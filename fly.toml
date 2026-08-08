@@ -1,0 +1,16 @@
+# Fly.io:  fly launch --no-deploy   then   fly secrets set REDCELL_NIM_KEYS='{"nemotron":{...}}'   then   fly deploy
+app = "redcell"
+primary_region = "iad"
+
+[build]
+
+[env]
+  REDCELL_HOST = "0.0.0.0"
+  REDCELL_PORT = "8770"
+
+[http_service]
+  internal_port = 8770
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0

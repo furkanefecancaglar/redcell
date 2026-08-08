@@ -1,0 +1,9 @@
+# Local or single-host deploy:  docker compose up -d   (keys from .env)
+services:
+  redcell:
+    build: .
+    ports:
+      - "8770:8770"
+    env_file:
+      - .env            # REDCELL_NIM_KEYS=... (copy from .env.example; never committed)
+    restart: unless-stopped

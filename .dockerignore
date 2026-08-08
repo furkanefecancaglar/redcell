@@ -1,0 +1,7 @@
+.env
+.git
+__pycache__/
+*.pyc
+scan_*.json
+scan_*.err
+*.log

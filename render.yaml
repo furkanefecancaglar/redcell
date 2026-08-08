@@ -1,0 +1,12 @@
+# Render:  New > Blueprint > point at this repo. Then set REDCELL_NIM_KEYS in the dashboard (sync:false).
+services:
+  - type: web
+    name: redcell
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: REDCELL_HOST
+        value: "0.0.0.0"
+      - key: REDCELL_NIM_KEYS
+        sync: false        # set the real value in the Render dashboard, never in git

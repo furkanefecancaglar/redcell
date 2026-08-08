@@ -1,0 +1,35 @@
+# REDCELL — AI agent prompt resilience gate
+# Drop this in your repo at .github/workflows/redcell.yml (and vendor redcell_static.py
+# + redcell_ci.py, e.g. under a redcell/ dir). It fails the build when a PR weakens an
+# agent's system prompt below the resilience threshold. 0 API — pure static analysis.
+name: REDCELL agent gate
+
+on:
+  pull_request:
+    # scope to the files that hold your agents' prompts/config — adjust to your layout
+    paths:
+      - "prompts/**"
+      - "agents/**"
+      - "**/*.prompt"
+      - "**/*.system.txt"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  redcell-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: REDCELL resilience gate
+        run: |
+          # point these globs at your prompt files; --min-score is the fail threshold
+          python3 redcell/redcell_ci.py \
+            "prompts/**/*.txt" "agents/**/*.md" \
+            --min-score 60 --no-color
+        # exit code 1 from redcell_ci.py fails the job automatically

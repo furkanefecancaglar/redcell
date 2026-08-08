@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REDCELL — Live console</title>
+<style>
+  :root{
+    --ink:#eef0f4;--ink-2:#c1c6d0;--ink-3:#8b93a3;
+    --paper:#101216;--paper-2:#161920;--card:#181b22;--line:#2a2f3a;
+    --brand:#ef5350;--brand-deep:#b93b38;--brand-tint:#2a1918;--sig:#2fbfa8;
+    --crit:#ef5350;--high:#e8912f;--med:#e0bb3a;--low:#6ba7e0;--pass:#54c07f;
+    --crit-bg:#2a1817;--high-bg:#271d12;--med-bg:#241f10;--low-bg:#141d28;--pass-bg:#132318;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 22px}
+  a{color:var(--brand)}
+  header{border-bottom:1px solid var(--line);position:sticky;top:0;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);z-index:5}
+  .bar{display:flex;align-items:center;gap:12px;height:58px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:18px}
+  .brand b{color:var(--brand)}
+  .mk{width:20px;height:20px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:2px}
+  .mk i{background:var(--ink-3);border-radius:1px}.mk i.on{background:var(--brand)}
+  .live{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--sig);display:flex;align-items:center;gap:6px}
+  .live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--sig);box-shadow:0 0 0 0 var(--sig);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--sig) 70%,transparent)}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+  h1{font-size:clamp(24px,4vw,34px);letter-spacing:-.03em;margin:26px 0 6px;text-wrap:balance}
+  .sub{color:var(--ink-2);margin:0 0 22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:600}
+  textarea{width:100%;min-height:150px;resize:vertical;background:var(--paper-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:14px;font-family:var(--mono);font-size:13px;line-height:1.55}
+  textarea:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:transparent}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .btn{font-family:var(--sans);font-size:14px;font-weight:650;border-radius:10px;padding:12px 20px;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:8px}
+  .btn.primary{background:var(--brand);color:#fff}.btn.primary:hover{background:var(--brand-deep)}
+  .btn.primary:disabled{opacity:.55;cursor:default}
+  .btn.ghost{background:var(--card);border-color:var(--line);color:var(--ink)}.btn.ghost:hover{border-color:var(--ink-3)}
+  .chip{font-family:var(--mono);font-size:11px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink-2);cursor:pointer}
+  .chip:hover{border-color:var(--brand);color:var(--brand)}
+  .spacer{flex:1}
+  .head-res{display:none;align-items:center;gap:22px;margin:26px 0 6px;padding:18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .head-res.show{display:flex;flex-wrap:wrap}
+  .score{font-size:44px;font-weight:850;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+  .score small{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+  .grade{font-family:var(--mono);font-weight:700;font-size:13px;padding:5px 13px;border-radius:999px}
+  .tallies{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:13px;margin-left:auto}
+  .tallies b{font-size:18px}
+  .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:100%}
+  #feed{display:flex;flex-direction:column;gap:12px;margin:22px 0 60px}
+  .atk{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+  .atk .h{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer}
+  .atk .h:hover{background:var(--paper-2)}
+  .verd{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;padding:4px 9px;border-radius:6px;white-space:nowrap}
+  .verd.FAIL{color:var(--crit);background:var(--crit-bg)}
+  .verd.PASS{color:var(--pass);background:var(--pass-bg)}
+  .verd.ERROR{color:var(--med);background:var(--med-bg)}
+  .verd.RUN{color:var(--ink-3);background:var(--paper-2)}
+  .atk .nm{font-weight:650;flex:1}
+  .atk .cls{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .atk .sev{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:3px 7px;border-radius:5px;border:1px solid var(--line);color:var(--ink-3)}
+  .atk .body{padding:0 16px 16px;display:none;flex-direction:column;gap:12px}
+  .atk.open .body{display:flex}
+  .atk h5{margin:0 0 5px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+  .mono-box{font-family:var(--mono);font-size:12px;background:var(--paper-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+  .mono-box.resp{border-left:3px solid var(--ink-3);max-height:260px;overflow:auto}
+  .mono-box.reason{border-left:3px solid var(--brand)}
+  .skel{height:14px;border-radius:6px;background:linear-gradient(90deg,var(--paper-2),var(--line),var(--paper-2));background-size:200% 100%;animation:sh 1.3s infinite}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .err{color:var(--crit);font-size:13px;margin-top:10px}
+  .note{font-size:12px;color:var(--ink-3);border-top:1px solid var(--line);padding-top:14px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap bar">
+    <div class="brand"><div class="mk"><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i></div>RED<b>CELL</b></div>
+    <div class="live" id="live">live engine</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="eyebrow" style="margin-top:26px">v1 · live adversarial engine</div>
+  <h1>Fire real attacks at your agent. Watch it hold — or break.</h1>
+  <p class="sub">This runs the adversarial corpus against a live model wearing your system prompt, then a separate judge model scores every response PASS/FAIL. Nothing is heuristic here.</p>
+
+  <textarea id="src" placeholder="Paste your AI agent's system prompt…"></textarea>
+  <div class="row">
+    <button class="btn primary" id="run">Run live scan</button>
+    <button class="btn ghost" id="load-weak">Load weak example</button>
+    <button class="btn ghost" id="load-hard">Load hardened example</button>
+    <span class="spacer"></span>
+    <span class="chip" id="engines">—</span>
+  </div>
+
+  <div class="head-res" id="headres">
+    <div><div class="score" id="score">0<small>resilience</small></div></div>
+    <div><span class="grade" id="grade">—</span></div>
+    <div class="tallies">
+      <span style="color:var(--crit)"><b id="tf">0</b> failed</span>
+      <span style="color:var(--pass)"><b id="tp">0</b> passed</span>
+      <span style="color:var(--med)"><b id="te">0</b> errors</span>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div id="feed"></div>
+  <p class="note">REDCELL v1 · local engine on 127.0.0.1 · your API key never leaves this machine · authorized security testing only.</p>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const ORDER={critical:0,high:1,medium:2,low:3};
+const CORPUS=[
+  {id:"LLM01-override",name:"Direct instruction override",cls:"Prompt injection",sev:"high"},
+  {id:"LLM07-extract",name:"System-prompt extraction",cls:"System-prompt leakage",sev:"medium"},
+  {id:"LLM01-persona",name:"Persona hijack",cls:"Persona jailbreak",sev:"medium"},
+  {id:"LLM06-agency",name:"Unconfirmed destructive action",cls:"Excessive agency",sev:"high"},
+  {id:"LLM02-exfil",name:"Exfiltration via URL/image",cls:"Data exfiltration",sev:"high"},
+  {id:"LLM01-authority",name:"Fake-developer safety-off",cls:"Authority / urgency",sev:"high"},
+  {id:"LLM01-encoding",name:"Base64-smuggled injection",cls:"Encoding smuggling",sev:"medium"},
+  {id:"LLM05-output",name:"Active-content injection",cls:"Insecure output handling",sev:"medium"},
+];
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+
+fetch("/health").then(r=>r.json()).then(h=>{
+  $("#engines").textContent=`target: ${h.target} · judge: ${h.judge}`;
+}).catch(()=>{$("#live").textContent="engine offline";});
+
+async function loadExample(k){
+  const ex=await fetch("/examples").then(r=>r.json());
+  $("#src").value=ex[k]||"";
+}
+$("#load-weak").onclick=()=>loadExample("weak");
+$("#load-hard").onclick=()=>loadExample("hard");
+
+function skeletonFeed(){
+  const feed=$("#feed");feed.innerHTML="";
+  CORPUS.forEach(a=>{
+    const el=document.createElement("div");el.className="atk";el.id="a-"+a.id;
+    el.innerHTML=`<div class="h"><span class="verd RUN" id="v-${a.id}">running</span>
+      <span class="nm">${a.name}</span><span class="cls">${a.cls}</span>
+      <span class="sev">${a.sev}</span></div>
+      <div class="body"><div class="skel" style="width:60%"></div></div>`;
+    el.querySelector(".h").onclick=()=>el.classList.toggle("open");
+    feed.appendChild(el);
+  });
+}
+function fill(r){
+  const el=$("#a-"+r.id);if(!el)return;
+  const v=$("#v-"+r.id);v.className="verd "+r.verdict;v.textContent=r.verdict;
+  el.querySelector(".body").innerHTML=
+    (r.error?`<div class="err">${esc(r.error)}</div>`:"")+
+    `<div><h5>Judge verdict — ${r.verdict}${r.confidence?` · conf ${r.confidence}`:""}</h5><div class="mono-box reason">${esc(r.reason||"—")}</div></div>`+
+    `<div><h5>Attack payload</h5><div class="mono-box">${esc(r.payload||"")}</div></div>`+
+    `<div><h5>Agent response</h5><div class="mono-box resp">${esc(r.response||"(none)")}</div></div>`;
+  if(r.verdict==="FAIL")el.classList.add("open");
+}
+function header(rep){
+  $("#headres").classList.add("show");
+  const na=rep.score===null||rep.score===undefined;
+  const col=na?"var(--med)":rep.score>=75?"var(--pass)":rep.score>=45?"var(--high)":"var(--crit)";
+  $("#score").style.color=col;
+  $("#score").innerHTML=(na?'N/A':rep.score)+'<small>resilience</small>';
+  if(na){$("#score").style.fontSize="28px";}else{$("#score").style.fontSize="";}
+  const g=$("#grade");g.textContent=rep.grade;
+  const gm={Hardened:["var(--pass)","var(--pass-bg)"],Resilient:["var(--pass)","var(--pass-bg)"],Exposed:["var(--high)","var(--high-bg)"],Vulnerable:["var(--crit)","var(--crit-bg)"],Critical:["var(--crit)","var(--crit-bg)"]}[rep.grade]||["var(--ink-3)","var(--paper-2)"];
+  g.style.color=gm[0];g.style.background=gm[1];
+  $("#tf").textContent=rep.failed;$("#tp").textContent=rep.passed;$("#te").textContent=rep.errors;
+  $("#meta").textContent=`${rep.total} attacks · target=${rep.target_engine} · judge=${rep.judge_engine}`;
+}
+$("#run").onclick=async()=>{
+  const p=$("#src").value.trim();
+  if(!p){$("#src").focus();return;}
+  const btn=$("#run");btn.disabled=true;btn.textContent="Attacking…";
+  $("#headres").classList.remove("show");
+  skeletonFeed();
+  try{
+    const rep=await fetch("/scan",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({system_prompt:p})}).then(r=>r.json());
+    if(rep.error)throw new Error(rep.error);
+    rep.results.sort((a,b)=>(a.verdict!=="FAIL")-(b.verdict!=="FAIL")||(ORDER[a.sev]-ORDER[b.sev]));
+    const feed=$("#feed");feed.innerHTML="";
+    rep.results.forEach(r=>{
+      const el=document.createElement("div");el.className="atk";el.id="a-"+r.id;
+      el.innerHTML=`<div class="h"><span class="verd ${r.verdict}" id="v-${r.id}">${r.verdict}</span>
+        <span class="nm">${r.name}</span><span class="cls">${r.cls}</span><span class="sev">${r.sev}</span></div>
+        <div class="body"></div>`;
+      el.querySelector(".h").onclick=()=>el.classList.toggle("open");
+      feed.appendChild(el);fill(r);
+    });
+    header(rep);
+    $("#headres").scrollIntoView({behavior:"smooth",block:"start"});
+  }catch(e){
+    $("#feed").innerHTML=`<div class="err">Scan failed: ${esc(e.message)}. Is the engine reachable? Check the server terminal.</div>`;
+  }finally{btn.disabled=false;btn.textContent="Run live scan";}
+};
+</script>
+</body>
+</html>

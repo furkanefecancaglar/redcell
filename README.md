@@ -1,0 +1,71 @@
+# REDCELL v1 — live adversarial engine
+
+Fires a real adversarial attack corpus at a live model wearing your agent's system
+prompt, then scores every response with a **separate judge model**. Not heuristics —
+actual attack + actual judge.
+
+## What it does
+1. **Simulate** the target agent: `chat(system=your_prompt, user=attack_payload)`.
+2. **Attack** with the OWASP LLM Top 10 corpus (injection, prompt-extraction, persona
+   hijack, excessive agency, data exfil, authority spoof, encoding smuggle, output injection).
+3. **Judge** each response with a different model → `PASS` (held) / `FAIL` (broken) + reason.
+4. **Score** 0–100 (severity-weighted) + grade.
+
+## Security model
+- Uses the NVIDIA NIM keys already in `~/nvidia-test/engines.py` — **one source of truth**,
+  keys never duplicated.
+- The server binds `127.0.0.1` only. **The key never leaves the machine and never touches
+  the browser.** This is exactly why the public artifact scanner can't do live calls (its CSP
+  blocks external APIs and would leak an embedded key) — the live engine must run locally / on
+  your own backend.
+
+## Run it
+CLI:
+```bash
+cd ~/redcell
+python3 redcell_engine.py --example weak        # demo target
+python3 redcell_engine.py --prompt-file my.txt  # your agent
+echo "You are a support bot..." | python3 redcell_engine.py --stdin
+python3 redcell_engine.py --example hard --json  # machine-readable
+```
+
+Local console (browser UI):
+```bash
+cd ~/redcell
+python3 server.py            # → http://127.0.0.1:8770
+```
+
+## Three surfaces (one server)
+`server.py` exposes the whole product on `127.0.0.1`:
+- `POST /scan-config` `{system_prompt}` → static resilience score (18 detectors, **0 API**). Shared core: `redcell_static.py`.
+- `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (12 rules, **0 API**). Core: `redcell_firewall.py`.
+- `POST /scan` `{system_prompt}` → live adversarial engine (real attacks + judge, **uses model quota**).
+- `GET /health` → advertises all three.
+
+CI gate (0 API): `python3 redcell_ci.py prompts/*.txt --min-score 60` (exit 1 on fail). Action: `.github/workflows/redcell.yml`.
+
+## Deploy
+```bash
+./run.sh                                   # local (127.0.0.1, keys from ~/nvidia-test/engines.py)
+docker build -t redcell . && \
+  docker run -p 8770:8770 --env-file .env redcell   # hosted (keys from env, binds 0.0.0.0)
+```
+Keys are **env-indirected** (`nim_client.py`): set `REDCELL_NIM_KEYS` (JSON) for a hosted deploy — nothing hardcoded,
+nothing committed (`.gitignore`/`.dockerignore` exclude `.env`). With no env set it falls back to the local
+`~/nvidia-test/engines.py` so dev is zero-config. See `.env.example`. **Put auth/a proxy in front when hosting** —
+`/scan` holds provider keys.
+
+## Config (env vars)
+- `REDCELL_NIM_KEYS`      — JSON engine table for hosted deploys; unset → local `~/nvidia-test/engines.py`.
+- `REDCELL_TARGET_ENGINE` (default `nemotron`) — model that plays the target agent.
+- `REDCELL_JUDGE_ENGINE`  (default `nemotron`) — model that scores responses (only `nemotron` usable as of 2026-08-08).
+- `REDCELL_WORKERS`       (default `2`)        — attack concurrency.
+- `REDCELL_HOST`/`REDCELL_PORT` (default `127.0.0.1`/`8770`) — bind address/port.
+
+## Cost note
+Each attack = 2 model calls (simulate + judge). Full corpus (8 attacks) ≈ 16 calls per scan.
+
+## Relationship to the public scanner
+- **v0 (published artifact):** free browser scanner, heuristic static analysis, zero backend,
+  top-of-funnel lead-gen. → https://claude.ai/code/artifact/a8f77cef-3be3-44fe-b182-b15d2fe9d09a
+- **v1 (this):** the paid engine — live attacks + judge. Runs where the key can stay secret.
