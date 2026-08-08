@@ -47,6 +47,44 @@ JUDGE_MIN_INTERVAL = float(os.environ.get("REDCELL_JUDGE_INTERVAL", "0.5"))
 _judge_lock = threading.Lock()
 _judge_last = [0.0]
 
+# Judge independence without a 2nd provider: opt-in probe picks a live judge engine
+# distinct from the target when one is available, and caches the choice for the run.
+AUTOFAILOVER = os.environ.get("REDCELL_AUTOFAILOVER", "").lower() in ("1", "true", "yes")
+_resolved_judge = [None]
+
+
+def probe_alive(names=None, max_tokens=6):
+    """Tiny liveness probe of each engine. Returns {name: {alive, latency|error}}."""
+    out = {}
+    for n in (names or list(ENGINES.keys())):
+        t0 = time.monotonic()
+        try:
+            chat(n, [{"role": "user", "content": "ok"}], max_tokens=max_tokens, temperature=0.0)
+            out[n] = {"alive": True, "latency": round(time.monotonic() - t0, 2)}
+        except Exception as e:
+            out[n] = {"alive": False, "error": str(e)[:90]}
+    return out
+
+
+def auto_select_judge(target, probe=None):
+    """Pick a judge alive AND distinct from the target when possible; else the target."""
+    probe = probe if probe is not None else probe_alive()
+    alive = [n for n, v in probe.items() if v.get("alive")]
+    distinct = sorted((n for n in alive if n != target), key=lambda n: probe[n].get("latency", 99))
+    if distinct:
+        return distinct[0]
+    return target if target in alive else (alive[0] if alive else target)
+
+
+def _judge_engine():
+    """Engine the judge calls use. With REDCELL_AUTOFAILOVER it's resolved once
+    (cached) to a live engine distinct from the target; else the configured one."""
+    if not AUTOFAILOVER:
+        return JUDGE_ENGINE
+    if _resolved_judge[0] is None:
+        _resolved_judge[0] = auto_select_judge(TARGET_ENGINE)
+    return _resolved_judge[0]
+
 
 def _throttled_judge_chat(messages, max_tokens=180):
     """Space out judge calls globally, and retry rate-limits with long backoff."""
@@ -59,7 +97,7 @@ def _throttled_judge_chat(messages, max_tokens=180):
                 time.sleep(JUDGE_MIN_INTERVAL - gap)
             _judge_last[0] = time.monotonic()
         try:
-            return chat(JUDGE_ENGINE, messages, max_tokens=max_tokens, temperature=0.0)
+            return chat(_judge_engine(), messages, max_tokens=max_tokens, temperature=0.0)
         except RuntimeError as e:
             if "429" in str(e) and attempt < len(waits):
                 time.sleep(waits[attempt])
@@ -392,7 +430,7 @@ def run_scan(system_prompt, on_result=None):
         "total": len(CORPUS), "failed": len(fails), "passed": len(passes),
         "errors": len(errors),
         "provisional": len(errors) > 0,
-        "target_engine": TARGET_ENGINE, "judge_engine": JUDGE_ENGINE,
+        "target_engine": TARGET_ENGINE, "judge_engine": _judge_engine(),
         "results": results,
     }
     if errors:
@@ -420,12 +458,30 @@ def _print_report(rep):
 
 def main():
     ap = argparse.ArgumentParser(description="REDCELL v1 live adversarial engine")
-    src = ap.add_mutually_exclusive_group(required=True)
+    src = ap.add_mutually_exclusive_group(required=False)
     src.add_argument("--prompt-file")
     src.add_argument("--stdin", action="store_true")
     src.add_argument("--example", choices=list(EXAMPLES))
     ap.add_argument("--json", action="store_true", help="emit raw JSON")
+    ap.add_argument("--probe", action="store_true",
+                    help="probe engine liveness and print the auto-failover judge pick, then exit")
     args = ap.parse_args()
+
+    if args.probe:
+        p = probe_alive()
+        pick = auto_select_judge(TARGET_ENGINE, p)
+        if args.json:
+            print(json.dumps({"probe": p, "target": TARGET_ENGINE, "auto_judge": pick}, indent=2))
+        else:
+            for n, v in p.items():
+                mark = f"alive {v['latency']}s" if v.get("alive") else f"DOWN  {v.get('error', '')}"
+                print(f"  {n:14} {mark}")
+            print(f"\n  target={TARGET_ENGINE}  auto-selected judge={pick}"
+                  + ("  (distinct ✓)" if pick != TARGET_ENGINE else "  (no distinct engine alive → same as target)"))
+        return
+
+    if not (args.prompt_file or args.stdin or args.example):
+        ap.error("one of --prompt-file / --stdin / --example is required (or use --probe)")
 
     if args.prompt_file:
         with open(args.prompt_file, encoding="utf-8") as f:

@@ -60,6 +60,8 @@ nothing committed (`.gitignore`/`.dockerignore` exclude `.env`). With no env set
 - `REDCELL_TARGET_ENGINE` (default `nemotron`) — model that plays the target agent.
 - `REDCELL_JUDGE_ENGINE`  (default `nemotron`) — model that scores responses (only `nemotron` usable as of 2026-08-08).
 - `REDCELL_WORKERS`       (default `2`)        — attack concurrency.
+- `REDCELL_AUTOFAILOVER`  (default off)        — probe engines once and auto-pick a live judge distinct from the
+  target (judge independence without a 2nd provider). Inspect with `python3 redcell_engine.py --probe`.
 - `REDCELL_HOST`/`REDCELL_PORT` (default `127.0.0.1`/`8770`) — bind address/port.
 
 ## Cost note
