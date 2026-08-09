@@ -8,3 +8,8 @@ compatibility_date = "2024-11-01"
 [[kv_namespaces]]
 binding = "BREACH_LOG"
 id = "0180c20eac4c44d19122e73caf98f535"
+
+# Lead capture — waitlist / demo requests (free KV, no card).
+[[kv_namespaces]]
+binding = "LEADS"
+id = "a0e2b7025ec040c99db46206c793ecac"

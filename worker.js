@@ -287,6 +287,33 @@ export default {
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
       return json(analyze(String(b.system_prompt)));
     }
+    // Lead capture — waitlist / book-a-demo. Stores to KV; emails are never exposed without a token.
+    if (request.method === 'POST' && url.pathname === '/lead') {
+      const b = await request.json().catch(() => ({}));
+      const email = String((b && b.email) || '').trim().slice(0, 200);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'a valid email is required' }, 400);
+      const rec = { ts: Date.now(), email, note: String((b && b.note) || '').slice(0, 1000), tier: String((b && b.tier) || '').slice(0, 40), source: String((b && b.source) || 'site').slice(0, 60) };
+      if (env && env.LEADS && ctx) {
+        ctx.waitUntil((async () => {
+          try {
+            await env.LEADS.put('lead:' + Date.now() + ':' + Math.random().toString(36).slice(2, 7), JSON.stringify(rec));
+            const raw = await env.LEADS.get('count'); const n = raw ? parseInt(raw, 10) : 0; await env.LEADS.put('count', String(n + 1));
+          } catch (e) { }
+        })());
+      }
+      return json({ ok: true, message: 'You are on the list — we will reach out.' });
+    }
+    if (url.pathname === '/leads') { // founder-only export (PII: requires a token)
+      if (!env || !env.LEADS) return json({ error: 'no store' }, 503);
+      const tok = env.REDCELL_SCAN_TOKEN;
+      if (!tok) return json({ error: 'set REDCELL_SCAN_TOKEN secret to read leads' }, 403);
+      if (request.headers.get('X-REDCELL-Token') !== tok) return json({ error: 'unauthorized' }, 401);
+      const list = await env.LEADS.list({ prefix: 'lead:', limit: 1000 });
+      const out = [];
+      for (const k of list.keys) { const v = await env.LEADS.get(k.name); if (v) { try { out.push(JSON.parse(v)); } catch (e) { } } }
+      out.sort((a, b) => b.ts - a.ts);
+      return json({ count: out.length, leads: out });
+    }
     if (request.method === 'POST' && url.pathname === '/scan') {
       if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'live engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
       if (env.REDCELL_SCAN_TOKEN && request.headers.get('X-REDCELL-Token') !== env.REDCELL_SCAN_TOKEN)
@@ -466,6 +493,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
   <div class=links>
     <a class=hide href="#console">Console</a>
     <a class=hide href="#surfaces">How it works</a>
+    <a class=hide href="#pricing">Pricing</a>
     <a class=hide href="#developers">Developers</a>
     <a class=cta href="/breach">Play Breach</a>
   </div>
@@ -518,6 +546,43 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
       <div class=lvls><i>1 · Novice</i><i>2 · Guarded</i><i>3 · Firewalled</i><i>4 · Sealed</i><i>5 · REDCELL</i></div>
     </div>
     <a class=play href="/breach">Play →</a>
+  </div>
+</div>
+
+<div class="wrap section" id=pricing>
+  <div class=eyebrow>Pricing</div>
+  <h2>Free to test. Paid to protect.</h2>
+  <p class=lede>The scanner, firewall and CI gate are free forever. The live red-team engine and runtime protection are for teams shipping agents to production.</p>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:32px;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+    <div style="padding:24px;border-right:1px solid var(--line)">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Free</div>
+      <div style="font-size:34px;font-weight:800;margin:10px 0;letter-spacing:-.02em">$0</div>
+      <ul style="color:var(--ink2);font-size:13.5px;padding-left:18px;margin:0;line-height:1.95">
+        <li>Static scanner + firewall API</li><li>CI gate, SDKs, MCP tool</li><li>Breach challenge</li></ul>
+    </div>
+    <div style="padding:24px;border-right:1px solid var(--line);background:var(--panel)">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--red)">Team</div>
+      <div style="font-size:34px;font-weight:800;margin:10px 0;letter-spacing:-.02em">$499<span style="font-size:14px;color:var(--ink3);font-weight:500">/mo</span></div>
+      <ul style="color:var(--ink2);font-size:13.5px;padding-left:18px;margin:0;line-height:1.95">
+        <li>Live red-team on your agents</li><li>Adaptive attacks + judge model</li><li>Runtime firewall + dashboards</li></ul>
+    </div>
+    <div style="padding:24px">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Enterprise</div>
+      <div style="font-size:34px;font-weight:800;margin:10px 0;letter-spacing:-.02em">Custom</div>
+      <ul style="color:var(--ink2);font-size:13.5px;padding-left:18px;margin:0;line-height:1.95">
+        <li>Unlimited agents, SSO</li><li>Compliance evidence exports</li><li>Private attack tuning, SLA</li></ul>
+    </div>
+  </div>
+  <div style="margin-top:26px;border:1px solid var(--line2);border-radius:14px;background:radial-gradient(120% 140% at 0 0,var(--redglow),transparent 55%),var(--panel);padding:26px;display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+      <h3 style="margin:0 0 6px;font-size:19px;letter-spacing:-.01em">Get early access to the live engine</h3>
+      <p style="margin:0;color:var(--ink2);font-size:14px">Shipping AI agents? Join the waitlist and we'll run a free security review of yours.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input id=lemail type=email placeholder="you@company.com" style="background:#0a0c11;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font:14px var(--sans);min-width:220px" onkeydown="if(event.key==='Enter')join()">
+      <button class="btn pri" id=joinbtn onclick=join()>Request access</button>
+    </div>
+    <div id=joinmsg style="width:100%;font-family:var(--mono);font-size:13px;display:none"></div>
   </div>
 </div>
 
@@ -579,6 +644,16 @@ async function fw(){var t=document.getElementById('in').value;if(!t.trim()){docu
   out.innerHTML=h;
  }catch(e){out.innerHTML='<div class=mono style="color:var(--crit)">check failed — retry in a moment</div>';}
  busy(b,false);}
+function validEmail(e){var a=e.indexOf('@');return a>0 && e.lastIndexOf('.')>a+1 && e.indexOf(' ')<0 && e.length<200;}
+async function join(){var e=(document.getElementById('lemail').value||'').trim();var b=document.getElementById('joinbtn');var m=document.getElementById('joinmsg');
+ if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid work email.';return;}
+ b.disabled=true;b.textContent='Sending…';
+ try{var r=await fetch('/lead',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,tier:'team',source:'landing'})}).then(function(x){return x.json();});
+  m.style.display='block';
+  if(r&&r.ok){m.style.color='var(--pass)';m.textContent='✓ '+r.message;document.getElementById('lemail').value='';}
+  else{m.style.color='var(--high)';m.textContent=(r&&r.error)||'Please try again.';}
+ }catch(err){m.style.display='block';m.style.color='var(--high)';m.textContent='Network error — try again.';}
+ b.disabled=false;b.textContent='Request access';}
 </script>
 </body></html>`;
 

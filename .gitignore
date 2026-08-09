@@ -9,3 +9,4 @@ scan_*.err
 build/
 dist/
 .eggs/
+.scan_token
