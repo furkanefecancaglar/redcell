@@ -269,6 +269,7 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
@@ -711,3 +712,90 @@ document.getElementById('send').disabled=false;i.focus();}
 fetch('/breach/stats').then(function(x){return x.json();}).then(function(s){var e=document.getElementById('stat');if(e&&s.attempts)e.textContent='· '+s.attempts.toLocaleString()+' attempts logged · '+(s.wins||0)+' breaches';}).catch(function(){});
 renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the password —');
 </script></body></html>`;
+
+/* ---------------- investor pitch page (/pitch) ---------------- */
+const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — investor brief</title>
+<link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
+<style>
+:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--pass:#33d17f;--mono:"IBM Plex Mono",monospace;--sans:"Archivo",system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);background-image:radial-gradient(55% 40% at 82% -6%,var(--redglow),transparent 60%);background-repeat:no-repeat}
+.wrap{max-width:820px;margin:0 auto;padding:0 24px}
+a{color:var(--redb)}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink3)}
+header{border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:11px;height:60px}.brand{font-weight:900;letter-spacing:-.02em;font-size:18px}.brand b{color:var(--red)}
+.mk{display:inline-grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:2.5px;width:19px;height:19px;vertical-align:-3px}.mk i{background:var(--ink3);border-radius:1px}.mk i.on{background:var(--red)}
+.tag{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3)}
+h1{font-size:clamp(30px,5vw,46px);line-height:1.05;letter-spacing:-.03em;font-weight:900;margin:40px 0 0}
+h1 em{font-style:normal;color:var(--red)}
+.sub{color:var(--ink2);font-size:19px;margin:16px 0 0;max-width:60ch}
+section{padding:30px 0;border-top:1px solid var(--line)}
+h2{font-size:13px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--red);margin:0 0 14px}
+p{margin:0 0 12px;color:var(--ink2)}p strong{color:var(--ink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel)}
+.card h3{margin:0 0 6px;font-size:15px}.card p{margin:0;font-size:13.5px}
+.card .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+td,th{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);font-weight:500}
+td.n{font-family:var(--mono);color:var(--ink)}
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px}
+.tiers div{padding:16px;border-right:1px solid var(--line)}.tiers div:last-child{border-right:0}
+.tiers .p{font-size:26px;font-weight:800;margin:6px 0}
+.ask{border:1px solid var(--line2);border-radius:14px;background:radial-gradient(120% 140% at 0 0,var(--redglow),transparent 55%),var(--panel);padding:22px;margin-top:6px}
+.cta{display:inline-block;margin-top:8px;background:var(--red);color:#fff;font-weight:700;padding:12px 22px;border-radius:10px;text-decoration:none}
+.disc{font-size:12.5px;color:var(--ink3);font-family:var(--mono);border-top:1px solid var(--line);margin-top:8px;padding-top:14px}
+footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12px var(--mono)}
+@media(max-width:640px){.grid,.tiers{grid-template-columns:1fr}.tiers div{border-right:0;border-bottom:1px solid var(--line)}}
+</style></head><body>
+<header><div class="wrap bar"><span class=brand><span class=mk><i class=on></i><i></i><i class=on></i><i></i><i class=on></i><i></i><i class=on></i><i></i><i class=on></i></span>RED<b>CELL</b></span><span class=tag>investor brief</span></div></header>
+<div class=wrap>
+<div class=eyebrow style="margin-top:36px">Pre-seed · AI-agent security</div>
+<h1>The security layer for <em>AI agents</em>.</h1>
+<p class=sub>Every company is shipping LLM agents wired to tools, data and customers. Almost none red-team them. REDCELL tests, gates, attacks and firewalls AI agents against the OWASP LLM Top&nbsp;10 — live today.</p>
+
+<section><h2>Problem</h2>
+<p>An LLM agent with tool access is an <strong>untrusted-input-to-privileged-action</strong> machine. One poisoned document, email or message can hijack it into leaking data, issuing refunds, or deleting records. <strong>Prompt injection is OWASP's #1 LLM risk and it is unsolved.</strong> Traditional AppSec never sees the prompt layer, and the teams that do test their agents do it by hand, once.</p></section>
+
+<section><h2>Product — live at redcell.redcellv1.workers.dev</h2>
+<div class=grid>
+<div class=card><span class=k>Test</span><h3>Static scanner</h3><p>18 detectors, OWASP LLM Top 10, findings + hardened-prompt kit.</p></div>
+<div class=card><span class=k>Prevent</span><h3>CI gate</h3><p>Fails the build when an agent's prompt regresses. SDKs (pip/npm), MCP tool.</p></div>
+<div class=card><span class=k>Attack</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
+<div class=card><span class=k>Defend</span><h3>Runtime firewall</h3><p>Blocks injection/jailbreak/exfil in untrusted input, 4 languages, microsecond latency, at the edge.</p></div>
+</div>
+<p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) drove 15M+ messages / 300k+ users. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
+
+<section><h2>Market — validated, winner undecided</h2>
+<p>AI-security seed funding reached <strong>~$855M across 150+ rounds in 2026</strong>. The direct peers are already funded — and one just exited:</p>
+<table><tr><th>Company</th><th>Raised</th><th>Lead</th></tr>
+<tr><td>Lakera</td><td class=n>$20M Series A</td><td>Atomico</td></tr>
+<tr><td>HiddenLayer</td><td class=n>$50M Series A</td><td>M12 (Microsoft)</td></tr>
+<tr><td>Prompt Security</td><td class=n>acquired</td><td>SentinelOne (2025)</td></tr></table>
+<p style="margin-top:12px">Buyers — fintech, healthcare, support automation, internal copilots — are now asked <em>"how do you know your agent is safe?"</em> for procurement and compliance (EU AI Act, SOC 2 AI addenda).</p></section>
+
+<section><h2>Wedge & moat</h2>
+<p><strong>Free → paid.</strong> The scanner, firewall and CI gate are free and viral in dev channels (and an MCP tool other agents call). They convert to the paid live-engine + runtime firewall. <strong>Land-and-expand</strong> from testing into production defense — the same corpus that tests also defends, and it compounds with every scan and every Breach attempt.</p></section>
+
+<section><h2>Business model</h2>
+<div class=tiers>
+<div><span class=eyebrow>Free</span><div class=p>$0</div><p style="font-size:13px;margin:0;color:var(--ink3)">Scanner · firewall · CI · SDKs · MCP</p></div>
+<div><span class=eyebrow style="color:var(--red)">Team</span><div class=p>$499<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
+<div><span class=eyebrow>Enterprise</span><div class=p>Custom</div><p style="font-size:13px;margin:0;color:var(--ink3)">Unlimited · SSO · compliance · SLA</p></div>
+</div></section>
+
+<section><h2>Traction — early &amp; honest</h2>
+<p>The full product is <strong>live and shippable</strong> (one edge URL, zero-card infra) with a working demo, a live red-team engine, the Breach game collecting the attack dataset, and a waitlist capturing inbound. We are pre-launch — no vanity metrics here; the ask funds getting to first paying teams.</p></section>
+
+<section><h2>The ask</h2>
+<div class=ask>
+<p style="color:var(--ink)"><strong>Raising a pre-seed round</strong> to expand the attack corpus toward garak-scale coverage, convert the free funnel to paying teams, and add semantic (embedding-based) detection beyond patterns. Amount, terms and use-of-funds finalized with the founder.</p>
+<a class=cta href="/">See the live product →</a>
+</div>
+<p class=disc>Illustrative market context and pricing; not verified financial metrics. Built for authorized security testing only. Contact via the waitlist on the site.</p></section>
+</div>
+<footer><div class=wrap>REDCELL · the security layer for AI agents · redcell.redcellv1.workers.dev</div></footer>
+</body></html>`;
