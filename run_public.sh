@@ -9,16 +9,30 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PORT="${REDCELL_PORT:-8770}"
 
-# 1) cloudflared — single free binary from Cloudflare (no account/card). Download if missing.
-CF="$(command -v cloudflared || true)"
-if [[ -z "$CF" ]]; then
+# 1) cloudflared — single free binary from Cloudflare (no account/card).
+#    Prefer a working one on PATH; else a working ~/.local/bin copy; else (re)download.
+LOCAL_CF="$HOME/.local/bin/cloudflared"
+CF=""
+if command -v cloudflared >/dev/null 2>&1 && cloudflared --version >/dev/null 2>&1; then
+  CF="$(command -v cloudflared)"
+elif [[ -x "$LOCAL_CF" ]] && "$LOCAL_CF" --version >/dev/null 2>&1; then
+  CF="$LOCAL_CF"
+else
   mkdir -p "$HOME/.local/bin"
-  echo "Downloading cloudflared (Cloudflare tunnel binary, ~/.local/bin)…"
-  curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
-       -o "$HOME/.local/bin/cloudflared"
-  chmod +x "$HOME/.local/bin/cloudflared"
-  CF="$HOME/.local/bin/cloudflared"
+  rm -f "$LOCAL_CF"
+  echo "Downloading cloudflared (Cloudflare tunnel binary → ~/.local/bin)…"
+  curl -fL --retry 3 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+       -o "$LOCAL_CF"
+  chmod +x "$LOCAL_CF"
+  CF="$LOCAL_CF"
 fi
+if ! "$CF" --version >/dev/null 2>&1; then
+  echo "ERROR: cloudflared at '$CF' won't run. Inspect it:" >&2
+  echo "    file '$CF' ; ls -l '$CF'" >&2
+  echo "  If it's HTML/text the download was blocked; if 'noexec', your ~/.local is mounted noexec." >&2
+  exit 1
+fi
+echo "cloudflared ok: $("$CF" --version 2>&1 | head -1)"
 
 # 2) start REDCELL locally
 echo "Starting REDCELL on 127.0.0.1:$PORT …"
