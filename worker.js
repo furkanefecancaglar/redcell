@@ -172,7 +172,7 @@ async function breachTurn(lvl, message, keys, targetName) {
 
 /* ---------------- HTTP router ---------------- */
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
@@ -218,9 +218,26 @@ export default {
         let keys; try { keys = JSON.parse(env.REDCELL_NIM_KEYS); } catch (e) { return json({ error: 'bad REDCELL_NIM_KEYS' }, 500); }
         try {
           const t = await breachTurn(lvl, b.message, keys, env.REDCELL_TARGET_ENGINE || 'nemotron');
+          if (env.BREACH_LOG && ctx) {
+            const rec = JSON.stringify({ ts: Date.now(), level: lvl.n, name: lvl.name, message: String(b.message).slice(0, 500), blocked: !!t.blocked, win: !!t.win });
+            ctx.waitUntil((async () => {
+              try {
+                await env.BREACH_LOG.put('atk:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8), rec, { expirationTtl: 60 * 60 * 24 * 120 });
+                const raw = await env.BREACH_LOG.get('stats');
+                const st = raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 };
+                st.attempts++; if (t.win) st.wins++; if (t.blocked) st.blocked++;
+                await env.BREACH_LOG.put('stats', JSON.stringify(st));
+              } catch (e) { /* logging is best-effort */ }
+            })());
+          }
           return json({ level: lvl.n, level_name: lvl.name, total_levels: LEVELS.length, ...t });
         } catch (e) { return json({ error: String(e) }, 500); }
       }
+    }
+    if (url.pathname === '/breach/stats') {
+      if (!env || !env.BREACH_LOG) return json({ attempts: 0, wins: 0, blocked: 0 });
+      const raw = await env.BREACH_LOG.get('stats');
+      return json(raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 });
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
 
@@ -500,7 +517,7 @@ a{color:var(--brand)}
 </style></head><body>
 <header><div class="wrap bar"><span class=brand>RED<b>CELL</b> Breach</span><span class=lv id=lvtag>Level 1 · Novice</span><span class=def id=defs></span></div></header>
 <div class=wrap>
-<p class=intro id=intro>Extract the secret password from the AI. Each level adds a REDCELL defense layer. Beat all 5.</p>
+<p class=intro id=intro>Extract the secret password from the AI. Each level adds a REDCELL defense layer. Beat all 5. <span id=stat style="color:var(--brand);font-family:var(--mono);font-size:12px"></span></p>
 <div id=log></div>
 <div id=winbox></div>
 <div class=row><input id=in placeholder="Try to make it reveal the secret…" onkeydown="if(event.key==='Enter')go()"><button id=send onclick=go()>Send</button></div>
@@ -523,5 +540,6 @@ if(LV>=5){wb.innerHTML='<div class=win><h3>🏆 You beat REDCELL Breach — all 
 else{wb.innerHTML='<div class=win><h3>🔓 Level '+LV+' cleared — you extracted the secret!</h3><button onclick=next()>Next level →</button><button onclick=share()>Share</button></div>';}}}}
 catch(e){add('sys','(network error)');}
 document.getElementById('send').disabled=false;i.focus();}
+fetch('/breach/stats').then(function(x){return x.json();}).then(function(s){var e=document.getElementById('stat');if(e&&s.attempts)e.textContent='· '+s.attempts.toLocaleString()+' attempts logged · '+(s.wins||0)+' breaches';}).catch(function(){});
 renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the password —');
 </script></body></html>`;
