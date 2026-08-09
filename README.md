@@ -38,7 +38,7 @@ python3 server.py            # → http://127.0.0.1:8770
 ## Three surfaces (one server)
 `server.py` exposes the whole product on `127.0.0.1`:
 - `POST /scan-config` `{system_prompt}` → static resilience score (18 detectors, **0 API**). Shared core: `redcell_static.py`.
-- `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (12 rules, **0 API**). Core: `redcell_firewall.py`.
+- `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (18 rules, **0 API**). Core: `redcell_firewall.py`.
 - `POST /scan` `{system_prompt}` → live adversarial engine (real attacks + judge, **uses model quota**).
 - `GET /health` → advertises all three.
 
