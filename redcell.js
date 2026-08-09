@@ -79,6 +79,11 @@
     ['many-shot', 'LLM01', 'medium',
       R`\b(here are (several |some |many )?examples of (how )?you (should |will )?(answer|respond|comply|help)|the following are examples of correct (behavior|responses|answers)|ignore your training and follow these examples)\b`,
       'many-shot / example-priming jailbreak'],
+    // Non-English injection (TR/ES/DE/FR) — \S* (not \w) for suffixes so this
+    // matches Turkish ı/ş/… identically to the Python rule (JS \w is ASCII-only).
+    ['multilang-injection', 'LLM01', 'high',
+      R`(önceki (tüm )?talimatlar\S* (yok say|görmezden gel|unut|boş ?ver)|sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (göster|açıkla|söyle|yazdır|ver)|tüm (kural\S*|kısıtlama\S*|sınırlama\S*) (yok say|kaldır|unut|görmezden gel)|ignora (las )?instrucciones (anteriores|previas)|olvida (las )?instrucciones (anteriores|previas)|revela (tu|el|las) (prompt|sistema|instrucciones)|ignoriere (alle )?(vorherigen |bisherigen )?anweisungen|vergiss (alle )?(vorherigen |bisherigen )?anweisungen|zeig(e)? (mir )?(deinen? )?(system[- ]?prompt|systemanweisung\S*)|ignore[z]? (toutes )?les instructions (précédentes|antérieures)|oublie[z]? (toutes )?les instructions (précédentes|antérieures)|révèle (ton|tes|le) (invite|système|prompt|instructions))`,
+      'non-English (TR/ES/DE/FR) prompt injection'],
   ];
 
   const RULES = RULE_DEFS.map(([id, owasp, sev, pat, why]) => ({
