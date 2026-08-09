@@ -1,0 +1,5 @@
+name = "redcell"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+# Deploy on Cloudflare's FREE plan (no card). See CLOUDFLARE_WORKER.md.
+# wrangler bundles worker.js + redcell.js + redcell_scanner.js automatically.
