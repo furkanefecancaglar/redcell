@@ -44,6 +44,9 @@ python3 server.py            # → http://127.0.0.1:8770
 
 CI gate (0 API): `python3 redcell_ci.py prompts/*.txt --min-score 60` (exit 1 on fail). Action: `.github/workflows/redcell.yml`.
 
+MCP server (0 API): `python3 redcell_mcp.py` exposes `firewall_check` + `scan_prompt` as tools any MCP client
+(Claude Desktop, Cursor, …) can call. Config: `{ "redcell": { "command": "python3", "args": ["/abs/path/redcell_mcp.py"] } }`.
+
 ## Deploy
 ```bash
 ./run.sh                                   # local (127.0.0.1, keys from ~/nvidia-test/engines.py)
