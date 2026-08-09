@@ -31,6 +31,9 @@ PORT = int(os.environ.get("REDCELL_PORT") or os.environ.get("PORT") or "8770")
 # Local dev binds 127.0.0.1 (key never leaves the machine). A hosted/container
 # deploy sets REDCELL_HOST=0.0.0.0 — and MUST add auth in front, since /scan holds keys.
 HOST = os.environ.get("REDCELL_HOST", "127.0.0.1")
+# If set, /scan (the quota-spending live engine) requires header  X-REDCELL-Token: <token>.
+# The 0-API surfaces (/scan-config, /firewall) stay open — safe to expose publicly.
+SCAN_TOKEN = os.environ.get("REDCELL_SCAN_TOKEN")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -64,6 +67,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 "target": eng.TARGET_ENGINE, "judge": eng.JUDGE_ENGINE,
                 "attacks": len(eng.CORPUS), "detectors": len(st._DET), "firewall_rules": len(fw._RULES) + 1,
+                "scan_gated": bool(SCAN_TOKEN),
             }))
         else:
             self._send(404, json.dumps({"error": "not found"}))
@@ -75,6 +79,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             if self.path == "/scan":
+                if SCAN_TOKEN and self.headers.get("X-REDCELL-Token") != SCAN_TOKEN:
+                    self._send(401, json.dumps({"error": "unauthorized — /scan requires header X-REDCELL-Token"}))
+                    return
                 prompt = (self._body().get("system_prompt") or "").strip()
                 if not prompt:
                     self._send(400, json.dumps({"error": "system_prompt required"}))
