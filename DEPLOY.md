@@ -18,13 +18,16 @@ cp .env.example .env            # then paste your real REDCELL_NIM_KEYS into .en
 docker compose up -d            # → http://<host>:8770
 ```
 
-## Option B — Fly.io (free tier, global)
+## Option B — Fly.io (free tier, global)  ← recommended, one script
 ```bash
+curl -L https://fly.io/install.sh | sh   # install flyctl (one time)
+fly auth login                            # your Fly account (a bot can't do this)
 cd ~/redcell
-fly launch --no-deploy          # accept the app name; uses the committed fly.toml
-fly secrets set REDCELL_NIM_KEYS='{"nemotron":{"key":"nvapi-...","model":"nvidia/nemotron-3-nano-30b-a3b"}}'
-fly deploy                      # → https://redcell.fly.dev
+./deploy_fly.sh                           # preflight → create app → set key → deploy → verify /health
+# name taken? →  APP=redcell-<yourhandle> ./deploy_fly.sh
 ```
+`deploy_fly.sh` calls `set_fly_key.sh`, which reads the nemotron key from `~/nvidia-test/engines.py`
+and pushes it as the `REDCELL_NIM_KEYS` Fly secret **without printing it**. Result: `https://<app>.fly.dev`.
 
 ## Option C — Render (free tier, dashboard)
 1. Push this repo to GitHub (see below).

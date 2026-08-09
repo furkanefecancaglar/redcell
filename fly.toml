@@ -1,4 +1,7 @@
-# Fly.io:  fly launch --no-deploy   then   fly secrets set REDCELL_NIM_KEYS='{"nemotron":{...}}'   then   fly deploy
+# Fly.io deploy — easiest path is `./deploy_fly.sh` (handles the key safely).
+# Manual: fly launch --no-deploy  →  ./set_fly_key.sh  →  fly deploy
+# NOTE: `app` must be globally unique. If "redcell" is taken, change it (or pass
+# APP=redcell-<yourhandle> to deploy_fly.sh, which rewrites this line for you).
 app = "redcell"
 primary_region = "iad"
 
@@ -14,3 +17,10 @@ primary_region = "iad"
   auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
