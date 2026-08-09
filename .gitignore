@@ -4,3 +4,8 @@ __pycache__/
 scan_*.json
 scan_*.err
 *.log
+
+*.egg-info/
+build/
+dist/
+.eggs/

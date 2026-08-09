@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redcell"
+version = "1.0.0"
+description = "The security layer for AI agents — scan, gate, red-team, and firewall LLM agents against the OWASP LLM Top 10."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["requests>=2.28"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+redcell-scan = "redcell_engine:main"
+redcell-firewall = "redcell_firewall:main"
+redcell-ci = "redcell_ci:main"
+redcell-mcp = "redcell_mcp:main"
+redcell-server = "server:main"
+
+[tool.setuptools]
+py-modules = [
+  "redcell",
+  "redcell_static",
+  "redcell_firewall",
+  "redcell_ci",
+  "redcell_engine",
+  "redcell_mcp",
+  "nim_client",
+  "server",
+]
