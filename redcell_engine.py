@@ -53,16 +53,30 @@ AUTOFAILOVER = os.environ.get("REDCELL_AUTOFAILOVER", "").lower() in ("1", "true
 _resolved_judge = [None]
 
 
-def probe_alive(names=None, max_tokens=6):
-    """Tiny liveness probe of each engine. Returns {name: {alive, latency|error}}."""
+def probe_alive(names=None, max_tokens=6, per_timeout=15):
+    """Tiny liveness probe of each engine. Returns {name: {alive, latency|error}}.
+
+    Each engine is bounded to per_timeout seconds so one overloaded engine (glm
+    has spiked to >40s/call) can't hang the whole probe — it's marked slow/down
+    and we move on. (chat()'s own 120s+retries would otherwise stall the heartbeat.)"""
     out = {}
     for n in (names or list(ENGINES.keys())):
-        t0 = time.monotonic()
-        try:
-            chat(n, [{"role": "user", "content": "ok"}], max_tokens=max_tokens, temperature=0.0)
-            out[n] = {"alive": True, "latency": round(time.monotonic() - t0, 2)}
-        except Exception as e:
-            out[n] = {"alive": False, "error": str(e)[:90]}
+        box = {}
+
+        def _call(n=n, box=box):
+            t0 = time.monotonic()
+            try:
+                chat(n, [{"role": "user", "content": "ok"}], max_tokens, 0.0)
+                box["v"] = {"alive": True, "latency": round(time.monotonic() - t0, 2)}
+            except Exception as e:
+                box["v"] = {"alive": False, "error": str(e)[:90]}
+
+        # daemon thread so a slow engine's leaked call can't block process exit
+        th = threading.Thread(target=_call, daemon=True)
+        th.start()
+        th.join(per_timeout)
+        out[n] = box.get("v", {"alive": False, "error": f"slow (>{per_timeout}s)"}) if not th.is_alive() \
+            else {"alive": False, "error": f"slow (>{per_timeout}s)"}
     return out
 
 
