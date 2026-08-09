@@ -29,13 +29,21 @@ if [[ "$APP" != "$(grep -E '^app\s*=' fly.toml | sed -E 's/.*"([^"]+)".*/\1/')" 
   echo "fly.toml app set to: $APP"
 fi
 
-# create the app if it doesn't exist yet (ignore 'already exists')
+# create the app if it doesn't exist yet
 if ! "$FLY" status -a "$APP" >/dev/null 2>&1; then
   echo "Creating app '$APP'…"
-  "$FLY" apps create "$APP" || {
-    echo "Could not create '$APP' (name may be taken). Re-run: APP=redcell-<yourhandle> ./deploy_fly.sh" >&2
+  if ! CREATE_OUT="$("$FLY" apps create "$APP" 2>&1)"; then
+    echo "$CREATE_OUT" >&2
+    if echo "$CREATE_OUT" | grep -qi "high risk"; then
+      echo "" >&2
+      echo "→ Fly flagged this (new) account as high-risk. Verify it once at:" >&2
+      echo "    https://fly.io/high-risk-unlock" >&2
+      echo "  (adds a card for identity; the free tier still applies). Then re-run ./deploy_fly.sh" >&2
+    elif echo "$CREATE_OUT" | grep -qiE "taken|already|unavailable"; then
+      echo "→ Name taken. Re-run:  APP=redcell-<yourhandle> ./deploy_fly.sh" >&2
+    fi
     exit 1
-  }
+  fi
 fi
 
 # push the NIM key (safe helper; value never printed) so /scan works
