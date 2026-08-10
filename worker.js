@@ -431,11 +431,12 @@ export default {
       let rest = url.pathname.slice(3);
       let mode = 'html';
       if (rest.slice(-7) === '/og.svg') { mode = 'og'; rest = rest.slice(0, -7); }
+      else if (rest.slice(-6) === '.sarif') { mode = 'sarif'; rest = rest.slice(0, -6); }
       else if (rest.slice(-5) === '.json') { mode = 'json'; rest = rest.slice(0, -5); }
       else if (rest.slice(-3) === '.md') { mode = 'md'; rest = rest.slice(0, -3); }
       const id = rest.replace(/[^a-z0-9]/g, '').slice(0, 16);
       const svgHdr = { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'X-Robots-Tag': 'noindex', ...CORS };
-      const miss = mode === 'json'
+      const miss = (mode === 'json' || mode === 'sarif')
         ? new Response(JSON.stringify({ error: 'report not found or expired' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } })
         : mode === 'og'
           ? new Response(REPORT_OG_MISS, { status: 404, headers: svgHdr })
@@ -450,6 +451,7 @@ export default {
       if (mode === 'json') return new Response(JSON.stringify({ id, ...rec }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
       if (mode === 'og') return new Response(renderReportOG(rec, id), { status: 200, headers: svgHdr });
       if (mode === 'md') return new Response(renderReportMd(rec, id), { status: 200, headers: { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
+      if (mode === 'sarif') return new Response(renderReportSarif(rec, id), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
       return html(renderReport(rec, id), 200, { 'X-Robots-Tag': 'noindex' });
     }
     if (url.pathname === '/leads') { // founder-only export (PII: requires a token)
@@ -1320,7 +1322,8 @@ function renderReport(rec, id) {
     + '<a class=btn href="https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareTxt) + '&url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>Share on X</a>'
     + '<a class=btn href="https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>LinkedIn</a>'
     + '<a class=btn href="/r/' + id + '.md">Markdown</a>'
-    + '<a class=btn href="/r/' + id + '.json">JSON</a></div>'
+    + '<a class=btn href="/r/' + id + '.json">JSON</a>'
+    + '<a class=btn href="/r/' + id + '.sarif">SARIF</a></div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want the runtime firewall in front of your agent?</b>'
     + '<div class=id style="margin:6px 0 12px">This scan is free and runs at the edge. The firewall, live red-team engine, and CI gate ship as REDCELL.</div>'
     + '<a class=cta href="/">Explore REDCELL →</a></div>'
@@ -1340,6 +1343,45 @@ function _ogMark() {
     s += '<rect x="' + x + '" y="' + y + '" width="15" height="15" rx="2" fill="' + (on.indexOf(i) >= 0 ? '#ff3b46' : '#3a4152') + '"/>';
   }
   return s + '<text x="76" y="42" font-size="34" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text></g>';
+}
+function _slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'finding'; }
+function _sarifLevel(sev) { return (sev === 'crit' || sev === 'high') ? 'error' : sev === 'med' ? 'warning' : 'note'; }
+function _secSeverity(sev) { return sev === 'crit' ? '9.5' : sev === 'high' ? '8.0' : sev === 'med' ? '5.0' : '3.0'; }
+function renderReportSarif(rec, id) {
+  var r = rec.report || {};
+  var findings = r.findings || [];
+  var rulesMap = {};
+  findings.forEach(function (f) {
+    var rid = _slug(f.title);
+    if (!rulesMap[rid]) rulesMap[rid] = {
+      id: rid,
+      name: f.title,
+      shortDescription: { text: f.title },
+      fullDescription: { text: REMEDIATION[f.title] || f.title },
+      helpUri: 'https://redcell.redcellv1.workers.dev/methodology',
+      defaultConfiguration: { level: _sarifLevel(f.sev) },
+      properties: { 'security-severity': _secSeverity(f.sev), tags: ['security', 'llm', f.id], category: f.cat || '' },
+    };
+  });
+  var rules = Object.keys(rulesMap).map(function (k) { return rulesMap[k]; });
+  var results = findings.map(function (f) {
+    return {
+      ruleId: _slug(f.title),
+      level: _sarifLevel(f.sev),
+      message: { text: f.title + '. Fix: ' + (REMEDIATION[f.title] || 'harden the system prompt.') },
+      locations: [{ physicalLocation: { artifactLocation: { uri: 'system-prompt.txt' } } }],
+      properties: { owasp: f.id, severity: f.sev },
+    };
+  });
+  return JSON.stringify({
+    version: '2.1.0',
+    $schema: 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
+    runs: [{
+      tool: { driver: { name: 'REDCELL', informationUri: 'https://redcell.redcellv1.workers.dev', version: '1.0.0', rules: rules } },
+      results: results,
+      properties: { score: (r.score || 0), grade: (r.grade || ''), reportUrl: 'https://redcell.redcellv1.workers.dev/r/' + id },
+    }],
+  }, null, 2);
 }
 function _mdCell(s) { return String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' '); }
 function renderReportMd(rec, id) {
@@ -1866,6 +1908,7 @@ function openApiDoc() {
       '/r/{id}': { get: { summary: 'Retrieve a shareable report (created by POST /review). Variants: append .json, .md, or /og.svg to the path.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'report page (text/html). noindex.' }, '404': { description: 'not found or expired (30-day TTL)' } } } },
       '/r/{id}.json': { get: { summary: 'Retrieve a report as JSON (machine-readable).', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { id: { type: 'string' }, ts: { type: 'integer' }, prompt: { type: 'string' }, report: { type: 'object' }, firewall: { type: 'object' } } } } } }, '404': { description: 'not found' } } } },
       '/r/{id}.md': { get: { summary: 'Retrieve a report as Markdown (paste into a PR, ticket, or docs).', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'text/markdown' }, '404': { description: 'not found' } } } },
+      '/r/{id}.sarif': { get: { summary: 'Retrieve a report as SARIF 2.1.0 (GitHub code-scanning / security tooling).', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'SARIF 2.1.0 JSON' }, '404': { description: 'not found' } } } },
     },
   };
 }
