@@ -422,13 +422,16 @@ export default {
       let mode = 'html';
       if (rest.slice(-7) === '/og.svg') { mode = 'og'; rest = rest.slice(0, -7); }
       else if (rest.slice(-5) === '.json') { mode = 'json'; rest = rest.slice(0, -5); }
+      else if (rest.slice(-3) === '.md') { mode = 'md'; rest = rest.slice(0, -3); }
       const id = rest.replace(/[^a-z0-9]/g, '').slice(0, 16);
       const svgHdr = { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'X-Robots-Tag': 'noindex', ...CORS };
       const miss = mode === 'json'
         ? new Response(JSON.stringify({ error: 'report not found or expired' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } })
         : mode === 'og'
           ? new Response(REPORT_OG_MISS, { status: 404, headers: svgHdr })
-          : html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
+          : mode === 'md'
+            ? new Response('# Report not found\n\nThis link is invalid or has expired (reports are kept for 30 days).\n', { status: 404, headers: { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } })
+            : html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
       if (!id || !env || !env.LEADS) return miss;
       const raw = await env.LEADS.get('report:' + id);
       if (!raw) return miss;
@@ -436,6 +439,7 @@ export default {
       if (!rec) return miss;
       if (mode === 'json') return new Response(JSON.stringify({ id, ...rec }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
       if (mode === 'og') return new Response(renderReportOG(rec, id), { status: 200, headers: svgHdr });
+      if (mode === 'md') return new Response(renderReportMd(rec, id), { status: 200, headers: { 'Content-Type': 'text/markdown; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
       return html(renderReport(rec, id), 200, { 'X-Robots-Tag': 'noindex' });
     }
     if (url.pathname === '/leads') { // founder-only export (PII: requires a token)
@@ -1304,7 +1308,9 @@ function renderReport(rec, id) {
     + '<div class=card><div class=ey>Analyzed prompt</div><pre class=p>' + esc(rec.prompt || '') + '</pre></div>'
     + '<div style="margin:18px 0">'
     + '<a class=btn href="https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareTxt) + '&url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>Share on X</a>'
-    + '<a class=btn href="https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>LinkedIn</a></div>'
+    + '<a class=btn href="https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>LinkedIn</a>'
+    + '<a class=btn href="/r/' + id + '.md">Markdown</a>'
+    + '<a class=btn href="/r/' + id + '.json">JSON</a></div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want the runtime firewall in front of your agent?</b>'
     + '<div class=id style="margin:6px 0 12px">This scan is free and runs at the edge. The firewall, live red-team engine, and CI gate ship as REDCELL.</div>'
     + '<a class=cta href="/">Explore REDCELL →</a></div>'
@@ -1324,6 +1330,45 @@ function _ogMark() {
     s += '<rect x="' + x + '" y="' + y + '" width="15" height="15" rx="2" fill="' + (on.indexOf(i) >= 0 ? '#ff3b46' : '#3a4152') + '"/>';
   }
   return s + '<text x="76" y="42" font-size="34" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text></g>';
+}
+function _mdCell(s) { return String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' '); }
+function renderReportMd(rec, id) {
+  var r = rec.report || {}, fwv = rec.firewall || {};
+  var L = [];
+  L.push('# REDCELL security report');
+  L.push('');
+  L.push('- **Resilience score:** ' + (r.score || 0) + '/100 (' + (r.grade || '') + ')');
+  L.push('- **Findings:** ' + (r.findings || []).length + ' · **checks passed:** ' + (r.passed || 0) + ' / 22');
+  L.push('- **Firewall verdict:** ' + String(fwv.action || 'allow').toUpperCase() + ' (score ' + (fwv.score || 0) + ', risk ' + (fwv.risk || 'none') + ')');
+  L.push('');
+  if ((r.findings || []).length) {
+    L.push('## Findings & fixes');
+    L.push('');
+    L.push('| Severity | OWASP | Finding | How to fix |');
+    L.push('| --- | --- | --- | --- |');
+    (r.findings || []).forEach(function (f) {
+      L.push('| ' + _mdCell(f.sev) + ' | ' + _mdCell(f.id) + ' | ' + _mdCell(f.title) + ' | ' + _mdCell(REMEDIATION[f.title] || '') + ' |');
+    });
+    L.push('');
+  } else {
+    L.push('_No static weaknesses matched — strong baseline._');
+    L.push('');
+  }
+  if ((fwv.matches || []).length) {
+    L.push('## Runtime firewall matches');
+    L.push('');
+    (fwv.matches || []).forEach(function (m) { L.push('- **' + m.id + '** (' + m.severity + ') — ' + m.why); });
+    L.push('');
+  }
+  L.push('## Analyzed prompt');
+  L.push('');
+  L.push('```text');
+  L.push(String(rec.prompt || '').replace(/```/g, "'''"));
+  L.push('```');
+  L.push('');
+  L.push('---');
+  L.push('Generated by REDCELL — https://redcell.redcellv1.workers.dev/r/' + id);
+  return L.join('\n') + '\n';
 }
 function renderReportOG(rec, id) {
   const r = (rec && rec.report) || {};
