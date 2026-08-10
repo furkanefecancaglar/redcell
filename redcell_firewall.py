@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field, asdict
@@ -231,6 +232,31 @@ def inspect(text: str) -> Verdict:
             risk = m.severity
     matches.sort(key=lambda x: -_W[x.severity])
     return Verdict(action, score, risk, matches)
+
+
+def hybrid_inspect(text, semantic=None):
+    """Regex inspect() PLUS an optional semantic escalation for paraphrased attacks the
+    patterns miss. inspect() itself stays 0-API and unchanged; the semantic layer only
+    runs when enabled (arg or REDCELL_SEMANTIC) and only escalates a regex 'allow' to
+    'flag' — never blocks on the semantic signal alone."""
+    v = inspect(text)
+    use = semantic if semantic is not None else bool(os.environ.get("REDCELL_SEMANTIC"))
+    if use and v.action == "allow":
+        try:
+            from redcell_semantic import semantic_score
+            s = semantic_score(text or "")
+            if s.get("risk") in ("medium", "high"):
+                sev = "high" if s["risk"] == "high" else "medium"
+                v.matches.append(Match("semantic-similarity", "LLM01", sev,
+                                       "semantically close to a known attack: " + str(s.get("nearest"))[:60],
+                                       "%s score %.2f" % (s.get("mode"), s.get("score", 0))))
+                v.score = max(v.score, _W[sev])
+                v.action = "flag"
+                if v.risk == "none":
+                    v.risk = sev
+        except Exception:
+            pass  # semantic is best-effort; regex verdict stands
+    return v
 
 
 class Blocked(Exception):

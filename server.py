@@ -100,7 +100,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not text:
                     self._send(400, json.dumps({"error": "input required"}))
                     return
-                self._send(200, json.dumps(fw.inspect(text).to_dict(), ensure_ascii=False))  # runtime, 0 API
+                self._send(200, json.dumps(fw.hybrid_inspect(text).to_dict(), ensure_ascii=False))  # regex (0 API) + optional semantic escalation
 
             elif self.path == "/semantic":  # paraphrase-aware layer (embed if REDCELL_SEMANTIC_EMBED, else 0-API lexical)
                 text = self._body().get("input") or ""
