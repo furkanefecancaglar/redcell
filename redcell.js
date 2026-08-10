@@ -99,6 +99,21 @@
     ['repeat-flood', 'LLM10', 'medium',
       R`\b(repeat|print|say|output|write)\b.{0,35}\b(forever|infinitely|over and over|a (thousand|million|billion) times|1000\+? times|until you (run out|crash|stop))\b|\b(repeat|say|print)\b.{0,20}\b\d{3,} times\b`,
       'repeat-flood / resource exhaustion'],
+    ['tool-param-injection', 'LLM06', 'high',
+      R`('\s*(or|and)\s+'?\d+'?\s*=\s*'?\d|;\s*(drop|delete|truncate|update|insert)\s+(table|into|from)\b|\bunion\s+select\b|'\s*;\s*--|\$\([^)]*\b(rm|curl|wget|bash|sh|nc|cat)\b|\{\{[^}]*\}\}|<img[^>]+onerror\s*=)`,
+      'injection payload in tool/query parameters'],
+    ['structured-override', 'LLM01', 'high',
+      R`("role"\s*:\s*"(system|admin|developer|root)"|"is_?admin"\s*:\s*true|"(admin|root|sudo|superuser|authenticated)"\s*:\s*true|"permissions?"\s*:\s*\[[^\]]*"(all|admin|\*)"|(^|\n)\s*role\s*:\s*(system|admin))`,
+      'privilege/role override via structured (JSON/YAML) data'],
+    ['homoglyph-spoofing', 'LLM01', 'medium',
+      R`([a-z][а-яёα-ω]|[а-яёα-ω][a-z]|[A-Z][А-ЯЁΑ-Ω]|[А-ЯЁΑ-Ω][A-Z])`,
+      'mixed-script homoglyph (Cyrillic/Greek lookalikes) evading keyword filters'],
+    ['dan-variants', 'LLM01', 'medium',
+      R`\byou are (now )?(dan|aim|stan|dude|betterdan|antigpt|kevin|jailbroken)\b|\b(do anything now|opposite (mode|day)|developer mode (enabled|is on|output|active)|jailbreak mode|no ethical (guidelines|constraints)|godmode)\b`,
+      'DAN / roleplay-jailbreak persona variant'],
+    ['link-spoofing', 'LLM02', 'medium',
+      R`(\[[^\]]*\]\(\s*javascript:|\[[^\]]*\]\(https?://[^)]*@|href\s*=\s*["']?\s*javascript:|\]\(\s*data:text/html|\bjavascript:[^"'\s]{0,40}(fetch|document\.cookie|eval))`,
+      'malicious/spoofed link (javascript:, credential-in-URL, data:html)'],
   ];
 
   const RULES = RULE_DEFS.map(([id, owasp, sev, pat, why]) => ({
