@@ -874,6 +874,11 @@ a{color:var(--brand)}
 <div id=winbox></div>
 <div class=row><input id=in placeholder="Try to make it reveal the secret…" onkeydown="if(event.key==='Enter')go()"><button id=send onclick=go()>Send</button></div>
 <p style="color:var(--ink3);font-size:12px">Level 1–5 · defenses escalate: hardened prompt → input firewall → output redaction → full REDCELL. <a href="/">About REDCELL</a></p>
+<div id=moat style="max-width:560px;margin:26px auto 0;display:none">
+<h3 style="font:11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:0 0 8px">Attack techniques the firewall has caught <span id=moatn style="color:#3a4152"></span></h3>
+<div id=moatlist></div>
+<p style="color:#3a4152;font:11px ui-monospace,monospace;margin:8px 0 0">real counts from live play · no messages stored</p>
+</div>
 </div>
 <script>
 var LV=1, DEFS={1:['hardened-prompt'],2:['hardened-prompt'],3:['input-firewall','hardened-prompt'],4:['input-firewall','hardened-prompt','output-redaction'],5:['input-firewall','hardened-prompt','output-redaction']};
@@ -893,6 +898,7 @@ else{wb.innerHTML='<div class=win><h3>🔓 Level '+LV+' cleared — you extracte
 catch(e){add('sys','(network error)');}
 document.getElementById('send').disabled=false;i.focus();}
 fetch('/breach/stats').then(function(x){return x.json();}).then(function(s){var e=document.getElementById('stat');if(e&&s.attempts)e.textContent='· '+s.attempts.toLocaleString()+' attempts logged · '+(s.wins||0)+' breaches';}).catch(function(){});
+fetch('/breach/techniques').then(function(x){return x.json();}).then(function(s){var t=(s&&s.techniques)||[];if(!t.length)return;var box=document.getElementById('moat'),list=document.getElementById('moatlist');var max=t[0].count||1;var html='';t.slice(0,8).forEach(function(x){var w=Math.max(6,Math.round((x.count/max)*100));var id=x.id.replace(/[<>&]/g,'');html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0;font:12px ui-monospace,monospace"><span style="flex:0 0 170px;color:#eaedf4">'+id+'</span><span style="flex:1;background:#161b28;border-radius:6px;overflow:hidden"><span style="display:block;height:14px;width:'+w+'%;background:#ff3b46"></span></span><span style="flex:0 0 34px;text-align:right;color:#9aa4b6">'+x.count+'</span></div>';});list.innerHTML=html;var n=document.getElementById('moatn');if(n)n.textContent='· '+(s.total||0)+' logged';box.style.display='block';}).catch(function(){});
 renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the password —');
 </script></body></html>`;
 
