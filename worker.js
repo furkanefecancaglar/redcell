@@ -295,6 +295,7 @@ export default {
     if (url.pathname === '/') { bump(env, ctx, 'landing'); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/ci') return html(renderCI());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -624,7 +625,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   <p class=lede>The same offensive-security core — test the prompt, gate the pipeline, attack the live agent, and firewall production traffic.</p>
   <div class=surf>
     <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>21 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
-    <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API.</p></div>
+    <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
     <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>32 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
   </div>
@@ -1033,6 +1034,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url><loc>https://redcell.redcellv1.workers.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/breach</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/ci</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1105,3 +1107,66 @@ function renderReport(rec, id) {
 }
 
 const REPORT_MISSING = '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex"><title>Report not found — REDCELL</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap><div class=ey>REDCELL</div><h1 style="font-size:22px">Report not found</h1><p class=id>This report link is invalid or has expired (reports are kept for 30 days). Run a new scan to generate one.</p><a class=cta href="/">Run a scan →</a></div></body></html>';
+
+/* ---------------- CI gate docs (GET /ci) ---------------- */
+const CI_YAML = `# .github/workflows/redcell.yml — REDCELL agent prompt-resilience gate
+name: REDCELL agent gate
+
+on:
+  pull_request:
+    paths:
+      - "prompts/**"
+      - "agents/**"
+      - "**/*.prompt"
+      - "**/*.system.txt"
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  redcell-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: REDCELL resilience gate
+        run: |
+          python3 redcell/redcell_ci.py \\
+            "prompts/**/*.txt" "agents/**/*.md" \\
+            --min-score 60 --no-color
+        # exit 1 fails the job; an unmatched glob is a clean pass (nothing to gate)
+`;
+const CI_USAGE = `# vendor the two zero-dependency files into your repo (until REDCELL is on PyPI)
+mkdir -p redcell
+cp redcell_static.py redcell_ci.py redcell/    # both are 0-API, stdlib-only
+
+# run it anywhere — locally or in CI
+python3 redcell/redcell_ci.py "prompts/**/*.txt" --min-score 60 --no-color
+python3 redcell/redcell_ci.py agent.system.txt --min-score 70 --json
+
+# exit codes: 0 = all passed (or no glob matched)  ·  1 = a gate failed  ·  3 = no path args`;
+
+function renderCI() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="REDCELL CI gate — fail the build when an AI agent’s system prompt regresses below a resilience threshold. GitHub Action, 0 API, copy-paste YAML.">'
+    + '<title>REDCELL — CI gate for agent prompts</title><style>' + REPORT_CSS
+    + '.k{color:#ff8a34}.g{color:#33d17f}pre.y{white-space:pre;overflow-x:auto}'
+    + '</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · CI gate</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">Stop a PR from weakening your agent.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL scores every changed system prompt against 21 OWASP-LLM-Top-10 checks and <b>fails the build</b> when resilience drops below your threshold or a critical finding appears. Pure static analysis — zero API keys, runs in seconds.</p>'
+    + '<div class=card><div class=ey>1 · Drop in the workflow</div><pre class="p y">' + esc(CI_YAML) + '</pre></div>'
+    + '<div class=card><div class=ey>2 · Vendor the checker &amp; run it</div><pre class="p y">' + esc(CI_USAGE) + '</pre></div>'
+    + '<div class=card><div class=ey>What blocks a merge</div>'
+    + '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>Score below <span class=k>--min-score</span></b><div class=id>e.g. a prompt that scores 42/100 with a min of 60</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>Any critical finding</b><div class=id>on by default; opt out with <span class=k>--no-fail-on-critical</span></div></span></div>'
+    + '<div class=find><span class=bar style="background:#33d17f"></span><span class=ttl><b>No prompt files changed</b><div class=id>an unmatched glob is a clean pass — the gate never blocks a repo that has nothing to check</div></span></div></div>'
+    + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want it live before you commit?</b>'
+    + '<div class=id style="margin:6px 0 12px">Paste a prompt into the scanner and see the same 21-check score the gate uses.</div>'
+    + '<a class=cta href="/">Try the scanner →</a></div>'
+    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">redcell.redcellv1.workers.dev</a> · <a href="/pitch">the pitch</a></div>'
+    + '</div></body></html>';
+}

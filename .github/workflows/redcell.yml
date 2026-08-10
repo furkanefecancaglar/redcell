@@ -32,4 +32,5 @@ jobs:
           python3 redcell/redcell_ci.py \
             "prompts/**/*.txt" "agents/**/*.md" \
             --min-score 60 --no-color
-        # exit code 1 from redcell_ci.py fails the job automatically
+        # exit 1 fails the job; an unmatched glob is a clean pass (nothing to gate).
+        # Full docs: https://redcell.redcellv1.workers.dev/ci

@@ -42,7 +42,7 @@ python3 server.py            # → http://127.0.0.1:8770
 - `POST /scan` `{system_prompt}` → live adversarial engine (real attacks + judge, **uses model quota**).
 - `GET /health` → advertises all three.
 
-CI gate (0 API): `python3 redcell_ci.py prompts/*.txt --min-score 60` (exit 1 on fail). Action: `.github/workflows/redcell.yml`.
+CI gate (0 API): `python3 redcell_ci.py prompts/*.txt --min-score 60` (exit 1 on fail; an unmatched glob is a clean pass). Action: `.github/workflows/redcell.yml`. Copy-paste setup + YAML: <https://redcell.redcellv1.workers.dev/ci>.
 
 MCP server (0 API): `python3 redcell_mcp.py` exposes `firewall_check` + `scan_prompt` as tools any MCP client
 (Claude Desktop, Cursor, …) can call. Config: `{ "redcell": { "command": "python3", "args": ["/abs/path/redcell_mcp.py"] } }`.

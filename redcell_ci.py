@@ -10,7 +10,8 @@ agent's guardrails can't merge.
     python3 redcell_ci.py agent.md --min-score 70 --json
     python3 redcell_ci.py --selftest
 
-Exit codes: 0 = all gates passed · 1 = a gate failed · 3 = bad usage (no files).
+Exit codes: 0 = all gates passed (or no glob matched — nothing to gate) · 1 = a gate
+failed (or a named file was unreadable) · 3 = bad usage (no path args given).
 """
 from __future__ import annotations
 
@@ -114,13 +115,21 @@ def main():
     if args.selftest:
         raise SystemExit(_selftest())
 
+    if not args.paths:
+        print("usage: redcell_ci.py <prompt-file>... [--min-score N]", file=sys.stderr)
+        raise SystemExit(3)
+    # A glob that matches nothing is skipped (a repo without prompt files yet must not
+    # break its build); a literal path that is missing is a real error and is kept so it
+    # fails the gate loudly.
     expanded = []
     for p in args.paths:
-        hits = glob.glob(p, recursive=True)
-        expanded.extend(hits if hits else [p])
+        if any(c in p for c in "*?["):
+            expanded.extend(glob.glob(p, recursive=True))
+        else:
+            expanded.append(p)
     if not expanded:
-        print("usage: redcell_ci.py <prompt-file>... [--min-score N]  (no files matched)", file=sys.stderr)
-        raise SystemExit(3)
+        print("REDCELL gate: no files matched — nothing to gate.", file=sys.stderr)
+        raise SystemExit(0)
 
     raise SystemExit(run(expanded, min_score=args.min_score,
                          fail_on_critical=not args.no_fail_on_critical,
