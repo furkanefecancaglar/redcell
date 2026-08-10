@@ -452,12 +452,28 @@ export default {
                 const st = raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 };
                 st.attempts++; if (t.win) st.wins++; if (t.blocked) st.blocked++;
                 await env.BREACH_LOG.put('stats', JSON.stringify(st));
+                // technique fingerprint: which firewall rules the attempt tripped — counts only, no message/PII
+                const fv = inspect(String(b.message));
+                const ids = (fv.matches || []).map(function (m) { return m.id; }).filter(Boolean);
+                if (ids.length) {
+                  const traw = await env.BREACH_LOG.get('techniques');
+                  const tc = traw ? JSON.parse(traw) : {};
+                  for (const id of ids) tc[id] = (tc[id] || 0) + 1;
+                  await env.BREACH_LOG.put('techniques', JSON.stringify(tc));
+                }
               } catch (e) { /* logging is best-effort */ }
             })());
           }
           return json({ level: lvl.n, level_name: lvl.name, total_levels: LEVELS.length, ...t });
         } catch (e) { return json({ error: String(e) }, 500); }
       }
+    }
+    if (url.pathname === '/breach/techniques') {
+      if (!env || !env.BREACH_LOG) return json({ techniques: [], total: 0 });
+      const raw = await env.BREACH_LOG.get('techniques');
+      const tc = raw ? JSON.parse(raw) : {};
+      const arr = Object.keys(tc).map(function (k) { return { id: k, count: tc[k] }; }).sort(function (a, b) { return b.count - a.count; });
+      return json({ techniques: arr, total: arr.reduce(function (s, x) { return s + x.count; }, 0) });
     }
     if (url.pathname === '/breach/stats') {
       if (!env || !env.BREACH_LOG) return json({ attempts: 0, wins: 0, blocked: 0 });
@@ -1010,6 +1026,8 @@ td.m{font-family:ui-monospace,monospace;color:#9aa4b6}
 <div class=c><div class=n>Leads (all)</div><div class=v id=f_lead>—</div></div>
 <div class=c><div class=n>Live red-team</div><div class=v id=f_scan_live>—</div></div>
 </div>
+<h2>Top attack techniques seen <span style="color:#3a4152;text-transform:none;letter-spacing:0">· Breach data moat</span></h2>
+<div id=techniques style="font:13px ui-monospace,monospace;color:#616b80">loading…</div>
 <h2>Recent leads</h2>
 <table id=leadtbl><thead><tr><th>When</th><th>Email</th><th>Tier</th><th>Source</th></tr></thead><tbody></tbody></table>
 <script>
@@ -1040,7 +1058,16 @@ async function loadStatus(){var el=document.getElementById('status');try{var s=a
  html+='<span style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:'+(s.ok?'#33d17f':'#ff3b46')+'">'+(s.ok?'● all systems go':'● degraded')+'</span>';
  el.innerHTML=html;
 }catch(e){el.innerHTML='<span style="color:#ff8a34">self-check unreachable</span>';}}
+async function loadTechniques(){var el=document.getElementById('techniques');try{var s=await fetch('/breach/techniques').then(function(x){return x.json();});
+ var t=(s&&s.techniques)||[];if(!t.length){el.textContent='no data yet — play the Breach game to seed it.';return;}
+ var max=t[0].count||1;var html='';t.slice(0,10).forEach(function(x){var w=Math.max(4,Math.round((x.count/max)*100));
+  html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><span style="flex:0 0 190px;color:#eaedf4">'+x.id.replace(/[<>&]/g,'')+'</span>'
+   +'<span style="flex:1;background:#161b28;border-radius:6px;overflow:hidden"><span style="display:block;height:16px;width:'+w+'%;background:#ff3b46"></span></span>'
+   +'<span style="flex:0 0 40px;text-align:right;color:#9aa4b6">'+x.count+'</span></div>';});
+ el.innerHTML=html;
+}catch(e){el.textContent='techniques unavailable';}}
 loadStatus();
+loadTechniques();
 loadStats();
 try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').value=s;load();}}catch(e){}
 </script></div></body></html>`;
