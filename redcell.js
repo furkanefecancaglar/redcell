@@ -84,6 +84,21 @@
     ['multilang-injection', 'LLM01', 'high',
       R`(önceki (tüm )?talimatlar\S* (yok say|görmezden gel|unut|boş ?ver)|sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (göster|açıkla|söyle|yazdır|ver)|tüm (kural\S*|kısıtlama\S*|sınırlama\S*) (yok say|kaldır|unut|görmezden gel)|ignora (las )?instrucciones (anteriores|previas)|olvida (las )?instrucciones (anteriores|previas)|revela (tu|el|las) (prompt|sistema|instrucciones)|ignoriere (alle )?(vorherigen |bisherigen )?anweisungen|vergiss (alle )?(vorherigen |bisherigen )?anweisungen|zeig(e)? (mir )?(deinen? )?(system[- ]?prompt|systemanweisung\S*)|ignore[z]? (toutes )?les instructions (précédentes|antérieures)|oublie[z]? (toutes )?les instructions (précédentes|antérieures)|révèle (ton|tes|le) (invite|système|prompt|instructions))`,
       'non-English (TR/ES/DE/FR) prompt injection'],
+    ['code-execution', 'LLM06', 'high',
+      R`(\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.(Popen|run|call)|__import__\s*\(|\b(execute|run) (this |the following )?(arbitrary |untrusted )?(shell|bash|python|system) (command|code|script)\b|\bpip install\b.{0,20}&&|;\s*(rm|curl|wget|bash)\s)`,
+      'code / command execution request'],
+    ['translation-leak', 'LLM07', 'medium',
+      R`\b(translate|say|write|render|repeat)\b.{0,30}\b(your|the) (system ?prompt|instructions?|rules|guidelines)\b.{0,20}\b(to|into|in)\b|\bin (french|spanish|german|turkish|pig latin|base64|leet\w*|morse)\b.{0,30}(your|the) (instructions?|rules|prompt)`,
+      'prompt extraction via translation/transform'],
+    ['completion-attack', 'LLM07', 'medium',
+      R`\b(complete|continue|finish|fill in|autocomplete)\b.{0,25}(the following|this)?.{0,15}["']?(my (system ?)?prompt (is|was|:)|you are a|your instructions? (are|:)|the (secret|password) is|my rules? (are|:))|\b(continue|complete)\b.{0,15}["']you are\b`,
+      'system-prompt leak via completion'],
+    ['persistent-injection', 'LLM01', 'medium',
+      R`\b(add|append|inject)\b.{0,20}\bto your (rules|instructions|system ?prompt|memory)\b|\b(remember|store)\b.{0,25}\b(permanently|forever)\b.{0,25}\b(that you|to (ignore|always|never)|as a rule)\b|\bfrom now on,? you (must|will|should) (ignore|always obey|never refuse|drop)\b`,
+      'persistent rule/memory injection'],
+    ['repeat-flood', 'LLM10', 'medium',
+      R`\b(repeat|print|say|output|write)\b.{0,35}\b(forever|infinitely|over and over|a (thousand|million|billion) times|1000\+? times|until you (run out|crash|stop))\b|\b(repeat|say|print)\b.{0,20}\b\d{3,} times\b`,
+      'repeat-flood / resource exhaustion'],
   ];
 
   const RULES = RULE_DEFS.map(([id, owasp, sev, pat, why]) => ({
