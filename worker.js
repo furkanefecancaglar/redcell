@@ -28,6 +28,15 @@ function json(obj, status = 200) {
   });
 }
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function html(body, status = 200, extra) {
+  return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, CORS, extra || {}) });
+}
+
 /* ---------------- live adversarial engine (mirrors redcell_engine.py) ---------------- */
 const SEVW = { critical: 34, high: 20, medium: 11, low: 5 };
 const CORPUS = [
@@ -307,6 +316,41 @@ export default {
         })());
       }
       return json({ ok: true, message: 'You are on the list — we will reach out.' });
+    }
+    // Free security review: run the full static scan + firewall on a submitted prompt,
+    // persist it under an unguessable id, and hand back a shareable report URL. The email
+    // (if given) is stored as a lead. The prompt lives in KV, never in a query string.
+    if (request.method === 'POST' && url.pathname === '/review') {
+      const b = await request.json().catch(() => ({}));
+      const prompt = String((b && b.system_prompt) || '').slice(0, 8000);
+      if (!prompt.trim()) return json({ error: 'a prompt is required' }, 400);
+      const email = String((b && b.email) || '').trim().slice(0, 200);
+      const rec = { ts: Date.now(), prompt, report: analyze(prompt), firewall: inspect(prompt) };
+      const id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).replace(/[^a-z0-9]/g, '').slice(0, 16);
+      if (env && env.LEADS) {
+        try { await env.LEADS.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 30 }); }
+        catch (e) { return json({ error: 'could not store report' }, 503); }
+        if (ctx && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          ctx.waitUntil((async () => {
+            try {
+              const lead = { ts: Date.now(), email, note: ('[review /r/' + id + '] ' + prompt).slice(0, 1000), tier: 'review', source: String((b && b.source) || 'lead-magnet').slice(0, 60) };
+              await env.LEADS.put('lead:' + Date.now() + ':' + Math.random().toString(36).slice(2, 7), JSON.stringify(lead));
+              const raw = await env.LEADS.get('count'); const n = raw ? parseInt(raw, 10) : 0; await env.LEADS.put('count', String(n + 1));
+            } catch (e) { }
+          })());
+        }
+      }
+      return json({ ok: true, id, url: '/r/' + id });
+    }
+    // Shared report page (noindex — it can contain a user's own prompt). Unguessable id in path.
+    if (url.pathname.indexOf('/r/') === 0) {
+      const id = url.pathname.slice(3).replace(/[^a-z0-9]/g, '').slice(0, 16);
+      if (!id || !env || !env.LEADS) return html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
+      const raw = await env.LEADS.get('report:' + id);
+      if (!raw) return html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
+      let rec = null; try { rec = JSON.parse(raw); } catch (e) { rec = null; }
+      if (!rec) return html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
+      return html(renderReport(rec, id), 200, { 'X-Robots-Tag': 'noindex' });
     }
     if (url.pathname === '/leads') { // founder-only export (PII: requires a token)
       if (!env || !env.LEADS) return json({ error: 'no store' }, 503);
@@ -671,18 +715,17 @@ function shareX(){window.open('https://twitter.com/intent/tweet?text='+encodeURI
 function shareLI(){window.open('https://www.linkedin.com/sharing/share-offsite/?url='+encodeURIComponent(RCURL),'_blank','noopener');}
 function reviewBox(kind){return '<div style="margin-top:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:rgba(255,59,70,.05)">'
 +'<div style="font-weight:700;font-size:14.5px;color:var(--ink)">Want the full security review?</div>'
-+'<div style="color:var(--ink3);font-size:13px;margin:4px 0 10px">We run this prompt through all 21 checks plus a live red-team pass and email you the report — free.</div>'
++'<div style="color:var(--ink3);font-size:13px;margin:4px 0 10px">Get a shareable report — all 21 checks plus a runtime firewall pass on this prompt. Free, instant.</div>'
 +'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id=revmail type=email placeholder="you@company.com" style="flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;color:var(--ink);padding:9px 11px;font-size:14px" />'
 +'<button onclick="review(\''+kind+'\')" style="background:var(--crit);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer">Get my review</button></div>'
 +'<div id=revmsg class=mono style="display:none;font-size:13px;margin-top:8px"></div></div>';}
 async function review(kind){var e=(document.getElementById('revmail').value||'').trim();var m=document.getElementById('revmsg');
  if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid email.';return;}
- var note='['+kind+'] '+(LASTP||'').slice(0,900);
- try{var r=await fetch('/lead',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,tier:'review',source:'lead-magnet',note:note})}).then(function(x){return x.json();});
-  m.style.display='block';
-  if(r&&r.ok){m.style.color='var(--pass)';m.textContent='✓ On its way — we will email your full review.';}
+ m.style.display='block';m.style.color='var(--ink3)';m.textContent='Building your report…';
+ try{var r=await fetch('/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_prompt:(LASTP||''),email:e,source:kind})}).then(function(x){return x.json();});
+  if(r&&r.ok&&r.url){m.style.color='var(--pass)';m.innerHTML='✓ Report ready — <a href="'+r.url+'" target="_blank" rel="noopener" style="color:var(--pass);text-decoration:underline">open your full security report ↗</a>';}
   else{m.style.color='var(--high)';m.textContent=(r&&r.error)||'Please try again.';}
- }catch(e2){m.style.display='block';m.style.color='var(--high)';m.textContent='Network error — try again.';}}
+ }catch(e2){m.style.color='var(--high)';m.textContent='Network error — try again.';}}
 function validEmail(e){var a=e.indexOf('@');return a>0 && e.lastIndexOf('.')>a+1 && e.indexOf(' ')<0 && e.length<200;}
 async function join(){var e=(document.getElementById('lemail').value||'').trim();var b=document.getElementById('joinbtn');var m=document.getElementById('joinmsg');
  if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid work email.';return;}
@@ -934,6 +977,7 @@ const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630
 /* ---------------- SEO: robots + sitemap ---------------- */
 const ROBOTS_TXT = `User-agent: *
 Allow: /
+Disallow: /r/
 Sitemap: https://redcell.redcellv1.workers.dev/sitemap.xml
 `;
 const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -944,3 +988,71 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
 `;
+
+/* ---------------- shared security report (GET /r/<id>) ---------------- */
+const _RSEV = { critical: '#ff3b46', high: '#ff8a34', medium: '#ffc73a', low: '#5aa0ff', pass: '#33d17f' };
+const REPORT_CSS = 'body{margin:0;background:#0b0d12;color:#eaedf4;font:15px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif}'
+  + '.wrap{max-width:820px;margin:0 auto;padding:34px 22px 70px}a{color:#33d17f}'
+  + '.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}'
+  + '.mk{display:inline-flex;gap:3px;vertical-align:middle;margin-right:9px}.mk i{width:9px;height:9px;border-radius:2px;display:block}'
+  + '.ey{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#616b80}'
+  + '.card{border:1px solid #232a3a;border-radius:14px;background:#111520;padding:20px 22px;margin:16px 0}'
+  + '.score{font-size:52px;font-weight:900;line-height:1}.score small{font-size:18px;color:#616b80;font-weight:600}'
+  + '.grade{font-family:ui-monospace,monospace;font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid #2c3547;margin-left:12px}'
+  + '.find{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid #1b2130}'
+  + '.bar{width:3px;align-self:stretch;border-radius:2px;flex:none}.ttl{flex:1}.sv{font-family:ui-monospace,monospace;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.05)}'
+  + '.id{font-family:ui-monospace,monospace;font-size:11px;color:#616b80}'
+  + '.verdict{display:inline-flex;align-items:center;gap:10px;font-family:ui-monospace,monospace;font-size:13px}'
+  + '.vb{color:#fff;padding:3px 11px;border-radius:7px;font-weight:700}'
+  + 'pre.p{white-space:pre-wrap;word-break:break-word;background:#0e1017;border:1px solid #232a3a;border-radius:10px;padding:14px;font-size:13px;color:#9aa4b6;max-height:280px;overflow:auto}'
+  + '.btn{display:inline-block;margin:4px 8px 0 0;border:1px solid #2c3547;color:#eaedf4;text-decoration:none;border-radius:8px;padding:8px 15px;font-size:13px}'
+  + '.cta{background:#ff3b46;color:#fff;border:0;border-radius:9px;padding:11px 20px;font-weight:700;text-decoration:none;display:inline-block}';
+
+function _mk() {
+  let s = '<span class=mk>';
+  for (let i = 0; i < 9; i++) s += '<i style="background:' + ([0, 2, 4, 6, 8].indexOf(i) >= 0 ? '#ff3b46' : '#3a4152') + '"></i>';
+  return s + '</span>';
+}
+
+function renderReport(rec, id) {
+  const r = rec.report || {}, fwv = rec.firewall || {};
+  const col = r.score >= 70 ? _RSEV.pass : r.score >= 45 ? _RSEV.high : _RSEV.critical;
+  const finds = (r.findings || []).map(function (f) {
+    const c = _RSEV[f.sev] || '#616b80';
+    return '<div class=find><span class=bar style="background:' + c + '"></span>'
+      + '<span class=ttl><b>' + esc(f.title) + '</b><div class=id>' + esc(f.cat || '') + '</div></span>'
+      + '<span class=sv style="color:' + c + '">' + esc(f.sev) + '</span><span class=id>' + esc(f.id) + '</span></div>';
+  }).join('') || '<div class=find style="color:#33d17f">No weaknesses matched — strong baseline.</div>';
+  const vc = fwv.action === 'block' ? _RSEV.critical : fwv.action === 'flag' ? _RSEV.high : _RSEV.pass;
+  const fwm = (fwv.matches || []).map(function (m) {
+    const c = _RSEV[m.severity] || '#616b80';
+    return '<div class=find><span class=bar style="background:' + c + '"></span><span class=ttl>' + esc(m.id) + ' <span class=id>— ' + esc(m.why) + '</span></span><span class=sv style="color:' + c + '">' + esc(m.severity) + '</span></div>';
+  }).join('') || '<div class=find style="color:#33d17f">Clean — no attack patterns matched in the prompt itself.</div>';
+  const shareTxt = 'I scored my AI system prompt ' + (r.score || 0) + '/100 on REDCELL — the security layer for AI agents.';
+  const shareUrl = 'https://redcell.redcellv1.workers.dev/r/' + id;
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=robots content="noindex,nofollow">'
+    + '<title>REDCELL security report</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · security report</div>'
+    + '<h1 style="font-size:23px;margin:10px 0 2px">Your prompt’s security report</h1>'
+    + '<div class=id style="margin-bottom:6px">Static resilience across 21 checks + a runtime firewall pass. Private link — not indexed.</div>'
+    + '<div class=card><div class=ey>Static resilience</div>'
+    + '<div style="display:flex;align-items:center;margin-top:8px"><span class=score style="color:' + col + '">' + (r.score || 0) + '<small>/100</small></span>'
+    + '<span class=grade style="color:' + col + '">' + esc(r.grade || '') + '</span>'
+    + '<span class=id style="margin-left:auto">' + (r.findings || []).length + ' findings · ' + (r.passed || 0) + ' checks passed</span></div>'
+    + '<div style="margin-top:10px">' + finds + '</div></div>'
+    + '<div class=card><div class=ey>Runtime firewall verdict</div><div style="margin-top:8px" class=verdict>verdict <span class=vb style="background:' + vc + '">' + esc(String(fwv.action || 'allow').toUpperCase()) + '</span><span class=id>score ' + (fwv.score || 0) + ' · risk ' + esc(fwv.risk || 'none') + '</span></div>'
+    + '<div style="margin-top:10px">' + fwm + '</div></div>'
+    + '<div class=card><div class=ey>Analyzed prompt</div><pre class=p>' + esc(rec.prompt || '') + '</pre></div>'
+    + '<div style="margin:18px 0">'
+    + '<a class=btn href="https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareTxt) + '&url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>Share on X</a>'
+    + '<a class=btn href="https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl) + '" target=_blank rel=noopener>LinkedIn</a></div>'
+    + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want the runtime firewall in front of your agent?</b>'
+    + '<div class=id style="margin:6px 0 12px">This scan is free and runs at the edge. The firewall, live red-team engine, and CI gate ship as REDCELL.</div>'
+    + '<a class=cta href="/">Explore REDCELL →</a></div>'
+    + '<div class=id style="margin-top:20px">Generated by REDCELL · <a href="/">redcell.redcellv1.workers.dev</a></div>'
+    + '</div></body></html>';
+}
+
+const REPORT_MISSING = '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex"><title>Report not found — REDCELL</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap><div class=ey>REDCELL</div><h1 style="font-size:22px">Report not found</h1><p class=id>This report link is invalid or has expired (reports are kept for 30 days). Run a new scan to generate one.</p><a class=cta href="/">Run a scan →</a></div></body></html>';
