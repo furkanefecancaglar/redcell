@@ -272,6 +272,8 @@ export default {
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
+    if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
+    if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
@@ -645,7 +647,7 @@ async function scan(){var t=document.getElementById('in').value;if(!t.trim()){do
   var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 21 checks</span></div>';
   h+='<div style="margin-top:12px">'+r.findings.map(function(f){var c=SEV[f.sev]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(f.title)+'</span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+f.sev+'</span><span class=id>'+f.id+'</span></div>';}).join('')+'</div>';
   if(!r.findings.length)h+='<div class=mono style="color:var(--pass);margin-top:8px">no weaknesses matched — strong baseline.</div>';
-  LASTP=t;h+=reviewBox('config');
+  LASTP=t;LASTSHARE='I scored my AI system prompt '+r.score+'/100 on REDCELL — the OWASP LLM Top-10 scanner for AI agents.';h+=shareBar()+reviewBox('config');
   out.innerHTML=h;var sc=out.querySelector('.score');var n=r.score;sc.firstChild.textContent='0';var i=0;var iv=setInterval(function(){i+=Math.max(1,Math.round((n-i)/6));if(i>=n){i=n;clearInterval(iv);}sc.firstChild.textContent=i;},26);
  }catch(e){out.innerHTML='<div class=mono style="color:var(--crit)">scan failed — retry in a moment</div>';}
  busy(b,false);}
@@ -655,11 +657,18 @@ async function fw(){var t=document.getElementById('in').value;if(!t.trim()){docu
   var vc=r.action==='block'?'var(--crit)':r.action==='flag'?'var(--high)':'var(--pass)';
   var h='<div class=verdict>verdict<span class=vb style="color:#fff;background:'+vc+'">'+r.action.toUpperCase()+'</span><span style="color:var(--ink3)">score '+r.score+' · risk '+r.risk+'</span></div>';
   h+='<div style="margin-top:12px">'+(r.matches.map(function(m){var c=SEV[m.severity]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(m.id)+' <span style="color:var(--ink3);font-size:13px">— '+esc(m.why)+'</span></span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+m.severity+'</span></div>';}).join('')||'<div class=mono style="color:var(--pass)">clean — no attack patterns matched.</div>')+'</div>';
-  LASTP=t;h+=reviewBox('input');
+  LASTP=t;LASTSHARE='I ran a prompt-injection test through REDCELL and the firewall said '+r.action.toUpperCase()+'. Free AI-agent security check:';h+=shareBar()+reviewBox('input');
   out.innerHTML=h;
  }catch(e){out.innerHTML='<div class=mono style="color:var(--crit)">check failed — retry in a moment</div>';}
  busy(b,false);}
-var LASTP='';
+var LASTP='';var LASTSHARE='';
+var RCURL='https://redcell.redcellv1.workers.dev/';
+function shareBar(){return '<div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
++'<span style="color:var(--ink3);font-size:11px;font-family:var(--mono);letter-spacing:.12em">SHARE RESULT</span>'
++'<button onclick="shareX()" style="background:transparent;color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;font-size:13px;cursor:pointer">Post on X</button>'
++'<button onclick="shareLI()" style="background:transparent;color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:6px 13px;font-size:13px;cursor:pointer">LinkedIn</button></div>';}
+function shareX(){window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(LASTSHARE)+'&url='+encodeURIComponent(RCURL),'_blank','noopener');}
+function shareLI(){window.open('https://www.linkedin.com/sharing/share-offsite/?url='+encodeURIComponent(RCURL),'_blank','noopener');}
 function reviewBox(kind){return '<div style="margin-top:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:rgba(255,59,70,.05)">'
 +'<div style="font-weight:700;font-size:14.5px;color:var(--ink)">Want the full security review?</div>'
 +'<div style="color:var(--ink3);font-size:13px;margin:4px 0 10px">We run this prompt through all 21 checks plus a live red-team pass and email you the report — free.</div>'
@@ -921,3 +930,17 @@ const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630
 <rect x="90" y="574" width="1020" height="2" fill="#232a3a"/>
 <text x="90" y="612" font-family="monospace" font-size="19" fill="#33d17f">● redcell.redcellv1.workers.dev</text>
 </svg>`;
+
+/* ---------------- SEO: robots + sitemap ---------------- */
+const ROBOTS_TXT = `User-agent: *
+Allow: /
+Sitemap: https://redcell.redcellv1.workers.dev/sitemap.xml
+`;
+const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://redcell.redcellv1.workers.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/breach</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+</urlset>
+`;
