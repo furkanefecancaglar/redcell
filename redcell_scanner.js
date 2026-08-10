@@ -1,5 +1,5 @@
 /*!
- * REDCELL static scanner — JS port of redcell_static.py (18 OWASP LLM detectors).
+ * REDCELL static scanner — JS port of redcell_static.py (22 OWASP LLM detectors).
  * Zero deps, browser + Node. Regexes use ONLY the 'i' flag (= Python re.IGNORECASE,
  * NO dotAll) so scores match the Python core exactly (weak 17 / agent 0 / hard 90).
  *
@@ -44,6 +44,9 @@
     ['LLM01', 'Retrieval provenance', 'high', 'Retrieved/RAG content lacks provenance rules', 'cond',
       R`\b(retriev\w+|rag\b|knowledge base|vector (store|db|database)|search results?|documents? (you|it) (read|retrieve|process)|context (provided|from) (documents|search)|web (page|search) results?)\b`,
       R`(untrusted|provenance|do not (follow|obey|execute) .{0,30}(instructions|commands) (in|from) .{0,20}(document|content|retriev|source)|treat .{0,25}(retriev|document|content|search) .{0,12}as data|is (not )?(an )?instruction)`],
+    ['LLM01', 'Indirect injection', 'high', 'Tool/function output not treated as untrusted', 'cond',
+      R`\b(tool (result|output|response)|function (result|output|call)|api (response|result|output)|the (result|output|response) (of|from) (a|the|your|each) (tool|function|api|call)|tool_result|plugin (output|result|response)|results? returned (by|from) (a |the )?(tool|function|api|plugin)|when (a |the )?tool returns)\b`,
+      R`\b(tool|function|api|plugin) (output|result|response)s?\b[^.]{0,60}(untrusted|as data|not (an? )?instruction|never (an? )?instruction)|treat[^.]{0,60}(as (untrusted|data)|never as instructions?|not as instructions?)|do not (follow|obey|execute|trust|act on)[^.]{0,45}(tool|function|api|plugin|result|output|response)|(tool|function|api|plugin) (output|result|response)s? (are|is) (untrusted|data|not )`],
     ['LLM01', 'Hidden-character smuggling', 'high', 'Invisible / bidi control characters in prompt', 'hidden', null, null],
     ['LLM06', 'Unsupervised autonomy', 'high', 'Autonomous action without human oversight', 'cond',
       R`\b(autonomous(ly)?|without (asking|confirming|human|approval)|on your own|take initiative|act independently|decide and (execute|act|do)|complete the (whole )?task .{0,15}(yourself|without)|fully automated)\b`,

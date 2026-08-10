@@ -45,7 +45,7 @@ TOOLS = [
     {
         "name": "scan_prompt",
         "description": ("Score an AI agent's SYSTEM PROMPT for defensive resilience against the OWASP LLM Top 10 "
-                        "(21 detectors: missing instruction hierarchy, no confidentiality, excessive agency, "
+                        "(22 detectors: missing instruction hierarchy, no confidentiality, excessive agency, "
                         "hardcoded secrets, etc.). Returns a 0-100 resilience score, grade, and the findings. Use "
                         "before shipping or in CI to catch a weak/regressed agent prompt. 0 API."),
         "inputSchema": {
