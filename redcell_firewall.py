@@ -183,7 +183,11 @@ _HOMO = {
     "τ": "t", "υ": "u", "χ": "x",
 }
 _LEET = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
-_B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+# base64 token, standard AND url-safe alphabet ( - _ ). Normalized before decode.
+_B64 = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
+# Unicode "tag" block (U+E0000–E007F): invisible chars that can smuggle a full ASCII
+# instruction past a human reviewer ("ASCII smuggling").
+_TAG = re.compile("[\U000E0000-\U000E007F]")
 
 
 def _fold(text: str) -> str:
@@ -192,12 +196,12 @@ def _fold(text: str) -> str:
     return "".join(_HOMO.get(ch, _LEET.get(ch, ch)) for ch in s)
 
 
-def _b64_decodes(text: str) -> List[str]:
-    """Decode base64-looking tokens; keep only those that decode to pure-ASCII text
-    (guarantees byte-identical results to JS atob on the same input)."""
+def _b64_one(text: str) -> List[str]:
+    """One decode pass: base64 (std + url-safe) tokens that decode to pure-ASCII text
+    (byte-identical to JS atob on the normalized token)."""
     outs = []
     for m in _B64.finditer(text):
-        tok = m.group(0).rstrip("=")
+        tok = m.group(0).rstrip("=").replace("-", "+").replace("_", "/")
         if len(tok) % 4 == 1:            # invalid base64 length — atob would throw too
             continue
         pad = (4 - len(tok) % 4) % 4
@@ -212,10 +216,27 @@ def _b64_decodes(text: str) -> List[str]:
     return outs
 
 
+def _b64_decodes(text: str) -> List[str]:
+    """Decode base64 tokens, then one more pass over each result to catch double-encoding."""
+    outs = _b64_one(text)
+    nested = []
+    for s in outs:
+        nested.extend(_b64_one(s))
+    return outs + nested
+
+
+def _tag_decode(text: str) -> str:
+    """Decode smuggled ASCII carried in Unicode tag chars (U+E0020–E007E → 0x20–0x7E)."""
+    return "".join(chr(ord(ch) - 0xE0000) for ch in text if 0xE0020 <= ord(ch) <= 0xE007E)
+
+
 def _obfuscated_hits(text: str, raw_seen: set) -> List[str]:
     """Rule ids that fire on a deobfuscated view but not on the raw text."""
     hits = set()
     views = [_fold(text)] + _b64_decodes(text)
+    td = _tag_decode(text)
+    if td:
+        views.append(td)
     for v in views:
         if not v:
             continue
@@ -276,6 +297,12 @@ def inspect(text: str) -> Verdict:
         matches.append(Match("hidden-characters", "LLM01", "high",
                              "invisible/bidi control characters hiding instructions",
                              "U+%04X" % ord(hm.group(0))))
+        score += _W["high"]
+    tg = _TAG.search(text)
+    if tg:
+        matches.append(Match("unicode-tag-smuggling", "LLM01", "high",
+                             "invisible Unicode tag characters (ASCII smuggling)",
+                             "U+%05X" % ord(tg.group(0))))
         score += _W["high"]
     obf = _obfuscated_hits(text, seen)
     if obf:

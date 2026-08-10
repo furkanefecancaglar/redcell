@@ -132,7 +132,10 @@
     'τ': 't', 'υ': 'u', 'χ': 'x',
   };
   const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's' };
-  const B64 = /[A-Za-z0-9+/]{16,}={0,2}/g;
+  // base64 token, standard AND url-safe alphabet ( - _ ). Normalized before atob.
+  const B64 = /[A-Za-z0-9+/_-]{16,}={0,2}/g;
+  // Unicode "tag" block (U+E0000–E007F): invisible ASCII-smuggling carriers.
+  const TAG = /[\u{E0000}-\u{E007F}]/u;
 
   function fold(text) {
     const s = text.replace(HIDDEN_G, '').toLowerCase();
@@ -141,12 +144,12 @@
     return out;
   }
 
-  function b64decodes(text) {
+  function b64one(text) {
     const outs = [];
     B64.lastIndex = 0;
     let m;
     while ((m = B64.exec(text))) {
-      const tok = m[0].replace(/=+$/, '');
+      const tok = m[0].replace(/=+$/, '').replace(/-/g, '+').replace(/_/g, '/');
       if (tok.length % 4 === 1) continue;          // invalid base64 length — atob throws too
       const pad = (4 - tok.length % 4) % 4;
       let dec;
@@ -162,9 +165,27 @@
     return outs;
   }
 
+  function b64decodes(text) {
+    const outs = b64one(text);
+    const nested = [];
+    for (const s of outs) for (const x of b64one(s)) nested.push(x);
+    return outs.concat(nested);
+  }
+
+  function tagDecode(text) {
+    let out = '';
+    for (const ch of text) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0xE0020 && cp <= 0xE007E) out += String.fromCharCode(cp - 0xE0000);
+    }
+    return out;
+  }
+
   function obfuscatedHits(text, rawSeen) {
     const hits = new Set();
     const views = [fold(text)].concat(b64decodes(text));
+    const td = tagDecode(text);
+    if (td) views.push(td);
     for (const v of views) {
       if (!v) continue;
       for (const rule of RULES) {
@@ -198,6 +219,12 @@
     if (hm) {
       const code = hm[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
       matches.push({ id: 'hidden-characters', owasp: 'LLM01', severity: 'high', why: 'invisible/bidi control characters hiding instructions', snippet: 'U+' + code });
+      score += W.high;
+    }
+    const tg = TAG.exec(text);
+    if (tg) {
+      const tcode = tg[0].codePointAt(0).toString(16).toUpperCase().padStart(5, '0');
+      matches.push({ id: 'unicode-tag-smuggling', owasp: 'LLM01', severity: 'high', why: 'invisible Unicode tag characters (ASCII smuggling)', snippet: 'U+' + tcode });
       score += W.high;
     }
     const obf = obfuscatedHits(text, seen);

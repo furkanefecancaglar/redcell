@@ -303,7 +303,7 @@ export default {
       return json({ ok: true, edge: true,
         surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)',
           scan: env && env.REDCELL_NIM_KEYS ? 'live engine (configured)' : 'live engine (set REDCELL_NIM_KEYS secret to enable)' },
-        detectors: scan.DET.length, firewall_rules: fw.RULES.length + 1, attacks: CORPUS.length + 1,
+        detectors: scan.DET.length, firewall_rules: fw.RULES.length + 3, attacks: CORPUS.length + 1,
         scan_gated: !!(env && env.REDCELL_SCAN_TOKEN) });
     }
     if (request.method === 'POST' && url.pathname === '/firewall') {

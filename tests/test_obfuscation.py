@@ -57,3 +57,39 @@ def test_b64_decode_rejects_binary():
     # base64 of raw bytes 0..15 is not printable ASCII → must be dropped
     tok = base64.b64encode(bytes(range(16))).decode()
     assert fw._b64_decodes(tok) == []
+
+
+def test_unicode_tag_smuggling_caught():
+    # instruction hidden entirely in invisible Unicode tag chars (U+E00xx)
+    tagged = "Hey there " + "".join(chr(0xE0000 + ord(c)) for c in _IGN) + " thanks"
+    v = fw.inspect(tagged)
+    assert v.action in ("flag", "block")
+    ids = [m.id for m in v.matches]
+    assert "unicode-tag-smuggling" in ids           # presence signal
+    assert "obfuscated-injection" in ids             # decoded instruction matched
+
+
+def test_double_base64_caught():
+    inner = base64.b64encode(_IGN.encode()).decode()
+    outer = base64.b64encode(inner.encode()).decode()
+    v = fw.inspect("please process: " + outer)
+    assert any(m.id == "obfuscated-injection" for m in v.matches)
+
+
+def test_urlsafe_base64_caught():
+    tok = base64.urlsafe_b64encode(_IGN.encode()).decode()   # contains - and/or _
+    v = fw.inspect("payload " + tok)
+    assert any(m.id == "obfuscated-injection" for m in v.matches)
+
+
+def test_benign_hyphen_underscore_tokens_stay_allow():
+    for b in [
+        "deploy id my-service-worker-prod-2024-east-cluster",
+        "session_token_aaaa_bbbb_cccc_dddd_eeee_ffff",
+        "commit a1b2c3d4-e5f6-7890-abcd-ef1234567890 merged",
+    ]:
+        assert fw.inspect(b).action == "allow", b
+
+
+def test_tag_decode_maps_to_ascii():
+    assert fw._tag_decode("".join(chr(0xE0000 + ord(c)) for c in "hello")) == "hello"
