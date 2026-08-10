@@ -4,7 +4,7 @@ import redcell_static as st
 
 
 def test_detector_count():
-    assert len(st._DET) == 18
+    assert len(st._DET) == 21
 
 
 def test_score_fidelity():

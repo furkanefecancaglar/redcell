@@ -2,7 +2,7 @@
  * REDCELL Cloudflare Worker — the whole product on one permanent free URL.
  *   /                 interactive product page (paste a prompt, see it scored + attacked)
  *   POST /firewall    runtime injection verdict           (0 API)
- *   POST /scan-config static resilience score (18 checks) (0 API)
+ *   POST /scan-config static resilience score (21 checks) (0 API)
  *   POST /scan        LIVE adversarial engine: real attacks + separate judge (uses NIM key)
  *   GET  /health
  *
@@ -532,7 +532,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   <h2>One security layer, four surfaces.</h2>
   <p class=lede>The same offensive-security core — test the prompt, gate the pipeline, attack the live agent, and firewall production traffic.</p>
   <div class=surf>
-    <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>18 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
+    <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>21 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API.</p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
     <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>Blocks injection, jailbreak and exfiltration in untrusted input — microsecond latency, 4 languages.</p></div>
@@ -628,10 +628,10 @@ function busy(b,on,label){b.disabled=on;b.textContent=on?label:b.getAttribute('d
 document.getElementById('bscan').setAttribute('data-l','Scan resilience');
 document.getElementById('bfw').setAttribute('data-l','Firewall check');
 async function scan(){var t=document.getElementById('in').value;if(!t.trim()){document.getElementById('in').focus();return;}
- var b=document.getElementById('bscan');busy(b,true,'Scanning…');out.className='show';out.innerHTML='<div class=mono style="color:var(--ink3);font-size:13px">running 18 detectors…</div>';
+ var b=document.getElementById('bscan');busy(b,true,'Scanning…');out.className='show';out.innerHTML='<div class=mono style="color:var(--ink3);font-size:13px">running 21 detectors…</div>';
  try{var r=await fetch('/scan-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_prompt:t})}).then(function(x){return x.json();});
   var col=r.score>=70?'var(--pass)':r.score>=45?'var(--high)':'var(--crit)';
-  var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 18 checks</span></div>';
+  var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 21 checks</span></div>';
   h+='<div style="margin-top:12px">'+r.findings.map(function(f){var c=SEV[f.sev]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(f.title)+'</span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+f.sev+'</span><span class=id>'+f.id+'</span></div>';}).join('')+'</div>';
   if(!r.findings.length)h+='<div class=mono style="color:var(--pass);margin-top:8px">no weaknesses matched — strong baseline.</div>';
   out.innerHTML=h;var sc=out.querySelector('.score');var n=r.score;sc.firstChild.textContent='0';var i=0;var iv=setInterval(function(){i+=Math.max(1,Math.round((n-i)/6));if(i>=n){i=n;clearInterval(iv);}sc.firstChild.textContent=i;},26);
@@ -763,7 +763,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 
 <section><h2>Product — live at redcell.redcellv1.workers.dev</h2>
 <div class=grid>
-<div class=card><span class=k>Test</span><h3>Static scanner</h3><p>18 detectors, OWASP LLM Top 10, findings + hardened-prompt kit.</p></div>
+<div class=card><span class=k>Test</span><h3>Static scanner</h3><p>21 detectors, OWASP LLM Top 10, findings + hardened-prompt kit.</p></div>
 <div class=card><span class=k>Prevent</span><h3>CI gate</h3><p>Fails the build when an agent's prompt regresses. SDKs (pip/npm), MCP tool.</p></div>
 <div class=card><span class=k>Attack</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
 <div class=card><span class=k>Defend</span><h3>Runtime firewall</h3><p>Blocks injection/jailbreak/exfil in untrusted input, 4 languages, microsecond latency, at the edge.</p></div>

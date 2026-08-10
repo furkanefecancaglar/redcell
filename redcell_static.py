@@ -71,6 +71,14 @@ _DET = [
      r"(be (concise|brief)|keep .{0,20}(it )?(short|brief|concise)|word (limit|count)|no more than|at most \d|limit (your|the) (response|output|answer)|do not (loop|repeat)|max(imum)? (length|tokens?|steps?)|stop after|one (tool )?round)"),
     ("LLM09", "Misinformation", "low", "No uncertainty / anti-fabrication rule", "absent",
      r"(do not (make up|fabricate|invent|hallucinate|guess)|if (you (are )?(unsure|uncertain)|you don'?t know)|say (you )?(don'?t know|are unsure)|cite (your )?sources?|only .{0,15}(verified|factual|accurate)|admit (uncertainty|when)|avoid speculation|don'?t speculate)", None),
+    ("LLM06", "Over-broad access", "high", "Over-broad tool or permission grant", "present",
+     r"\b(full access|all tools?|any (tool|api|action|command|system call)|unrestricted access|admin (rights|privileges|access|mode)|root access|complete control|do (absolutely )?anything (the user|they) (want|ask|say))\b", None),
+    ("LLM09", "Output format", "low", "No output-format / schema constraint for machine-consumed output", "cond",
+     r"\b(return|output|respond with|produce|emit|send)\b.{0,30}\b(json|xml|data|results?|payload|response) (to|for|into|that) (the )?(api|system|caller|frontend|database|another|downstream|parser|service)\b|\bthe (output|response|result) (is|will be) (parsed|consumed|used) by\b",
+     r"\b(valid json|json ?schema|respond (only )?(in|with) (json|structured)|follow (this|the) (format|schema)|structured output|only (return|output)|output (format|schema)|must be valid json)\b"),
+    ("LLM02", "Identity binding", "med", "Privilege derived from conversation, not a verified session", "cond",
+     r"\b((grant|give|check|verify|determine|treat as|assume) .{0,20}(admin|privileg\w+|elevated access|permission)|user'?s? (privileg\w+|admin|role|permission|access level)|(is|are) (the user |they )?(an? )?admin\b)",
+     r"\b(authenticated session|verified (session|identity)|backend (provides|passes|supplies)|out[- ]of[- ]band|session (token|claim)|do not (derive|infer|grant|trust) .{0,30}(from )?(the )?(conversation|user (message|claim|input|says)))\b"),
 ]
 
 
