@@ -298,6 +298,7 @@ export default {
     if (url.pathname === '/ci') return html(renderCI());
     if (url.pathname === '/mcp') return html(renderMCP());
     if (url.pathname === '/quickstart') return html(renderQuickstart());
+    if (url.pathname === '/methodology') return html(renderMethodology());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -761,7 +762,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   </div>
 </div>
 
-<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span>authorized security testing only</span></div></footer>
+<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
 
 <script>
 var EX={
@@ -1121,6 +1122,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/ci</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/mcp</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/quickstart</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/methodology</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1490,5 +1492,38 @@ function renderQuickstart() {
     + 'function mark(){var b=document.getElementById("cb_"+id);if(b){b.textContent="✓ Copied";setTimeout(function(){b.textContent="Copy";},1600);}}'
     + 'function fb(x){try{var ta=document.createElement("textarea");ta.value=x;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);mark();}catch(e){}}'
     + 'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(mark,function(){fb(t);});}else{fb(t);}}</script>'
+    + '</div></body></html>';
+}
+
+/* ---------------- Methodology / trust page (GET /methodology) ---------------- */
+function _mCard(title, body) {
+  return '<div class=card><div class=ey>' + title + '</div><div style="margin-top:8px;color:#c7cdd9;font-size:14.5px;line-height:1.6">' + body + '</div></div>';
+}
+function renderMethodology() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="How REDCELL works — the static scanner scoring, the runtime firewall detectors and deobfuscation, the 0-API stance, and an honest list of what it does NOT do.">'
+    + '<meta property="og:title" content="REDCELL — methodology"><meta property="og:description" content="Exactly how the score and firewall work — and their limits. No overclaiming."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<title>REDCELL — methodology</title><style>' + REPORT_CSS + 'h2{font-size:15px;color:#eaedf4;margin:26px 0 6px}code{background:#0e1017;border:1px solid #232a3a;border-radius:5px;padding:1px 6px;font-size:13px;color:#9aa4b6}</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · methodology</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">How it works — and what it doesn’t do.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL is deterministic, pattern-based security tooling for LLM agents. No model sits in the free path: the scanner and firewall are pure static/regex analysis, so they run in microseconds, need no API key, and send your text nowhere. That design has clear strengths and clear limits — both are below.</p>'
+    + _mCard('Static scanner — the resilience score',
+        'Scores an agent <b>system prompt</b> against 22 detectors mapped to the OWASP LLM Top 10 (instruction hierarchy, confidentiality, excessive agency, secret exposure, insecure output handling, RAG &amp; tool-output provenance, memory poisoning, identity binding, and more). Each detector is one of: <code>absent</code> (a defense you should have but don’t), <code>present</code> (a risky phrase you shouldn’t have), <code>cond</code> (a risky capability without its guard), <code>len</code>, or <code>hidden</code>. '
+        + 'Score starts at 100 and subtracts a severity weight per finding — critical −34, high −20, medium −11, low −5 — floored at 0. Grades: Hardened ≥85, Resilient ≥70, Exposed ≥45, Vulnerable ≥20, else Critical.')
+    + _mCard('Runtime firewall — allow / flag / block',
+        'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 32 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
+        + 'Beyond literal patterns it <b>deobfuscates</b> each input — base64 (standard / url-safe / one nested level), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible Unicode-tag (U+E0000–E007F) smuggling — then re-runs the rules on the normalized text. '
+        + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus.')
+    + _mCard('Live red-team engine (paid)',
+        'The only surface that uses a model: it fires a real adversarial attack corpus at a live model wearing your system prompt, then scores each response with a <b>separate judge model</b> — actual attack, actual judge, not heuristics. This runs where your provider key can stay secret; it uses model quota.')
+    + _mCard('Data &amp; privacy',
+        'The free scanner and firewall send your text to no third party — the logic runs at the edge. A shareable report (<code>/r/&lt;id&gt;</code>) stores the prompt you submitted under an unguessable id for 30 days so you can share the link; those pages are <code>noindex</code> and the prompt never appears in a URL. The Breach game logs only aggregate matched-rule <b>counts</b> for the public technique board — never your messages.')
+    + '<h2 style="color:#ff8a34">What REDCELL does NOT do</h2>'
+    + _mCard('Honest limits',
+        '<b>It is not a model.</b> The scanner and firewall are deterministic pattern matchers. That makes them fast, private, and explainable — but a novel attack with no lexical or structural signal, or a defense phrased in a way the patterns don’t recognize, can be missed. '
+        + '<b>A high score is not a safety guarantee.</b> It means known weaknesses weren’t found by these checks, not that your agent is safe. '
+        + '<b>It does not watch your traffic</b> unless you explicitly call the firewall on it, and it does not replace human security review, red-teaming, or defense-in-depth. Use it as one fast, deterministic layer — not the only one.')
+    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a> · <a href="/mcp">MCP</a></div>'
     + '</div></body></html>';
 }
