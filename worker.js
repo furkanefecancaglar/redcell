@@ -271,6 +271,7 @@ export default {
     if (url.pathname === '/') return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
@@ -372,6 +373,16 @@ const LANDING = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>REDCELL — the security layer for AI agents</title>
 <meta name=description content="Runtime firewall and live red-team for LLM agents. Score a prompt against the OWASP LLM Top 10 and block prompt injection in real time — from the edge.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
+<meta property="og:title" content="REDCELL — the security layer for AI agents">
+<meta property="og:description" content="Test, red-team and firewall your AI agents against prompt injection — free, from the edge.">
+<meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg">
+<meta property="og:url" content="https://redcell.redcellv1.workers.dev/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="REDCELL — the security layer for AI agents">
+<meta name="twitter:description" content="Test, red-team and firewall your AI agents against prompt injection.">
+<meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
+<link rel="canonical" href="https://redcell.redcellv1.workers.dev/">
 <link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
 <style>
@@ -634,6 +645,7 @@ async function scan(){var t=document.getElementById('in').value;if(!t.trim()){do
   var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 21 checks</span></div>';
   h+='<div style="margin-top:12px">'+r.findings.map(function(f){var c=SEV[f.sev]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(f.title)+'</span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+f.sev+'</span><span class=id>'+f.id+'</span></div>';}).join('')+'</div>';
   if(!r.findings.length)h+='<div class=mono style="color:var(--pass);margin-top:8px">no weaknesses matched — strong baseline.</div>';
+  LASTP=t;h+=reviewBox('config');
   out.innerHTML=h;var sc=out.querySelector('.score');var n=r.score;sc.firstChild.textContent='0';var i=0;var iv=setInterval(function(){i+=Math.max(1,Math.round((n-i)/6));if(i>=n){i=n;clearInterval(iv);}sc.firstChild.textContent=i;},26);
  }catch(e){out.innerHTML='<div class=mono style="color:var(--crit)">scan failed — retry in a moment</div>';}
  busy(b,false);}
@@ -643,9 +655,25 @@ async function fw(){var t=document.getElementById('in').value;if(!t.trim()){docu
   var vc=r.action==='block'?'var(--crit)':r.action==='flag'?'var(--high)':'var(--pass)';
   var h='<div class=verdict>verdict<span class=vb style="color:#fff;background:'+vc+'">'+r.action.toUpperCase()+'</span><span style="color:var(--ink3)">score '+r.score+' · risk '+r.risk+'</span></div>';
   h+='<div style="margin-top:12px">'+(r.matches.map(function(m){var c=SEV[m.severity]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(m.id)+' <span style="color:var(--ink3);font-size:13px">— '+esc(m.why)+'</span></span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+m.severity+'</span></div>';}).join('')||'<div class=mono style="color:var(--pass)">clean — no attack patterns matched.</div>')+'</div>';
+  LASTP=t;h+=reviewBox('input');
   out.innerHTML=h;
  }catch(e){out.innerHTML='<div class=mono style="color:var(--crit)">check failed — retry in a moment</div>';}
  busy(b,false);}
+var LASTP='';
+function reviewBox(kind){return '<div style="margin-top:16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:rgba(255,59,70,.05)">'
++'<div style="font-weight:700;font-size:14.5px;color:var(--ink)">Want the full security review?</div>'
++'<div style="color:var(--ink3);font-size:13px;margin:4px 0 10px">We run this prompt through all 21 checks plus a live red-team pass and email you the report — free.</div>'
++'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id=revmail type=email placeholder="you@company.com" style="flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;color:var(--ink);padding:9px 11px;font-size:14px" />'
++'<button onclick="review(\''+kind+'\')" style="background:var(--crit);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer">Get my review</button></div>'
++'<div id=revmsg class=mono style="display:none;font-size:13px;margin-top:8px"></div></div>';}
+async function review(kind){var e=(document.getElementById('revmail').value||'').trim();var m=document.getElementById('revmsg');
+ if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid email.';return;}
+ var note='['+kind+'] '+(LASTP||'').slice(0,900);
+ try{var r=await fetch('/lead',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,tier:'review',source:'lead-magnet',note:note})}).then(function(x){return x.json();});
+  m.style.display='block';
+  if(r&&r.ok){m.style.color='var(--pass)';m.textContent='✓ On its way — we will email your full review.';}
+  else{m.style.color='var(--high)';m.textContent=(r&&r.error)||'Please try again.';}
+ }catch(e2){m.style.display='block';m.style.color='var(--high)';m.textContent='Network error — try again.';}}
 function validEmail(e){var a=e.indexOf('@');return a>0 && e.lastIndexOf('.')>a+1 && e.indexOf(' ')<0 && e.length<200;}
 async function join(){var e=(document.getElementById('lemail').value||'').trim();var b=document.getElementById('joinbtn');var m=document.getElementById('joinmsg');
  if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid work email.';return;}
@@ -662,6 +690,14 @@ async function join(){var e=(document.getElementById('lemail').value||'').trim()
 /* ---------------- REDCELL Breach game page ---------------- */
 const BREACH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL Breach — jailbreak challenge</title>
+<meta name=description content="Can you jailbreak the guard? A live prompt-injection challenge — climb the levels and beat REDCELL's firewall.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
+<meta property="og:title" content="REDCELL Breach — can you jailbreak the guard?">
+<meta property="og:description" content="A live prompt-injection challenge. Climb the levels and try to beat the firewall.">
+<meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg">
+<meta property="og:url" content="https://redcell.redcellv1.workers.dev/breach">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
 :root{--ink:#eef0f4;--ink3:#8b93a3;--paper:#0e1014;--card:#181b22;--line:#2a2f3a;--brand:#ef5350;--brandd:#b93b38;--tint:#2a1918;--pass:#54c07f;--mono:ui-monospace,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans)}
@@ -717,6 +753,14 @@ renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the p
 /* ---------------- investor pitch page (/pitch) ---------------- */
 const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — investor brief</title>
+<meta name=description content="REDCELL — the security layer for AI agents. Market, product, and traction brief.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
+<meta property="og:title" content="REDCELL — investor brief">
+<meta property="og:description" content="The security layer for AI agents. Market, product, and where we're going.">
+<meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg">
+<meta property="og:url" content="https://redcell.redcellv1.workers.dev/pitch">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
 <style>
@@ -854,3 +898,26 @@ async function load(){var t=document.getElementById('tok').value.trim();var er=d
 }
 try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').value=s;load();}}catch(e){}
 </script></div></body></html>`;
+
+/* ---------------- Open Graph share image (/og.svg) ---------------- */
+const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Archivo, Segoe UI, Arial, sans-serif">
+<rect width="1200" height="630" fill="#0b0d12"/>
+<defs><radialGradient id="g" cx="82%" cy="0%" r="60%"><stop offset="0" stop-color="#ff3b46" stop-opacity="0.18"/><stop offset="1" stop-color="#ff3b46" stop-opacity="0"/></radialGradient></defs>
+<rect width="1200" height="630" fill="url(#g)"/>
+<g transform="translate(90,86)">
+<rect x="0" y="0" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="0" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="0" width="15" height="15" rx="2" fill="#ff3b46"/>
+<rect x="0" y="20" width="15" height="15" rx="2" fill="#3a4152"/><rect x="20" y="20" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="40" y="20" width="15" height="15" rx="2" fill="#3a4152"/>
+<rect x="0" y="40" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="40" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="40" width="15" height="15" rx="2" fill="#ff3b46"/>
+<text x="76" y="46" font-size="40" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text>
+</g>
+<text x="90" y="300" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">The security layer</text>
+<text x="90" y="384" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">for <tspan fill="#ff3b46">AI agents.</tspan></text>
+<text x="92" y="452" font-size="27" fill="#9aa4b6">Test, red-team &amp; firewall your agents against prompt injection.</text>
+<g font-family="monospace" font-size="20" fill="#616b80">
+<text x="92" y="546">RUNTIME FIREWALL</text><text x="372" y="546" fill="#3a4152">·</text>
+<text x="392" y="546">LIVE RED-TEAM</text><text x="606" y="546" fill="#3a4152">·</text>
+<text x="626" y="546">OWASP LLM TOP 10</text>
+</g>
+<rect x="90" y="574" width="1020" height="2" fill="#232a3a"/>
+<text x="90" y="612" font-family="monospace" font-size="19" fill="#33d17f">● redcell.redcellv1.workers.dev</text>
+</svg>`;
