@@ -321,6 +321,7 @@ export default {
     if (url.pathname === '/methodology') return html(renderMethodology());
     if (url.pathname === '/vs') return html(renderVs());
     if (url.pathname === '/example') return html(renderExample());
+    if (url.pathname === '/docs') return html(renderDocs());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -668,6 +669,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
     <a class=hide href="#surfaces">How it works</a>
     <a class=hide href="#pricing">Pricing</a>
     <a class=hide href="#developers">Developers</a>
+    <a class=hide href="/docs">Docs</a>
     <a class=cta href="/breach">Play Breach</a>
   </div>
 </div></header>
@@ -784,7 +786,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   </div>
 </div>
 
-<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
+<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/docs" style="color:var(--ink3)">docs</a> · <a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
 
 <script>
 var EX={
@@ -1149,6 +1151,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/methodology</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/vs</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/example</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/docs</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1699,5 +1702,44 @@ function renderExample() {
     + '<div class=id style="margin-top:8px">REDCELL de-obfuscates the input (here, leetspeak → plain text) and then matches — so <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">1gn0re…</code> is caught even though the literal string never says "ignore".</div></div>'
     + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add this to your agent in 30s →</a></div>'
     + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a></div>'
+    + '</div></body></html>';
+}
+
+/* ---------------- Docs index (GET /docs) ---------------- */
+function _docRow(href, title, desc) {
+  return '<a href="' + href + '" style="display:block;text-decoration:none;border:1px solid #232a3a;border-radius:10px;padding:12px 14px;margin:8px 0;background:#111520">'
+    + '<div style="color:#eaedf4;font-weight:700;font-size:14.5px">' + esc(title) + ' <span style="color:#616b80;font-family:ui-monospace,monospace;font-size:12px;font-weight:400">' + esc(href) + '</span></div>'
+    + '<div style="color:#9aa4b6;font-size:13px;margin-top:2px">' + esc(desc) + '</div></a>';
+}
+function renderDocs() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="REDCELL docs index — every page in one place: live demos, the 30-second integration, CI gates, MCP, the vendorable source, methodology, and how it compares.">'
+    + '<meta property="og:title" content="REDCELL — docs"><meta property="og:description" content="Every REDCELL page in one place."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<title>REDCELL — docs</title><style>' + REPORT_CSS + 'h2{font-size:12px;font-family:ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:24px 0 4px}</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · docs</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">Everything, in one place.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">The security layer for AI agents — a static scanner, a runtime firewall, a live red-team engine, and a CI gate. All 0-API surfaces are free and need no key.</p>'
+    + '<h2>Try it</h2>'
+    + _docRow('/', 'Home — live scanner + firewall', 'Paste a system prompt or an attack and see it scored / blocked in the browser.')
+    + _docRow('/example', 'Worked example', 'Real before/after from the live engine — weak vs hardened prompt + an obfuscated injection caught. No mockups.')
+    + _docRow('/breach', 'Breach — jailbreak challenge', 'A 5-level game: out-hack the guard. Every attempt feeds the public attack-technique board.')
+    + '<h2>Integrate</h2>'
+    + _docRow('/quickstart', 'Quickstart — guard your agent in 30s', 'Copy-paste JS / Python / curl for the runtime firewall and the prompt scanner. 0 dependencies, no key.')
+    + _docRow('/ci', 'CI gates', 'Fail the build when a prompt regresses (resilience score) or when a known injection stops being caught (firewall regression).')
+    + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check + scan_prompt.')
+    + _docRow('/src/redcell_firewall.py', 'Vendorable source (/src)', 'The real 0-dependency files to curl and vendor: redcell_firewall.py, redcell_static.py, redcell_ci.py, redcell_mcp.py, redcell_fw_check.py.')
+    + '<h2>Understand</h2>'
+    + _docRow('/methodology', 'Methodology', 'Exactly how the score and firewall work — detector kinds, scoring, deobfuscation — and an honest list of what it does NOT do.')
+    + _docRow('/vs', 'How it compares', 'Where a deterministic 0-API firewall+scanner fits alongside model-based guardrails. Use both.')
+    + _docRow('/pitch', 'Investor brief', 'The market, the product, and where this is going.')
+    + '<h2>API (0-API surfaces need no key)</h2>'
+    + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
+    + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
+    + '<div><span style="color:#33d17f">GET</span> /health · /selfcheck · /breach/techniques <span style="color:#616b80">→ status / self-check / attack-technique counts</span></div></div>'
+    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/quickstart">quickstart</a> · <a href="/methodology">methodology</a></div>'
     + '</div></body></html>';
 }
