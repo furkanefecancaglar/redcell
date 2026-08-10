@@ -270,6 +270,7 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
@@ -799,3 +800,57 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 </div>
 <footer><div class=wrap>REDCELL · the security layer for AI agents · redcell.redcellv1.workers.dev</div></footer>
 </body></html>`;
+
+/* ---------------- founder dashboard (/dashboard) — token entered client-side ---------------- */
+const DASHBOARD_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — dashboard</title>
+<style>
+body{margin:0;background:#0b0d12;color:#eaedf4;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:28px 22px}
+h1{font-size:20px;letter-spacing:-.02em;margin:0 0 4px}h1 b{color:#ff3b46}
+.sub{color:#616b80;font:12px ui-monospace,monospace;margin:0 0 20px}
+.row{display:flex;gap:8px;margin:14px 0}
+input{flex:1;background:#111520;color:#eaedf4;border:1px solid #232a3a;border-radius:9px;padding:11px;font:13px ui-monospace,monospace}
+button{background:#ff3b46;color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:600;cursor:pointer}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+.c{background:#111520;border:1px solid #232a3a;border-radius:12px;padding:16px}
+.c .n{font:11px ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:#616b80}
+.c .v{font-size:28px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
+h2{font:11px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#616b80;margin:22px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{text-align:left;padding:9px 8px;border-bottom:1px solid #232a3a}th{color:#616b80;font:11px ui-monospace,monospace;font-weight:500}
+td.m{font-family:ui-monospace,monospace;color:#9aa4b6}
+.err{color:#ff8a34;font:12px ui-monospace,monospace}
+@media(max-width:560px){.cards{grid-template-columns:repeat(2,1fr)}}
+</style></head><body><div class=wrap>
+<h1>RED<b>CELL</b> — founder dashboard</h1>
+<p class=sub>funnel + attack-data moat · token stays in your browser</p>
+<div class=row><input id=tok type=password placeholder="X-REDCELL-Token (from ~/redcell/.scan_token)"><button onclick=load()>Load</button></div>
+<div id=err class=err></div>
+<div class=cards>
+<div class=c><div class=n>Leads</div><div class=v id=leads>—</div></div>
+<div class=c><div class=n>Breach attempts</div><div class=v id=att>—</div></div>
+<div class=c><div class=n>Breaches (wins)</div><div class=v id=wins>—</div></div>
+<div class=c><div class=n>Firewall blocks</div><div class=v id=blk>—</div></div>
+</div>
+<h2>Recent leads</h2>
+<table id=leadtbl><thead><tr><th>When</th><th>Email</th><th>Tier</th><th>Source</th></tr></thead><tbody></tbody></table>
+<script>
+function fmt(ts){try{return new Date(ts).toISOString().slice(0,16).replace('T',' ');}catch(e){return '';}}
+async function load(){var t=document.getElementById('tok').value.trim();var er=document.getElementById('err');er.textContent='';
+ if(!t){er.textContent='Enter your token.';return;}
+ try{localStorage.setItem('rc_tok',t);}catch(e){}
+ try{
+  var st=await fetch('/breach/stats').then(function(x){return x.json();});
+  document.getElementById('att').textContent=(st.attempts||0).toLocaleString();
+  document.getElementById('wins').textContent=(st.wins||0).toLocaleString();
+  document.getElementById('blk').textContent=(st.blocked||0).toLocaleString();
+  var lr=await fetch('/leads',{headers:{'X-REDCELL-Token':t}});
+  if(lr.status===401||lr.status===403){er.textContent='Token rejected ('+lr.status+').';return;}
+  var ld=await lr.json();
+  document.getElementById('leads').textContent=(ld.count||0).toLocaleString();
+  var tb=document.querySelector('#leadtbl tbody');tb.innerHTML='';
+  (ld.leads||[]).slice(0,25).forEach(function(l){var tr=document.createElement('tr');tr.innerHTML='<td class=m>'+fmt(l.ts)+'</td><td>'+(l.email||'')+'</td><td class=m>'+(l.tier||'')+'</td><td class=m>'+(l.source||'')+'</td>';tb.appendChild(tr);});
+ }catch(e){er.textContent='Load failed — check the token and try again.';}
+}
+try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').value=s;load();}}catch(e){}
+</script></div></body></html>`;
