@@ -15,5 +15,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # node is needed so the Python<->JS parity test actually runs (it skips without it)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python -m pytest -q
