@@ -102,6 +102,14 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._send(200, json.dumps(fw.inspect(text).to_dict(), ensure_ascii=False))  # runtime, 0 API
 
+            elif self.path == "/semantic":  # paraphrase-aware layer (embed if REDCELL_SEMANTIC_EMBED, else 0-API lexical)
+                text = self._body().get("input") or ""
+                if not text:
+                    self._send(400, json.dumps({"error": "input required"}))
+                    return
+                import redcell_semantic as sem
+                self._send(200, json.dumps(sem.semantic_score(text), ensure_ascii=False))
+
             else:
                 self._send(404, json.dumps({"error": "not found"}))
         except Exception as e:
