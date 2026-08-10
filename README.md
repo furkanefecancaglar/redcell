@@ -37,8 +37,8 @@ python3 server.py            # → http://127.0.0.1:8770
 
 ## Three surfaces (one server)
 `server.py` exposes the whole product on `127.0.0.1`:
-- `POST /scan-config` `{system_prompt}` → static resilience score (18 detectors, **0 API**). Shared core: `redcell_static.py`.
-- `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (18 rules, **0 API**). Core: `redcell_firewall.py`.
+- `POST /scan-config` `{system_prompt}` → static resilience score (21 detectors, **0 API**). Shared core: `redcell_static.py`.
+- `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (32 detectors, **0 API**). Core: `redcell_firewall.py`. Beyond keyword rules it **deobfuscates** each input — base64 (standard/url-safe/nested), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible **Unicode-tag ASCII smuggling** (U+E0000–E007F) — then re-runs the rule set, so an injection hidden as `1gn0re…` or an invisible tag string is still caught.
 - `POST /scan` `{system_prompt}` → live adversarial engine (real attacks + judge, **uses model quota**).
 - `GET /health` → advertises all three.
 
