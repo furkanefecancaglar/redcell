@@ -19,6 +19,8 @@
   const W = { critical: 40, high: 22, medium: 12, low: 5 };
   const BLOCK_SCORE = 40;
   const FLAG_SCORE = 12;
+  // Bound worst-case CPU: inspect only the first 16 KB (mirror of redcell_firewall._MAX_INSPECT).
+  const MAX_INSPECT = 16384;
   const SEV_RANK = { low: 0, medium: 1, high: 2, critical: 3 };
 
   // [id, owasp, severity, pattern, why] — pattern via String.raw so backslashes
@@ -204,6 +206,7 @@
 
   function inspect(text) {
     if (!text) return { action: 'allow', score: 0, risk: 'none', matches: [] };
+    if (text.length > MAX_INSPECT) text = text.slice(0, MAX_INSPECT);
     const matches = [];
     let score = 0;
     const seen = new Set();

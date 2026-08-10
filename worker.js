@@ -1514,7 +1514,7 @@ function renderMethodology() {
     + _mCard('Runtime firewall — allow / flag / block',
         'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 32 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
         + 'Beyond literal patterns it <b>deobfuscates</b> each input — base64 (standard / url-safe / one nested level), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible Unicode-tag (U+E0000–E007F) smuggling — then re-runs the rules on the normalized text. '
-        + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus.')
+        + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting.')
     + _mCard('Live red-team engine (paid)',
         'The only surface that uses a model: it fires a real adversarial attack corpus at a live model wearing your system prompt, then scores each response with a <b>separate judge model</b> — actual attack, actual judge, not heuristics. This runs where your provider key can stay secret; it uses model quota.')
     + _mCard('Data &amp; privacy',

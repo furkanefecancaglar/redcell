@@ -250,6 +250,11 @@ def _obfuscated_hits(text: str, raw_seen: set) -> List[str]:
 
 BLOCK_SCORE = 40   # >= this => block
 FLAG_SCORE = 12    # >= this => flag (log/review), below => allow
+# Bound worst-case CPU: inspect only the first 16 KB of any input. All rules use bounded
+# quantifiers (no exponential ReDoS was found), but time still grows with length and the
+# deobfuscation layer re-scans several views — so cap the prefix. Real messages / tool
+# results / doc chunks are far smaller; callers with larger blobs should chunk them.
+_MAX_INSPECT = 16384
 
 
 @dataclass
@@ -283,6 +288,8 @@ def inspect(text: str) -> Verdict:
     """Inspect one untrusted input. Pure pattern analysis, no network."""
     if not text:
         return Verdict("allow", 0, "none", [])
+    if len(text) > _MAX_INSPECT:
+        text = text[:_MAX_INSPECT]
     matches: List[Match] = []
     score = 0
     seen = set()
