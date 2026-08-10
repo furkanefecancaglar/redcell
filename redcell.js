@@ -121,6 +121,59 @@
   }));
 
   const HIDDEN = /[​-‏‪-‮⁠-⁤﻿­]/;
+  const HIDDEN_G = /[​-‏‪-‮⁠-⁤﻿­]/g;
+
+  // --- evasion normalization (deobfuscation) — byte-for-byte mirror of redcell_firewall.py
+  const HOMO = {
+    'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i',
+    'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w', 'к': 'k', 'м': 'm', 'т': 't',
+    'н': 'h', 'в': 'b', 'г': 'r', 'л': 'l',
+    'α': 'a', 'β': 'b', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p',
+    'τ': 't', 'υ': 'u', 'χ': 'x',
+  };
+  const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's' };
+  const B64 = /[A-Za-z0-9+/]{16,}={0,2}/g;
+
+  function fold(text) {
+    const s = text.replace(HIDDEN_G, '').toLowerCase();
+    let out = '';
+    for (const ch of s) out += (HOMO[ch] || LEET[ch] || ch);
+    return out;
+  }
+
+  function b64decodes(text) {
+    const outs = [];
+    B64.lastIndex = 0;
+    let m;
+    while ((m = B64.exec(text))) {
+      const tok = m[0].replace(/=+$/, '');
+      if (tok.length % 4 === 1) continue;          // invalid base64 length — atob throws too
+      const pad = (4 - tok.length % 4) % 4;
+      let dec;
+      try { dec = atob(tok + '===='.slice(0, pad)); } catch (e) { continue; }
+      if (dec.length < 6) continue;
+      let ok = true;
+      for (let i = 0; i < dec.length; i++) {
+        const c = dec.charCodeAt(i);
+        if (!(c === 9 || c === 10 || c === 13 || (c >= 32 && c <= 126))) { ok = false; break; }
+      }
+      if (ok) outs.push(dec);
+    }
+    return outs;
+  }
+
+  function obfuscatedHits(text, rawSeen) {
+    const hits = new Set();
+    const views = [fold(text)].concat(b64decodes(text));
+    for (const v of views) {
+      if (!v) continue;
+      for (const rule of RULES) {
+        if (rawSeen.has(rule.id) || rule.id === 'homoglyph-spoofing') continue;
+        if (rule.re.test(v)) hits.add(rule.id);
+      }
+    }
+    return Array.from(hits).sort();
+  }
 
   function snippet(text, idx, len) {
     const a = Math.max(0, idx - 12), b = Math.min(text.length, idx + len + 12);
@@ -132,9 +185,11 @@
     if (!text) return { action: 'allow', score: 0, risk: 'none', matches: [] };
     const matches = [];
     let score = 0;
+    const seen = new Set();
     for (const rule of RULES) {
       const m = rule.re.exec(text);
       if (m) {
+        seen.add(rule.id);
         matches.push({ id: rule.id, owasp: rule.owasp, severity: rule.severity, why: rule.why, snippet: snippet(text, m.index, m[0].length) });
         score += W[rule.severity];
       }
@@ -143,6 +198,11 @@
     if (hm) {
       const code = hm[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
       matches.push({ id: 'hidden-characters', owasp: 'LLM01', severity: 'high', why: 'invisible/bidi control characters hiding instructions', snippet: 'U+' + code });
+      score += W.high;
+    }
+    const obf = obfuscatedHits(text, seen);
+    if (obf.length) {
+      matches.push({ id: 'obfuscated-injection', owasp: 'LLM01', severity: 'high', why: 'evasion-normalized input matched: ' + obf.join(', '), snippet: obf.join(', ').slice(0, 60) });
       score += W.high;
     }
     const action = score >= BLOCK_SCORE ? 'block' : score >= FLAG_SCORE ? 'flag' : 'allow';

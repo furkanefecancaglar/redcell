@@ -29,6 +29,7 @@ CLI
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -168,6 +169,64 @@ _COMPILED = [(rid, owasp, sev, re.compile(rx, re.IGNORECASE | re.DOTALL), why)
 # invisible / bidi control characters used to hide instructions
 _HIDDEN = re.compile("[​-‏‪-‮⁠-⁤﻿­]")
 
+# --- evasion normalization (deobfuscation) -------------------------------------
+# Attackers hide injections behind homoglyphs (Cyrillic/Greek lookalikes), leetspeak,
+# zero-width splits, and base64. We build normalized "views" of the input and re-run
+# the SAME rules on them; a rule that fires only on a normalized view (not the raw
+# text) is reported once as `obfuscated-injection`. The JS port (redcell.js) mirrors
+# these maps and the base64 logic byte-for-byte so both engines agree.
+_HOMO = {
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i",
+    "ј": "j", "ѕ": "s", "ԁ": "d", "ԛ": "q", "ԝ": "w", "к": "k", "м": "m", "т": "t",
+    "н": "h", "в": "b", "г": "r", "л": "l",
+    "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p",
+    "τ": "t", "υ": "u", "χ": "x",
+}
+_LEET = {"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"}
+_B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+
+
+def _fold(text: str) -> str:
+    """Lowercase + strip hidden chars + map homoglyphs and leetspeak back to ASCII."""
+    s = _HIDDEN.sub("", text).lower()
+    return "".join(_HOMO.get(ch, _LEET.get(ch, ch)) for ch in s)
+
+
+def _b64_decodes(text: str) -> List[str]:
+    """Decode base64-looking tokens; keep only those that decode to pure-ASCII text
+    (guarantees byte-identical results to JS atob on the same input)."""
+    outs = []
+    for m in _B64.finditer(text):
+        tok = m.group(0).rstrip("=")
+        if len(tok) % 4 == 1:            # invalid base64 length — atob would throw too
+            continue
+        pad = (4 - len(tok) % 4) % 4
+        try:
+            raw = base64.b64decode(tok + "=" * pad)
+        except Exception:
+            continue
+        if len(raw) < 6:
+            continue
+        if all(b in (9, 10, 13) or 32 <= b <= 126 for b in raw):
+            outs.append(raw.decode("ascii"))
+    return outs
+
+
+def _obfuscated_hits(text: str, raw_seen: set) -> List[str]:
+    """Rule ids that fire on a deobfuscated view but not on the raw text."""
+    hits = set()
+    views = [_fold(text)] + _b64_decodes(text)
+    for v in views:
+        if not v:
+            continue
+        for rid, owasp, sev, rx, why in _COMPILED:
+            if rid in raw_seen or rid == "homoglyph-spoofing":
+                continue
+            if rx.search(v):
+                hits.add(rid)
+    return sorted(hits)
+
+
 BLOCK_SCORE = 40   # >= this => block
 FLAG_SCORE = 12    # >= this => flag (log/review), below => allow
 
@@ -217,6 +276,12 @@ def inspect(text: str) -> Verdict:
         matches.append(Match("hidden-characters", "LLM01", "high",
                              "invisible/bidi control characters hiding instructions",
                              "U+%04X" % ord(hm.group(0))))
+        score += _W["high"]
+    obf = _obfuscated_hits(text, seen)
+    if obf:
+        matches.append(Match("obfuscated-injection", "LLM01", "high",
+                             "evasion-normalized input matched: " + ", ".join(obf),
+                             (", ".join(obf))[:60]))
         score += _W["high"]
 
     if score >= BLOCK_SCORE:
