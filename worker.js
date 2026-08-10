@@ -37,6 +37,21 @@ function html(body, status = 200, extra) {
   return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, CORS, extra || {}) });
 }
 
+// Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
+// waitUntil, so a burst of concurrent hits can lose an increment (undercounts, never over).
+const STAT_KEYS = ['landing', 'scan', 'firewall', 'review', 'lead', 'scan_live'];
+function bump(env, ctx, key) {
+  if (!env || !env.LEADS || !ctx) return;
+  ctx.waitUntil((async () => {
+    try {
+      const k = 'stat:' + key;
+      const raw = await env.LEADS.get(k);
+      const n = raw ? (parseInt(raw, 10) || 0) : 0;
+      await env.LEADS.put(k, String(n + 1));
+    } catch (e) { /* metrics are best-effort */ }
+  })());
+}
+
 /* ---------------- live adversarial engine (mirrors redcell_engine.py) ---------------- */
 const SEVW = { critical: 34, high: 20, medium: 11, low: 5 };
 const CORPUS = [
@@ -277,7 +292,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/') return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/') { bump(env, ctx, 'landing'); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -294,11 +309,13 @@ export default {
     if (request.method === 'POST' && url.pathname === '/firewall') {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.input) return json({ error: 'input required' }, 400);
+      bump(env, ctx, 'firewall');
       return json(inspect(String(b.input)));
     }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
+      bump(env, ctx, 'scan');
       return json(analyze(String(b.system_prompt)));
     }
     // Lead capture — waitlist / book-a-demo. Stores to KV; emails are never exposed without a token.
@@ -306,6 +323,7 @@ export default {
       const b = await request.json().catch(() => ({}));
       const email = String((b && b.email) || '').trim().slice(0, 200);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'a valid email is required' }, 400);
+      bump(env, ctx, 'lead');
       const rec = { ts: Date.now(), email, note: String((b && b.note) || '').slice(0, 1000), tier: String((b && b.tier) || '').slice(0, 40), source: String((b && b.source) || 'site').slice(0, 60) };
       if (env && env.LEADS && ctx) {
         ctx.waitUntil((async () => {
@@ -325,12 +343,14 @@ export default {
       const prompt = String((b && b.system_prompt) || '').slice(0, 8000);
       if (!prompt.trim()) return json({ error: 'a prompt is required' }, 400);
       const email = String((b && b.email) || '').trim().slice(0, 200);
+      bump(env, ctx, 'review');
       const rec = { ts: Date.now(), prompt, report: analyze(prompt), firewall: inspect(prompt) };
       const id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).replace(/[^a-z0-9]/g, '').slice(0, 16);
       if (env && env.LEADS) {
         try { await env.LEADS.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 30 }); }
         catch (e) { return json({ error: 'could not store report' }, 503); }
         if (ctx && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          bump(env, ctx, 'lead');
           ctx.waitUntil((async () => {
             try {
               const lead = { ts: Date.now(), email, note: ('[review /r/' + id + '] ' + prompt).slice(0, 1000), tier: 'review', source: String((b && b.source) || 'lead-magnet').slice(0, 60) };
@@ -369,6 +389,7 @@ export default {
         return json({ error: 'unauthorized — /scan requires header X-REDCELL-Token' }, 401);
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
+      bump(env, ctx, 'scan_live');
       let keys; try { keys = JSON.parse(env.REDCELL_NIM_KEYS); } catch (e) { return json({ error: 'bad REDCELL_NIM_KEYS' }, 500); }
       try {
         const rep = await liveScan(String(b.system_prompt), keys,
@@ -407,6 +428,19 @@ export default {
       if (!env || !env.BREACH_LOG) return json({ attempts: 0, wins: 0, blocked: 0 });
       const raw = await env.BREACH_LOG.get('stats');
       return json(raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 });
+    }
+    // Aggregate funnel counters — non-PII, no token needed. Real numbers or 0.
+    if (url.pathname === '/stats') {
+      const counts = {};
+      if (env && env.LEADS) {
+        for (const k of STAT_KEYS) { const v = await env.LEADS.get('stat:' + k); counts[k] = v ? (parseInt(v, 10) || 0) : 0; }
+      } else { for (const k of STAT_KEYS) counts[k] = 0; }
+      let breach = { attempts: 0, wins: 0 };
+      if (env && env.BREACH_LOG) {
+        const raw = await env.BREACH_LOG.get('stats');
+        if (raw) { try { const s = JSON.parse(raw); breach = { attempts: s.attempts || 0, wins: s.wins || 0 }; } catch (e) { } }
+      }
+      return json({ ok: true, counts, breach });
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
 
@@ -928,6 +962,15 @@ td.m{font-family:ui-monospace,monospace;color:#9aa4b6}
 <div class=c><div class=n>Breaches (wins)</div><div class=v id=wins>—</div></div>
 <div class=c><div class=n>Firewall blocks</div><div class=v id=blk>—</div></div>
 </div>
+<h2>Conversion funnel <span style="color:#3a4152;text-transform:none;letter-spacing:0">· live, no token needed</span></h2>
+<div class=cards>
+<div class=c><div class=n>Page loads</div><div class=v id=f_landing>—</div></div>
+<div class=c><div class=n>Config scans</div><div class=v id=f_scan>—</div></div>
+<div class=c><div class=n>Firewall checks</div><div class=v id=f_firewall>—</div></div>
+<div class=c><div class=n>Reviews built</div><div class=v id=f_review>—</div></div>
+<div class=c><div class=n>Leads (all)</div><div class=v id=f_lead>—</div></div>
+<div class=c><div class=n>Live red-team</div><div class=v id=f_scan_live>—</div></div>
+</div>
 <h2>Recent leads</h2>
 <table id=leadtbl><thead><tr><th>When</th><th>Email</th><th>Tier</th><th>Source</th></tr></thead><tbody></tbody></table>
 <script>
@@ -948,6 +991,10 @@ async function load(){var t=document.getElementById('tok').value.trim();var er=d
   (ld.leads||[]).slice(0,25).forEach(function(l){var tr=document.createElement('tr');tr.innerHTML='<td class=m>'+fmt(l.ts)+'</td><td>'+(l.email||'')+'</td><td class=m>'+(l.tier||'')+'</td><td class=m>'+(l.source||'')+'</td>';tb.appendChild(tr);});
  }catch(e){er.textContent='Load failed — check the token and try again.';}
 }
+async function loadStats(){try{var s=await fetch('/stats').then(function(x){return x.json();});var c=(s&&s.counts)||{};
+ ['landing','scan','firewall','review','lead','scan_live'].forEach(function(k){var e=document.getElementById('f_'+k);if(e)e.textContent=(c[k]||0).toLocaleString();});
+}catch(e){}}
+loadStats();
 try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').value=s;load();}}catch(e){}
 </script></div></body></html>`;
 
