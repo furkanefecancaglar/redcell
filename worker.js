@@ -681,7 +681,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
   <p class=sub>REDCELL scores an agent's prompt against the OWASP LLM Top 10 and blocks live attacks before they reach the model — even ones hidden in base64, leetspeak, homoglyphs, or invisible Unicode. As a firewall, a CI gate, or an SDK. Try it right here — or <a href="/example" style="color:var(--crit)">see a worked example</a>.</p>
   <div class=trust>
     <span><span class=dot></span>Live on the edge</span>
-    <span><b>33</b>&nbsp;firewall detectors</span>
+    <span><b>34</b>&nbsp;firewall detectors</span>
     <span><b>22</b>&nbsp;static checks · 4 languages</span>
     <span><b>0</b>&nbsp;API keys to try it</span>
   </div>
@@ -709,7 +709,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
-    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>33 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
+    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>34 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
   </div>
 </div>
 
@@ -988,7 +988,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <div class=card><span class=k>Test</span><h3>Static scanner</h3><p>22 detectors, OWASP LLM Top 10, findings + hardened-prompt kit.</p></div>
 <div class=card><span class=k>Prevent</span><h3>CI gate</h3><p>Fails the build when an agent's prompt regresses. SDKs (pip/npm), MCP tool.</p></div>
 <div class=card><span class=k>Attack</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
-<div class=card><span class=k>Defend</span><h3>Runtime firewall</h3><p>33 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
+<div class=card><span class=k>Defend</span><h3>Runtime firewall</h3><p>34 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
 </div>
 <p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) drove 15M+ messages / 300k+ users. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
 
@@ -1460,7 +1460,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 redcel
 
 function renderMCP() {
   const tools = [
-    ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 33 detectors + deobfuscation. Returns allow / flag / block.'],
+    ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 34 detectors + deobfuscation. Returns allow / flag / block.'],
     ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (22 detectors). Returns a 0–100 score, grade, and findings.'],
   ].map(function (t) {
     return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
@@ -1566,7 +1566,7 @@ function renderQuickstart() {
     + '<div class=ey>' + _mk() + 'REDCELL · quickstart</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Guard your agent in 30 seconds.</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 4px">One call to the runtime firewall inspects any untrusted input — user messages, retrieved docs, tool results — and returns <b>allow</b> / <b>flag</b> / <b>block</b> before it reaches your model. 0 dependencies, no API key, runs at the edge.</p>'
-    + '<div class=id style="margin:0 0 8px">Same 33-detector engine as the live demo — including base64/leetspeak/homoglyph/unicode-tag deobfuscation.</div>'
+    + '<div class=id style="margin:0 0 8px">Same 34-detector engine as the live demo — including base64/leetspeak/homoglyph/unicode-tag deobfuscation.</div>'
     + '<h2 style="font-size:15px;color:#eaedf4;margin:26px 0 2px">1 · Firewall untrusted input at runtime</h2>'
     + '<div class=id style="margin:0 0 8px">allow / flag / block on every user message, retrieved doc, or tool result before it reaches your model.</div>'
     + _qsBlock('JavaScript / TypeScript', 'js', QS_JS)
@@ -1605,7 +1605,7 @@ function renderMethodology() {
         'Scores an agent <b>system prompt</b> against 22 detectors mapped to the OWASP LLM Top 10 (instruction hierarchy, confidentiality, excessive agency, secret exposure, insecure output handling, RAG &amp; tool-output provenance, memory poisoning, identity binding, and more). Each detector is one of: <code>absent</code> (a defense you should have but don’t), <code>present</code> (a risky phrase you shouldn’t have), <code>cond</code> (a risky capability without its guard), <code>len</code>, or <code>hidden</code>. '
         + 'Score starts at 100 and subtracts a severity weight per finding — critical −34, high −20, medium −11, low −5 — floored at 0. Grades: Hardened ≥85, Resilient ≥70, Exposed ≥45, Vulnerable ≥20, else Critical. Like the firewall, it inspects the first 16 KB (a real system prompt is far smaller).')
     + _mCard('Runtime firewall — allow / flag / block',
-        'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 33 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
+        'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 34 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
         + 'Beyond literal patterns it <b>deobfuscates</b> each input — base64 (standard / url-safe / one nested level), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible Unicode-tag (U+E0000–E007F) smuggling — then re-runs the rules on the normalized text. '
         + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting.')
     + _mCard('Live red-team engine (paid)',
