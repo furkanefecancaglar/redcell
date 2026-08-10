@@ -781,9 +781,9 @@ document.getElementById('bscan').setAttribute('data-l','Scan resilience');
 document.getElementById('bfw').setAttribute('data-l','Firewall check');
 async function scan(){var t=document.getElementById('in').value;if(!t.trim()){document.getElementById('in').focus();return;}
  var b=document.getElementById('bscan');busy(b,true,'Scanning…');out.className='show';out.innerHTML='<div class=mono style="color:var(--ink3);font-size:13px">running 22 detectors…</div>';
- try{var r=await fetch('/scan-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_prompt:t})}).then(function(x){return x.json();});
+ try{var t0=performance.now();var r=await fetch('/scan-config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_prompt:t})}).then(function(x){return x.json();});var ms=Math.max(1,Math.round(performance.now()-t0));
   var col=r.score>=70?'var(--pass)':r.score>=45?'var(--high)':'var(--crit)';
-  var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 22 checks</span></div>';
+  var h='<div class=ro-top><div class=score style="color:'+col+'">'+r.score+'<small>/100</small></div><span class=grade style="color:'+col+';background:rgba(255,255,255,.05)">'+r.grade+'</span><span class=ro-meta>'+r.findings.length+' findings · 22 checks · '+ms+' ms</span></div>';
   h+='<div style="margin-top:12px">'+r.findings.map(function(f){var c=SEV[f.sev]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(f.title)+'</span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+f.sev+'</span><span class=id>'+f.id+'</span></div>';}).join('')+'</div>';
   if(!r.findings.length)h+='<div class=mono style="color:var(--pass);margin-top:8px">no weaknesses matched — strong baseline.</div>';
   LASTP=t;LASTSHARE='I scored my AI system prompt '+r.score+'/100 on REDCELL — the OWASP LLM Top-10 scanner for AI agents.';h+=shareBar()+reviewBox('config');
@@ -792,9 +792,9 @@ async function scan(){var t=document.getElementById('in').value;if(!t.trim()){do
  busy(b,false);}
 async function fw(){var t=document.getElementById('in').value;if(!t.trim()){document.getElementById('in').focus();return;}
  var b=document.getElementById('bfw');busy(b,true,'Checking…');out.className='show';out.innerHTML='<div class=mono style="color:var(--ink3);font-size:13px">inspecting input…</div>';
- try{var r=await fetch('/firewall',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:t})}).then(function(x){return x.json();});
+ try{var t0=performance.now();var r=await fetch('/firewall',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:t})}).then(function(x){return x.json();});var ms=Math.max(1,Math.round(performance.now()-t0));
   var vc=r.action==='block'?'var(--crit)':r.action==='flag'?'var(--high)':'var(--pass)';
-  var h='<div class=verdict>verdict<span class=vb style="color:#fff;background:'+vc+'">'+r.action.toUpperCase()+'</span><span style="color:var(--ink3)">score '+r.score+' · risk '+r.risk+'</span></div>';
+  var h='<div class=verdict>verdict<span class=vb style="color:#fff;background:'+vc+'">'+r.action.toUpperCase()+'</span><span style="color:var(--ink3)">score '+r.score+' · risk '+r.risk+' · '+ms+' ms</span></div>';
   h+='<div style="margin-top:12px">'+(r.matches.map(function(m){var c=SEV[m.severity]||'var(--ink3)';return '<div class=find><span class=bar style="background:'+c+'"></span><span class=ttl>'+esc(m.id)+' <span style="color:var(--ink3);font-size:13px">— '+esc(m.why)+'</span></span><span class=sv style="color:'+c+';background:rgba(255,255,255,.04)">'+m.severity+'</span></div>';}).join('')||'<div class=mono style="color:var(--pass)">clean — no attack patterns matched.</div>')+'</div>';
   LASTP=t;LASTSHARE='I ran a prompt-injection test through REDCELL and the firewall said '+r.action.toUpperCase()+'. Free AI-agent security check:';h+=shareBar()+reviewBox('input');
   out.innerHTML=h;
@@ -1065,11 +1065,13 @@ async function load(){var t=document.getElementById('tok').value.trim();var er=d
 async function loadStats(){try{var s=await fetch('/stats').then(function(x){return x.json();});var c=(s&&s.counts)||{};
  ['landing','scan','firewall','review','lead','scan_live'].forEach(function(k){var e=document.getElementById('f_'+k);if(e)e.textContent=(c[k]||0).toLocaleString();});
 }catch(e){}}
-async function loadStatus(){var el=document.getElementById('status');try{var s=await fetch('/selfcheck').then(function(x){return x.json();});
+async function loadStatus(){var el=document.getElementById('status');try{var t0=performance.now();var s=await fetch('/selfcheck').then(function(x){return x.json();});var ms=Math.max(1,Math.round(performance.now()-t0));
  var c=s.checks||{};var html='';var names={firewall:'Firewall',scanner:'Scanner',report_kv:'Report store'};
  Object.keys(names).forEach(function(k){var ok=c[k]&&c[k].pass;var col=ok?'#33d17f':'#ff3b46';var dot=ok?'●':'●';
   html+='<span title="'+((c[k]&&c[k].detail)||'')+'" style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:'+col+'">'+dot+' '+names[k]+' '+(ok?'ok':'FAIL')+'</span>';});
  html+='<span style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:'+(s.ok?'#33d17f':'#ff3b46')+'">'+(s.ok?'● all systems go':'● degraded')+'</span>';
+ var now=new Date();var hh=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
+ html+='<span style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:#616b80">'+ms+' ms round-trip · checked '+hh+'</span>';
  el.innerHTML=html;
 }catch(e){el.innerHTML='<span style="color:#ff8a34">self-check unreachable</span>';}}
 async function loadTechniques(){var el=document.getElementById('techniques');try{var s=await fetch('/breach/techniques').then(function(x){return x.json();});
