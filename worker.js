@@ -322,6 +322,7 @@ export default {
     if (url.pathname === '/vs') return html(renderVs());
     if (url.pathname === '/example') return html(renderExample());
     if (url.pathname === '/docs') return html(renderDocs());
+    if (url.pathname === '/openapi.json') return json(openApiDoc());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -1739,7 +1740,62 @@ function renderDocs() {
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
-    + '<div><span style="color:#33d17f">GET</span> /health · /selfcheck · /breach/techniques <span style="color:#616b80">→ status / self-check / attack-technique counts</span></div></div>'
+    + '<div><span style="color:#33d17f">GET</span> /health · /selfcheck · /breach/techniques <span style="color:#616b80">→ status / self-check / attack-technique counts</span></div>'
+    + '<div style="margin-top:8px"><a href="/openapi.json" style="color:#33d17f">/openapi.json</a> <span style="color:#616b80">→ OpenAPI 3.1 spec (machine-discoverable)</span></div></div>'
     + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/quickstart">quickstart</a> · <a href="/methodology">methodology</a></div>'
     + '</div></body></html>';
+}
+
+/* ---------------- Machine-discoverable API (GET /openapi.json) ---------------- */
+function openApiDoc() {
+  const S = 'https://redcell.redcellv1.workers.dev';
+  const Match = { type: 'object', properties: { id: { type: 'string' }, owasp: { type: 'string' }, severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] }, why: { type: 'string' }, snippet: { type: 'string' } } };
+  const Finding = { type: 'object', properties: { id: { type: 'string', description: 'OWASP LLM class, e.g. LLM01' }, cat: { type: 'string' }, sev: { type: 'string', enum: ['crit', 'high', 'med', 'low'] }, title: { type: 'string' }, evidence: { type: 'string' } } };
+  return {
+    openapi: '3.1.0',
+    info: {
+      title: 'REDCELL API',
+      version: '1.0.0',
+      description: 'The security layer for AI agents. The scan-config and firewall surfaces are 0-API (no key, run at the edge). /scan uses a model and may require a token. Report prompts are stored under an unguessable id for 30 days (noindex); nothing is sent to third parties.',
+    },
+    servers: [{ url: S }],
+    paths: {
+      '/firewall': {
+        post: {
+          summary: 'Inspect untrusted input for prompt-injection / jailbreak / exfiltration (0 API).',
+          description: 'Runs ' + (fw.RULES.length + 3) + ' detectors plus deobfuscation (base64/url-safe/nested, leetspeak, homoglyph, zero-width, unicode-tag). Inspects the first 16 KB.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' } } } } } },
+          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
+        },
+      },
+      '/scan-config': {
+        post: {
+          summary: 'Score an agent system prompt against the OWASP LLM Top 10 (0 API).',
+          description: 'Static resilience score from ' + scan.DET.length + ' detectors.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['system_prompt'], properties: { system_prompt: { type: 'string' } } } } } },
+          responses: { '200': { description: 'report', content: { 'application/json': { schema: { type: 'object', properties: { score: { type: 'integer', minimum: 0, maximum: 100 }, grade: { type: 'string' }, passed: { type: 'integer' }, has_critical: { type: 'boolean' }, findings: { type: 'array', items: Finding } } } } } }, '400': { description: 'system_prompt required' } },
+        },
+      },
+      '/review': {
+        post: {
+          summary: 'Run scan + firewall on a prompt and mint a shareable report link.',
+          description: 'Stores the report under an unguessable id (30-day TTL, noindex) and returns its URL. If email is given it is captured as a lead. Prompt is capped at 8 KB.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['system_prompt'], properties: { system_prompt: { type: 'string', maxLength: 8000 }, email: { type: 'string', maxLength: 200 }, source: { type: 'string' } } } } } },
+          responses: { '200': { description: 'created', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, id: { type: 'string' }, url: { type: 'string', description: 'path to the report page, e.g. /r/<id>' } } } } } }, '400': { description: 'a prompt is required' } },
+        },
+      },
+      '/scan': {
+        post: {
+          summary: 'Live adversarial engine — real attacks + a separate judge model (uses model quota).',
+          description: 'Requires header X-REDCELL-Token when the deployment sets one. Fires an attack corpus at a live model wearing your prompt and scores each response.',
+          parameters: [{ name: 'X-REDCELL-Token', in: 'header', required: false, schema: { type: 'string' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['system_prompt'], properties: { system_prompt: { type: 'string' } } } } } },
+          responses: { '200': { description: 'adversarial report' }, '401': { description: 'unauthorized' }, '503': { description: 'engine not configured' } },
+        },
+      },
+      '/health': { get: { summary: 'Surface status + detector counts.', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, edge: { type: 'boolean' }, detectors: { type: 'integer' }, firewall_rules: { type: 'integer' }, attacks: { type: 'integer' }, scan_gated: { type: 'boolean' }, surfaces: { type: 'object' } } } } } } } } },
+      '/selfcheck': { get: { summary: 'In-process reliability probe (real result, per surface).', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, ts: { type: 'integer' }, checks: { type: 'object' } } } } } } } } },
+      '/breach/techniques': { get: { summary: 'Aggregate attack-technique counts from the Breach game (counts only, no PII).', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { total: { type: 'integer' }, techniques: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, count: { type: 'integer' } } } } } } } } } } } },
+    },
+  };
 }
