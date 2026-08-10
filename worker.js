@@ -317,6 +317,7 @@ export default {
       return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600', ...CORS } });
     }
     if (url.pathname === '/methodology') return html(renderMethodology());
+    if (url.pathname === '/vs') return html(renderVs());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -780,7 +781,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   </div>
 </div>
 
-<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
+<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
 
 <script>
 var EX={
@@ -1143,6 +1144,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/mcp</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/quickstart</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/methodology</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/vs</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1587,6 +1589,37 @@ function renderMethodology() {
         '<b>It is not a model.</b> The scanner and firewall are deterministic pattern matchers. That makes them fast, private, and explainable — but a novel attack with no lexical or structural signal, or a defense phrased in a way the patterns don’t recognize, can be missed. '
         + '<b>A high score is not a safety guarantee.</b> It means known weaknesses weren’t found by these checks, not that your agent is safe. '
         + '<b>It does not watch your traffic</b> unless you explicitly call the firewall on it, and it does not replace human security review, red-teaming, or defense-in-depth. Use it as one fast, deterministic layer — not the only one.')
-    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a> · <a href="/mcp">MCP</a></div>'
+    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a> · <a href="/mcp">MCP</a></div>'
+    + '</div></body></html>';
+}
+
+/* ---------------- Honest positioning (GET /vs) ---------------- */
+function renderVs() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="Where a deterministic 0-API firewall + prompt scanner fits alongside model-based LLM guardrails — strengths, honest limits, and why you want both. No benchmarks, no disparagement.">'
+    + '<meta property="og:title" content="REDCELL vs model-based guardrails — an honest fit guide"><meta property="og:description" content="Deterministic + private + free vs model-based semantic depth. Use both."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<title>REDCELL — how it compares</title><style>' + REPORT_CSS + 'h2{font-size:15px;color:#eaedf4;margin:24px 0 6px}.two{display:grid;gap:14px}@media(min-width:720px){.two{grid-template-columns:1fr 1fr}}li{margin:5px 0;color:#c7cdd9}ul{padding-left:18px;margin:8px 0}</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · how it compares</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">Where REDCELL fits — honestly.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">LLM-agent defenses come in two families, and the strongest setups use both. <b>Deterministic pattern/policy layers</b> (REDCELL) match known attack structure and missing defenses in microseconds, with no network call. <b>Model-based classifiers</b> (for example Lakera Guard, Meta PromptGuard, Rebuff, NVIDIA NeMo Guardrails) run a trained model to judge intent, generalizing to attacks that share no keywords. Different tools for different failure modes.</p>'
+    + '<div class=id style="margin:0 0 10px">This page describes categories, not competitor internals — no benchmarks, no scorecards, no claims we can’t verify.</div>'
+    + '<div class=two>'
+    + '<div class=card><div class=ey style="color:#33d17f">Reach for REDCELL (deterministic) when…</div><ul>'
+    + '<li>you want a verdict in microseconds with <b>no egress</b> — the text never leaves your edge/process (privacy, compliance, air-gapped).</li>'
+    + '<li>you need <b>explainability</b>: every verdict names the exact rule and OWASP class it matched.</li>'
+    + '<li>you want a <b>deterministic CI gate</b> — same input, same result, no model drift — to stop a PR that weakens a prompt or un-blocks a known injection.</li>'
+    + '<li>you want to <b>harden the system prompt itself</b> (the 22-check scanner) — a static concern most runtime classifiers don’t cover.</li>'
+    + '<li>you want it <b>free and 0-dependency</b>, vendored as one file, no key, no vendor lock-in.</li></ul></div>'
+    + '<div class=card><div class=ey style="color:#ff8a34">Reach for a model layer when…</div><ul>'
+    + '<li>the attack is <b>novel or semantic</b> — a paraphrase or social-engineering framing that shares no keywords or structure with known patterns.</li>'
+    + '<li>you need <b>intent understanding</b> across languages and phrasings a finite rule set won’t enumerate.</li>'
+    + '<li>you can accept model latency, cost, and the occasional false call in exchange for that generalization.</li>'
+    + '<li>you want a second, independent opinion — <b>defense-in-depth</b> beats any single layer.</li></ul></div>'
+    + '</div>'
+    + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>The honest answer: use both.</b>'
+    + '<div class=id style="margin:6px 0 0">Put REDCELL first as a fast, private, deterministic filter and CI gate — it removes the obvious and the obfuscated (base64/leetspeak/homoglyph/unicode-tag) cheaply and blocks regressions. Add a model-based classifier for the semantic long tail. REDCELL does not replace human red-teaming or a trained classifier; it is the fast layer that makes the expensive layers rarer.</div></div>'
+    + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add the firewall in 30s →</a></div>'
+    + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a></div>'
     + '</div></body></html>';
 }
