@@ -11,6 +11,18 @@
  */
 import fw from './redcell.js';
 import scan from './redcell_scanner.js';
+// The 0-dependency source files, imported as text (wrangler Text rule) so /src/<file>.py
+// serves exactly what the vendoring instructions reference.
+import SRC_STATIC from './redcell_static.py';
+import SRC_FIREWALL from './redcell_firewall.py';
+import SRC_CI from './redcell_ci.py';
+import SRC_MCP from './redcell_mcp.py';
+const SRC_FILES = {
+  'redcell_static.py': SRC_STATIC,
+  'redcell_firewall.py': SRC_FIREWALL,
+  'redcell_ci.py': SRC_CI,
+  'redcell_mcp.py': SRC_MCP,
+};
 
 const inspect = fw.inspect;
 const analyze = scan.analyze;
@@ -298,6 +310,12 @@ export default {
     if (url.pathname === '/ci') return html(renderCI());
     if (url.pathname === '/mcp') return html(renderMCP());
     if (url.pathname === '/quickstart') return html(renderQuickstart());
+    if (url.pathname.indexOf('/src/') === 0) {
+      const name = url.pathname.slice(5);
+      const body = Object.prototype.hasOwnProperty.call(SRC_FILES, name) ? SRC_FILES[name] : null;
+      if (body == null) return new Response('not found. available: ' + Object.keys(SRC_FILES).join(', ') + '\n', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS } });
+      return new Response(body, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600', ...CORS } });
+    }
     if (url.pathname === '/methodology') return html(renderMethodology());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -1355,9 +1373,11 @@ jobs:
             --min-score 60 --no-color
         # exit 1 fails the job; an unmatched glob is a clean pass (nothing to gate)
 `;
-const CI_USAGE = `# vendor the two zero-dependency files into your repo (until REDCELL is on PyPI)
-mkdir -p redcell
-cp redcell_static.py redcell_ci.py redcell/    # both are 0-API, stdlib-only
+const CI_USAGE = `# fetch the two zero-dependency files into your repo (until REDCELL is on PyPI)
+mkdir -p redcell && cd redcell
+curl -sO https://redcell.redcellv1.workers.dev/src/redcell_static.py
+curl -sO https://redcell.redcellv1.workers.dev/src/redcell_ci.py
+cd ..
 
 # run it anywhere — locally or in CI
 python3 redcell/redcell_ci.py "prompts/**/*.txt" --min-score 60 --no-color
@@ -1397,9 +1417,12 @@ const MCP_CONFIG = `{
     }
   }
 }`;
-const MCP_SETUP = `# vendor the three zero-dependency files (stdlib only — no pip install needed)
-mkdir -p redcell
-cp redcell_mcp.py redcell_firewall.py redcell_static.py redcell/
+const MCP_SETUP = `# fetch the three zero-dependency files (stdlib only — no pip install needed)
+mkdir -p redcell && cd redcell
+curl -sO https://redcell.redcellv1.workers.dev/src/redcell_mcp.py
+curl -sO https://redcell.redcellv1.workers.dev/src/redcell_firewall.py
+curl -sO https://redcell.redcellv1.workers.dev/src/redcell_static.py
+cd ..
 
 # point your MCP client at redcell/redcell_mcp.py (see the config on the right),
 # then restart the client. Verify by hand over stdio:
