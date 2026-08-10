@@ -33,7 +33,7 @@ TOOLS = [
         "name": "firewall_check",
         "description": ("Inspect an UNTRUSTED input (a user message, retrieved document, or tool result) for "
                         "prompt-injection / jailbreak / data-exfiltration attempts BEFORE it reaches your agent's "
-                        "model. 32 detectors plus deobfuscation of base64, leetspeak, homoglyphs, zero-width and "
+                        "model. 33 detectors plus deobfuscation of base64, leetspeak, homoglyphs, zero-width and "
                         "invisible Unicode-tag smuggling. Returns a verdict: allow | flag | block, a risk score, and "
                         "the matched attack rules. 0 API, microsecond latency. Use as an input firewall for any LLM agent."),
         "inputSchema": {
