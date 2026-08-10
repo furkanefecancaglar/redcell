@@ -82,8 +82,11 @@
 
   function hit(re, text) { const m = re.exec(text); return m ? m[0] : null; }
 
+  const MAX_ANALYZE = 16384;  // mirror of redcell_static._MAX_ANALYZE — bound worst-case CPU
+
   function analyze(text) {
     text = text || '';
+    if (text.length > MAX_ANALYZE) text = text.slice(0, MAX_ANALYZE);
     const findings = [];
     let passed = 0;
     for (const d of DET) {

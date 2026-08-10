@@ -111,8 +111,14 @@ def _hit(rx, text) -> Optional[str]:
     return m.group(0) if m else None
 
 
+_MAX_ANALYZE = 16384  # inspect only the first 16 KB (a real system prompt is far smaller);
+# bounds worst-case CPU and mirrors the firewall's cap. Larger blobs should be chunked.
+
+
 def analyze(text: str) -> Report:
     text = text or ""
+    if len(text) > _MAX_ANALYZE:
+        text = text[:_MAX_ANALYZE]
     findings: List[Finding] = []
     passed = 0
     for owasp, cat, sev, title, kind, a, b in _DET:
