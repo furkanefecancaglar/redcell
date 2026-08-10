@@ -393,18 +393,23 @@ export default {
     // Shared report page (noindex — it can contain a user's own prompt). Unguessable id in path.
     if (url.pathname.indexOf('/r/') === 0) {
       let rest = url.pathname.slice(3);
-      const wantJson = rest.slice(-5) === '.json';
-      if (wantJson) rest = rest.slice(0, -5);
+      let mode = 'html';
+      if (rest.slice(-7) === '/og.svg') { mode = 'og'; rest = rest.slice(0, -7); }
+      else if (rest.slice(-5) === '.json') { mode = 'json'; rest = rest.slice(0, -5); }
       const id = rest.replace(/[^a-z0-9]/g, '').slice(0, 16);
-      const miss = wantJson
+      const svgHdr = { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600', 'X-Robots-Tag': 'noindex', ...CORS };
+      const miss = mode === 'json'
         ? new Response(JSON.stringify({ error: 'report not found or expired' }), { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } })
-        : html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
+        : mode === 'og'
+          ? new Response(REPORT_OG_MISS, { status: 404, headers: svgHdr })
+          : html(REPORT_MISSING, 404, { 'X-Robots-Tag': 'noindex' });
       if (!id || !env || !env.LEADS) return miss;
       const raw = await env.LEADS.get('report:' + id);
       if (!raw) return miss;
       let rec = null; try { rec = JSON.parse(raw); } catch (e) { rec = null; }
       if (!rec) return miss;
-      if (wantJson) return new Response(JSON.stringify({ id, ...rec }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
+      if (mode === 'json') return new Response(JSON.stringify({ id, ...rec }), { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...CORS } });
+      if (mode === 'og') return new Response(renderReportOG(rec, id), { status: 200, headers: svgHdr });
       return html(renderReport(rec, id), 200, { 'X-Robots-Tag': 'noindex' });
     }
     if (url.pathname === '/leads') { // founder-only export (PII: requires a token)
@@ -1233,6 +1238,10 @@ function renderReport(rec, id) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=robots content="noindex,nofollow">'
+    + '<meta property="og:type" content="website"><meta property="og:title" content="REDCELL security report — ' + (r.score || 0) + '/100">'
+    + '<meta property="og:description" content="' + ((r.findings || []).length) + ' findings across 22 static checks + a runtime firewall pass. Scan your AI agent free.">'
+    + '<meta property="og:image" content="https://redcell.redcellv1.workers.dev/r/' + id + '/og.svg">'
+    + '<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/r/' + id + '/og.svg">'
     + '<title>REDCELL security report</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · security report</div>'
     + '<h1 style="font-size:23px;margin:10px 0 2px">Your prompt’s security report</h1>'
@@ -1265,6 +1274,41 @@ function renderReport(rec, id) {
     + 'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(mark,function(){fb(t);});}else{fb(t);}}</script>'
     + '</div></body></html>';
 }
+
+function _ogMark() {
+  let s = '<g transform="translate(90,74)">';
+  const on = [0, 2, 4, 6, 8];
+  for (let i = 0; i < 9; i++) {
+    const x = (i % 3) * 20, y = Math.floor(i / 3) * 20;
+    s += '<rect x="' + x + '" y="' + y + '" width="15" height="15" rx="2" fill="' + (on.indexOf(i) >= 0 ? '#ff3b46' : '#3a4152') + '"/>';
+  }
+  return s + '<text x="76" y="42" font-size="34" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text></g>';
+}
+function renderReportOG(rec, id) {
+  const r = (rec && rec.report) || {};
+  const score = Math.max(0, Math.min(100, parseInt(r.score, 10) || 0));
+  const grade = esc(String(r.grade || '').slice(0, 20));
+  const nfind = ((r.findings || []).length) | 0;
+  const col = score >= 70 ? '#33d17f' : score >= 45 ? '#ff8a34' : '#ff3b46';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Archivo, Segoe UI, Arial, sans-serif">'
+    + '<rect width="1200" height="630" fill="#0b0d12"/>'
+    + '<defs><radialGradient id="g" cx="80%" cy="-4%" r="62%"><stop offset="0" stop-color="' + col + '" stop-opacity="0.16"/><stop offset="1" stop-color="' + col + '" stop-opacity="0"/></radialGradient></defs>'
+    + '<rect width="1200" height="630" fill="url(#g)"/>'
+    + _ogMark()
+    + '<text x="90" y="205" font-size="24" font-family="monospace" fill="#616b80" letter-spacing="3">AI AGENT SECURITY REPORT</text>'
+    + '<text x="86" y="470" font-size="240" font-weight="900" fill="' + col + '" letter-spacing="-8">' + score + '<tspan font-size="72" fill="#616b80" font-weight="700">/100</tspan></text>'
+    + '<text x="640" y="330" font-size="52" font-weight="800" fill="#eaedf4">' + grade + '</text>'
+    + '<text x="642" y="378" font-size="25" fill="#9aa4b6">' + nfind + ' findings</text>'
+    + '<text x="642" y="414" font-size="22" font-family="monospace" fill="#616b80">22-check static + firewall</text>'
+    + '<rect x="90" y="556" width="1020" height="2" fill="#232a3a"/>'
+    + '<text x="90" y="596" font-family="monospace" font-size="21" fill="#616b80">redcell.redcellv1.workers.dev · <tspan fill="#33d17f">scan your agent free</tspan></text>'
+    + '</svg>';
+}
+const REPORT_OG_MISS = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Archivo, Segoe UI, Arial, sans-serif">'
+  + '<rect width="1200" height="630" fill="#0b0d12"/>' + _ogMark()
+  + '<text x="90" y="330" font-size="60" font-weight="900" fill="#eaedf4">Report not found</text>'
+  + '<text x="92" y="392" font-size="26" fill="#9aa4b6">This link is invalid or has expired.</text>'
+  + '<text x="90" y="596" font-family="monospace" font-size="21" fill="#616b80">redcell.redcellv1.workers.dev · <tspan fill="#33d17f">scan your agent free</tspan></text></svg>';
 
 const REPORT_MISSING = '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex"><title>Report not found — REDCELL</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap><div class=ey>REDCELL</div><h1 style="font-size:22px">Report not found</h1><p class=id>This report link is invalid or has expired (reports are kept for 30 days). Run a new scan to generate one.</p><a class=cta href="/">Run a scan →</a></div></body></html>';
 
