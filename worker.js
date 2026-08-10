@@ -360,15 +360,25 @@ export default {
       const ok = Object.keys(checks).every(function (k) { return checks[k].pass; });
       return json({ ok, checks, ts: Date.now() });
     }
+    // GET convenience for quick curl/browser testing. POST (JSON body) is canonical —
+    // don't put production prompts in URLs (they can land in logs/history).
+    if (request.method === 'GET' && url.pathname === '/firewall' && url.searchParams.has('input')) {
+      bump(env, ctx, 'firewall');
+      return json(inspect(String(url.searchParams.get('input')).slice(0, 4096)));
+    }
+    if (request.method === 'GET' && url.pathname === '/scan-config' && url.searchParams.has('system_prompt')) {
+      bump(env, ctx, 'scan');
+      return json(analyze(String(url.searchParams.get('system_prompt')).slice(0, 8000)));
+    }
     if (request.method === 'POST' && url.pathname === '/firewall') {
       const b = await request.json().catch(() => ({}));
-      if (!b || !b.input) return json({ error: 'input required' }, 400);
+      if (!b || !b.input) return json({ error: 'input required (POST JSON {input}) or ?input= for GET' }, 400);
       bump(env, ctx, 'firewall');
       return json(inspect(String(b.input)));
     }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
       const b = await request.json().catch(() => ({}));
-      if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
+      if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
       bump(env, ctx, 'scan');
       return json(analyze(String(b.system_prompt)));
     }
@@ -1795,6 +1805,7 @@ function renderDocs() {
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
     + '<div><span style="color:#33d17f">GET</span> /health · /selfcheck · /breach/techniques <span style="color:#616b80">→ status / self-check / attack-technique counts</span></div>'
+    + '<div style="margin-top:8px;color:#616b80">Quick test in a browser or curl: <span style="color:#9aa4b6">GET /firewall?input=…</span> and <span style="color:#9aa4b6">GET /scan-config?system_prompt=…</span> (POST is canonical — don’t put production data in URLs).</div>'
     + '<div style="margin-top:8px"><a href="/openapi.json" style="color:#33d17f">/openapi.json</a> <span style="color:#616b80">→ OpenAPI 3.1 spec (machine-discoverable)</span></div></div>'
     + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/quickstart">quickstart</a> · <a href="/methodology">methodology</a></div>'
     + '</div></body></html>';
@@ -1821,6 +1832,7 @@ function openApiDoc() {
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' } } } } } },
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
         },
+        get: { summary: 'Convenience: inspect ?input= (POST is canonical; do not put production data in URLs).', parameters: [{ name: 'input', in: 'query', required: true, schema: { type: 'string', maxLength: 4096 } }], responses: { '200': { description: 'verdict' } } },
       },
       '/scan-config': {
         post: {
@@ -1829,6 +1841,7 @@ function openApiDoc() {
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['system_prompt'], properties: { system_prompt: { type: 'string' } } } } } },
           responses: { '200': { description: 'report', content: { 'application/json': { schema: { type: 'object', properties: { score: { type: 'integer', minimum: 0, maximum: 100 }, grade: { type: 'string' }, passed: { type: 'integer' }, has_critical: { type: 'boolean' }, findings: { type: 'array', items: Finding } } } } } }, '400': { description: 'system_prompt required' } },
         },
+        get: { summary: 'Convenience: score ?system_prompt= (POST is canonical; do not put production prompts in URLs).', parameters: [{ name: 'system_prompt', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'report' } } },
       },
       '/review': {
         post: {
