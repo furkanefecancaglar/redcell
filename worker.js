@@ -296,6 +296,7 @@ export default {
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
     if (url.pathname === '/ci') return html(renderCI());
+    if (url.pathname === '/mcp') return html(renderMCP());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/sitemap.xml') return new Response(SITEMAP_XML, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -705,9 +706,9 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=m>GET</div><div class=u>/health</div><div class=d>surface status</div>
   </div>
   <div class=install>
-    <code><b>pip</b> install redcell</code>
-    <code><b>npm</b> i redcell-firewall</code>
-    <code><b>mcp</b> · redcell_mcp.py</code>
+    <code><b>py</b> redcell_firewall.py · 0 deps</code>
+    <code><b>js</b> redcell.js · 0 deps</code>
+    <a href="/mcp" style="text-decoration:none"><code><b>mcp</b> · add as a tool →</code></a>
   </div>
 </div>
 
@@ -1042,6 +1043,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/breach</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/ci</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/mcp</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1209,5 +1211,50 @@ function renderCI() {
     + '<div class=id style="margin:6px 0 12px">Paste a prompt into the scanner and see the same 21-check score the gate uses.</div>'
     + '<a class=cta href="/">Try the scanner →</a></div>'
     + '<div class=id style="margin-top:20px">REDCELL · <a href="/">redcell.redcellv1.workers.dev</a> · <a href="/pitch">the pitch</a></div>'
+    + '</div></body></html>';
+}
+
+/* ---------------- MCP distribution docs (GET /mcp) ---------------- */
+const MCP_CONFIG = `{
+  "mcpServers": {
+    "redcell": {
+      "command": "python3",
+      "args": ["/absolute/path/to/redcell/redcell_mcp.py"]
+    }
+  }
+}`;
+const MCP_SETUP = `# vendor the three zero-dependency files (stdlib only — no pip install needed)
+mkdir -p redcell
+cp redcell_mcp.py redcell_firewall.py redcell_static.py redcell/
+
+# point your MCP client at redcell/redcell_mcp.py (see the config on the right),
+# then restart the client. Verify by hand over stdio:
+printf '%s\\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 redcell/redcell_mcp.py`;
+
+function renderMCP() {
+  const tools = [
+    ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 32 detectors + deobfuscation. Returns allow / flag / block.'],
+    ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (21 detectors). Returns a 0–100 score, grade, and findings.'],
+  ].map(function (t) {
+    return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
+  }).join('');
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="Add REDCELL as an MCP server — give any agent (Claude Desktop, Cursor) a prompt-injection firewall and an OWASP-LLM-Top-10 prompt scanner as callable tools. 0 API, zero dependencies.">'
+    + '<title>REDCELL — MCP server for agents</title><style>' + REPORT_CSS
+    + '.k{color:#ff8a34}pre.y{white-space:pre;overflow-x:auto}.grid{display:grid;gap:14px}@media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}'
+    + '</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · MCP server</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets two tools it can call to defend or test another agent. Both are 0 API: pure static analysis and regex, no keys, no quota.</p>'
+    + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
+    + '<div class=grid>'
+    + '<div class=card><div class=ey>1 · Client config</div><div class=id style="margin:2px 0 8px">e.g. Claude Desktop <span class=k>claude_desktop_config.json</span></div><pre class="p y">' + esc(MCP_CONFIG) + '</pre></div>'
+    + '<div class=card><div class=ey>2 · Vendor &amp; verify</div><pre class="p y">' + esc(MCP_SETUP) + '</pre></div>'
+    + '</div>'
+    + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Same core, over HTTP</b>'
+    + '<div class=id style="margin:6px 0 12px">Prefer a call over the wire? The identical checks are live at POST /firewall and POST /scan-config — 0 API, from the edge.</div>'
+    + '<a class=cta href="/">See the API →</a></div>'
+    + '<div class=id style="margin-top:20px">REDCELL · <a href="/">redcell.redcellv1.workers.dev</a> · <a href="/ci">CI gate</a> · <a href="/pitch">the pitch</a></div>'
     + '</div></body></html>';
 }

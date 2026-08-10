@@ -33,8 +33,9 @@ TOOLS = [
         "name": "firewall_check",
         "description": ("Inspect an UNTRUSTED input (a user message, retrieved document, or tool result) for "
                         "prompt-injection / jailbreak / data-exfiltration attempts BEFORE it reaches your agent's "
-                        "model. Returns a verdict: allow | flag | block, a risk score, and the matched attack rules. "
-                        "0 API, microsecond latency. Use this as an input firewall in front of any LLM agent."),
+                        "model. 32 detectors plus deobfuscation of base64, leetspeak, homoglyphs, zero-width and "
+                        "invisible Unicode-tag smuggling. Returns a verdict: allow | flag | block, a risk score, and "
+                        "the matched attack rules. 0 API, microsecond latency. Use as an input firewall for any LLM agent."),
         "inputSchema": {
             "type": "object",
             "properties": {"input": {"type": "string", "description": "the untrusted text to inspect"}},
@@ -44,7 +45,7 @@ TOOLS = [
     {
         "name": "scan_prompt",
         "description": ("Score an AI agent's SYSTEM PROMPT for defensive resilience against the OWASP LLM Top 10 "
-                        "(18 detectors: missing instruction hierarchy, no confidentiality, excessive agency, "
+                        "(21 detectors: missing instruction hierarchy, no confidentiality, excessive agency, "
                         "hardcoded secrets, etc.). Returns a 0-100 resilience score, grade, and the findings. Use "
                         "before shipping or in CI to catch a weak/regressed agent prompt. 0 API."),
         "inputSchema": {
