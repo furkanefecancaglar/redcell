@@ -11,6 +11,7 @@
  */
 import fw from './redcell.js';
 import scan from './redcell_scanner.js';
+import semantic from './redcell_semantic.js';
 // The 0-dependency source files, imported as text (wrangler Text rule) so /src/<file>.py
 // serves exactly what the vendoring instructions reference.
 import SRC_STATIC from './redcell_static.py';
@@ -28,6 +29,24 @@ const SRC_FILES = {
 
 const inspect = fw.inspect;
 const analyze = scan.analyze;
+const semanticLexical = semantic.semanticScoreLexical;
+
+// Optional paraphrase-aware escalation (0-API lexical). Mirrors Python hybrid_inspect:
+// only runs when explicitly enabled AND the regex verdict is 'allow'; escalates allow→flag
+// on a medium/high semantic match — never blocks on the semantic signal alone.
+function withSemantic(v, text, on) {
+  if (!on || v.action !== 'allow') return v;
+  const s = semanticLexical(String(text || ''));
+  if (s.risk === 'medium' || s.risk === 'high') {
+    const sev = s.risk === 'high' ? 'high' : 'medium';
+    v.matches.push({ id: 'semantic-similarity', owasp: 'LLM01', severity: sev, why: 'semantically close to a known attack: ' + s.nearest, snippet: s.mode + ' ' + s.score });
+    v.score = Math.max(v.score, sev === 'high' ? 22 : 12);
+    v.action = 'flag';
+    if (v.risk === 'none') v.risk = sev;
+  }
+  return v;
+}
+function truthy(x) { return x === true || x === 1 || x === '1' || x === 'true'; }
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -364,7 +383,8 @@ export default {
     // don't put production prompts in URLs (they can land in logs/history).
     if (request.method === 'GET' && url.pathname === '/firewall' && url.searchParams.has('input')) {
       bump(env, ctx, 'firewall');
-      return json(inspect(String(url.searchParams.get('input')).slice(0, 4096)));
+      const gi = String(url.searchParams.get('input')).slice(0, 4096);
+      return json(withSemantic(inspect(gi), gi, truthy(url.searchParams.get('semantic'))));
     }
     if (request.method === 'GET' && url.pathname === '/scan-config' && url.searchParams.has('system_prompt')) {
       bump(env, ctx, 'scan');
@@ -374,7 +394,7 @@ export default {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.input) return json({ error: 'input required (POST JSON {input}) or ?input= for GET' }, 400);
       bump(env, ctx, 'firewall');
-      return json(inspect(String(b.input)));
+      return json(withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic)));
     }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
       const b = await request.json().catch(() => ({}));
