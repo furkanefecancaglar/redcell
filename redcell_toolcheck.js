@@ -18,7 +18,8 @@
   const FIN_VERB = /^(transfer|pay|payout|wire|refund|withdraw|remit|send)_?(money|funds|payment)?/i;
   const SENSITIVE = /\b(inbox|passwords?|api ?keys?|credentials?|secrets?|private keys?|ssn|social security|customer (records?|data|database)|user (records?|database)|database dump|(the )?whole database)\b/i;
   const AMT_ALL = /\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b/i;
-  const LOCALPATH = /(\/etc\/(passwd|shadow)|\/root\/|\/proc\/self|~\/\.ssh|\bfile:\/\/\/)/i;
+  const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\/)/i;
+  const ENVSEC = /\b(LD_PRELOAD|LD_LIBRARY_PATH|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|(api|secret|private)_?key|secret_?access|npm_?token)\b/i;
 
   function check(name, args, inspect) {
     name = name || '';
@@ -45,6 +46,7 @@
     if (EXFIL_VERB.test(name) && SENSITIVE.test(kv)) add('tool-data-exfil', 40, 'block');
     if (FIN_VERB.test(name) && AMT_ALL.test(kv)) add('unbounded-financial-action', 22, 'flag');
     if (LOCALPATH.test(kv)) add('local-file-access', 22, 'flag');
+    if (ENVSEC.test(name.replace(/_/g, ' ') + ' ' + kv)) add('secret-env-access', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };
