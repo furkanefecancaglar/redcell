@@ -1900,6 +1900,7 @@ function renderVs() {
     + '<li>you need <b>explainability</b>: every verdict names the exact rule and OWASP class it matched.</li>'
     + '<li>you want a <b>deterministic CI gate</b> — same input, same result, no model drift — to stop a PR that weakens a prompt or un-blocks a known injection.</li>'
     + '<li>you want to <b>harden the system prompt itself</b> (the 22-check scanner) — a static concern most runtime classifiers don’t cover.</li>'
+    + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF and command injection, and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
     + '<li>you want it <b>free and 0-dependency</b>, vendored as one file, no key, no vendor lock-in.</li></ul></div>'
     + '<div class=card><div class=ey style="color:#ff8a34">Reach for a model layer when…</div><ul>'
     + '<li>the attack is <b>novel or semantic</b> — a paraphrase or social-engineering framing that shares no keywords or structure with known patterns.</li>'
@@ -2185,7 +2186,7 @@ function renderChangelog() {
     + '<h1 style="font-size:24px;margin:10px 0 4px">What has shipped</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 6px">A factual, dated record of the product. Every item is live on this URL, 0-API, and covered by the test suite (currently 154 tests incl. an automated Python↔JS parity gate). No metrics are claimed here that aren’t verifiable in the code.</p>'
     + _clDay('2026-08-11 · Agent-native platform', [
-        'Tool-call firewall (POST /toolcheck): assesses a proposed {name, arguments} call — 7 risk classes incl. SSRF-to-internal, sensitive-file & secret-env access, destructive names, exfil, unbounded financial. Probe-verified 0 false positives on a benign tool-call corpus.',
+        'Tool-call firewall (POST /toolcheck): assesses a proposed {name, arguments} call — 8 risk classes incl. destructive names, data-exfil, unbounded financial, sensitive-file & secret-env access, SSRF-to-internal, and command injection in an argument. Probe-verified 0 false positives on a benign tool-call corpus.',
         'Unified check (POST /agentcheck): scanner + firewall + tool-call in one call → worst verdict. Also exposed as a 4th MCP tool (agent_check) and a one-file agent middleware in /quickstart.',
         'Optional 0-API semantic layer (?semantic=1): escalates a paraphrased attack (no keyword overlap) from allow → flag; never blocks on it alone.',
         'Agent threat-model page (/agents): the attack chain (input → injection → tool abuse → impact) mapped to each surface.',
