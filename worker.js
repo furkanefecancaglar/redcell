@@ -79,6 +79,7 @@ const REASON_LABELS = {
   'unbounded-financial-action': 'a money transfer with an unbounded amount (all / *)',
   'local-file-access': 'reads or writes a sensitive filesystem path',
   'secret-env-access': 'reads or sets a secret environment variable',
+  'ssrf-internal-target': 'a request to an internal / metadata / private-network address (SSRF)',
 };
 function reasonLabel(id) { return REASON_LABELS[id] || id; }
 function html(body, status = 200, extra) {
@@ -2097,7 +2098,8 @@ function renderAgents() {
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>unbounded-financial-action</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['unbounded-financial-action']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>local-file-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['local-file-access']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>secret-env-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['secret-env-access']) + '</div></span></div>'
-    + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, SSRF, encoded payloads).</div></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>ssrf-internal-target</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['ssrf-internal-target']) + '</div></span></div>'
+    + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, encoded payloads).</div></div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>One call for all three: <a href="/openapi.json" style="color:#ff8a34">POST /agentcheck</a></b>'
     + '<div class=id style="margin:6px 0 12px">Pass any of <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">{ system_prompt, input, tool_call }</code> and get a single verdict across the scanner, firewall, and tool-call check. 0 API, deterministic, runs at the edge.</div>'
     + '<a class=cta href="/quickstart">Wire it into your agent →</a></div>'

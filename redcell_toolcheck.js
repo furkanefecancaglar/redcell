@@ -20,6 +20,7 @@
   const AMT_ALL = /\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b/i;
   const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\/)/i;
   const ENVSEC = /\b(LD_PRELOAD|LD_LIBRARY_PATH|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|(api|secret|private)_?key|secret_?access|npm_?token)\b/i;
+  const SSRF_INTERNAL = /\b(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|metadata\.google\.internal)\b|(?:https?:\/\/|@|url=|host=|endpoint=|\/\/)\[?(?:localhost(?=[:/ \]]|$)|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|::1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|[a-z0-9.-]+\.(?:internal|svc\.cluster\.local)(?=[:/ \]]|$)|[a-z0-9.-]+\.local(?=[:/ \]]|$))/i;
 
   function check(name, args, inspect) {
     name = name || '';
@@ -47,6 +48,7 @@
     if (FIN_VERB.test(name) && AMT_ALL.test(kv)) add('unbounded-financial-action', 22, 'flag');
     if (LOCALPATH.test(kv)) add('local-file-access', 22, 'flag');
     if (ENVSEC.test(name.replace(/_/g, ' ') + ' ' + kv)) add('secret-env-access', 22, 'flag');
+    if (SSRF_INTERNAL.test(kv)) add('ssrf-internal-target', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };

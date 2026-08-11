@@ -48,6 +48,10 @@ DANGER = [
     ("set_env", {"name": "LD_PRELOAD", "value": "/tmp/evil.so"}),
     ("read_env", {"name": "AWS_SECRET_ACCESS_KEY"}),
     ("read_file", {"path": "/proc/self/environ"}),
+    ("fetch_url", {"url": "http://localhost:8080/admin"}),
+    ("fetch", {"url": "http://192.168.1.1/router"}),
+    ("get", {"url": "http://metadata.google.internal/computeMetadata/v1/"}),
+    ("webhook", {"url": "http://db.svc.cluster.local:5432"}),
 ]
 
 BENIGN += [
@@ -56,6 +60,9 @@ BENIGN += [
     ("fetch_url", {"url": "https://cdn.example.com/etc/logo.png"}),
     ("set_env", {"name": "LOG_LEVEL", "value": "debug"}),
     ("search", {"query": "how to set an api key in the config"}),
+    ("fetch_url", {"url": "https://api.stripe.com/v1/charges"}),
+    ("fetch", {"url": "https://localhost.mycompany.com/app"}),
+    ("get", {"url": "https://8.8.8.8/health"}),
 ]
 
 

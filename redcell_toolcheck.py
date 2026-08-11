@@ -43,6 +43,18 @@ _ENVSEC = re.compile(
     r"\b(LD_PRELOAD|LD_LIBRARY_PATH|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|OPENAI_API_KEY|"
     r"ANTHROPIC_API_KEY|GITHUB_TOKEN|(api|secret|private)_?key|secret_?access|npm_?token)\b",
     re.IGNORECASE)
+# SSRF: a url/host arg pointing at cloud-metadata, loopback, private, or internal-DNS targets.
+# The private/loopback/internal names require a url/host context so a normal domain that merely
+# starts with e.g. 'localhost' or contains '192.168' in text does not match.
+_SSRF_INTERNAL = re.compile(
+    r"\b(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|metadata\.google\.internal)\b"
+    r"|(?:https?://|@|url=|host=|endpoint=|//)\[?(?:localhost(?=[:/ \]]|$)"
+    r"|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|::1"
+    r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r"|[a-z0-9.-]+\.(?:internal|svc\.cluster\.local)(?=[:/ \]]|$)"
+    r"|[a-z0-9.-]+\.local(?=[:/ \]]|$))",
+    re.IGNORECASE)
 
 
 def check(name, arguments):
@@ -76,6 +88,8 @@ def check(name, arguments):
         add("local-file-access", 22, "flag")
     if _ENVSEC.search(name.replace("_", " ") + " " + kv):
         add("secret-env-access", 22, "flag")
+    if _SSRF_INTERNAL.search(kv):
+        add("ssrf-internal-target", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"
