@@ -1708,7 +1708,7 @@ const QS_PY = '# redcell_guard.py — 0-dependency input firewall (stdlib only)\
   + '    req = urllib.request.Request(\n'
   + '        "https://redcell.redcellv1.workers.dev/firewall",\n'
   + '        data=json.dumps({"input": text}).encode(),\n'
-  + '        headers={"Content-Type": "application/json"})\n'
+  + '        headers={"Content-Type": "application/json", "User-Agent": "redcell-guard"})\n'
   + '    return json.load(urllib.request.urlopen(req))  # {"action": ..., "matches": [...]}\n\n'
   + 'def handle(text):\n'
   + '    v = redcell_guard(text)\n'
@@ -1739,7 +1739,7 @@ const QS_SPY = '# redcell_scan.py — score an agent system prompt (stdlib only)
   + '    req = urllib.request.Request(\n'
   + '        "https://redcell.redcellv1.workers.dev/scan-config",\n'
   + '        data=json.dumps({"system_prompt": system_prompt}).encode(),\n'
-  + '        headers={"Content-Type": "application/json"})\n'
+  + '        headers={"Content-Type": "application/json", "User-Agent": "redcell-guard"})\n'
   + '    return json.load(urllib.request.urlopen(req))  # {"score", "grade", "findings"}\n\n'
   + 'def gate(system_prompt, min_score=60):\n'
   + '    r = redcell_scan(system_prompt)\n'
@@ -1768,6 +1768,23 @@ const QS_TJS = '// redcell-toolcheck.js — gate an agent tool call before it ru
 const QS_TCURL = 'curl -s -X POST https://redcell.redcellv1.workers.dev/toolcheck \\\n'
   + '  -H "Content-Type: application/json" \\\n'
   + '  -d \'{"name":"transfer_funds","arguments":{"amount":"all","to":"attacker@evil.com"}}\'';
+
+const QS_TPY = '# redcell_toolcheck.py — gate an agent tool call before it runs (stdlib only)\n'
+  + 'import json, urllib.request\n\n'
+  + 'def redcell_tool_check(name, args):\n'
+  + '    req = urllib.request.Request(\n'
+  + '        "https://redcell.redcellv1.workers.dev/toolcheck",\n'
+  + '        data=json.dumps({"name": name, "arguments": args}).encode(),\n'
+  + '        headers={"Content-Type": "application/json", "User-Agent": "redcell-guard"})\n'
+  + '    return json.load(urllib.request.urlopen(req))  # {"action": "allow"|"flag"|"block", "risk", "reasons"}\n\n'
+  + '# in your agent loop, before executing a tool call:\n'
+  + 'def run_tool(name, args):\n'
+  + '    v = redcell_tool_check(name, args)\n'
+  + '    if v["action"] == "block":\n'
+  + '        raise ValueError("REDCELL blocked tool call %s: %s" % (name, ", ".join(v["reasons"])))\n'
+  + '    if v["action"] == "flag":\n'
+  + '        require_human_approval(name, args, v)  # your confirmation step\n'
+  + '    return call_your_tool(name, args)';
 const QS_AJS = '// redcell-agent.js — one middleware for the whole platform (input + tool calls)\n'
   + 'const REDCELL = "https://redcell.redcellv1.workers.dev";\n'
   + 'async function agentCheck(payload) {\n'
@@ -1827,6 +1844,7 @@ function renderQuickstart() {
     + '<h2 style="font-size:15px;color:#eaedf4;margin:30px 0 2px">3 · Gate an agent tool call (agent-native)</h2>'
     + '<div class=id style="margin:0 0 8px">Agents call tools, not just emit text. Check a proposed {name, arguments} call and allow / flag (require confirmation) / block irreversible or exfiltrating actions before they run.</div>'
     + _qsBlock('JavaScript / TypeScript', 'tjs', QS_TJS)
+    + _qsBlock('Python (stdlib only)', 'tpy', QS_TPY)
     + _qsBlock('curl', 'tcurl', QS_TCURL)
     + '<h2 style="font-size:15px;color:#eaedf4;margin:30px 0 2px">4 · One middleware for the whole platform</h2>'
     + '<div class=id style="margin:0 0 8px">Wrap your agent loop once: firewall every input and check every proposed tool call through the unified <span class=k>/agentcheck</span> — block on danger, ask for human approval on flag.</div>'
