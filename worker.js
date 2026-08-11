@@ -77,7 +77,7 @@ function html(body, status = 200, extra) {
 
 // Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
 // waitUntil, so a burst of concurrent hits can lose an increment (undercounts, never over).
-const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'review', 'lead', 'scan_live'];
+const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'agentcheck', 'review', 'lead', 'scan_live'];
 function bump(env, ctx, key) {
   if (!env || !env.LEADS || !ctx) return;
   ctx.waitUntil((async () => {
@@ -413,6 +413,30 @@ export default {
       if (!b || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
       bump(env, ctx, 'toolcheck');
       return json(toolcheck.check(String(b.name), b.arguments || {}, inspect));
+    }
+    // Unified agent check: run all three surfaces in one call and return the worst verdict.
+    if (request.method === 'POST' && url.pathname === '/agentcheck') {
+      const b = await request.json().catch(() => ({}));
+      const hasTool = !!(b && b.tool_call && b.tool_call.name);
+      if (!b || (!b.system_prompt && !b.input && !hasTool)) {
+        return json({ error: 'provide at least one of: system_prompt, input, tool_call {name, arguments}' }, 400);
+      }
+      bump(env, ctx, 'agentcheck');
+      const rank = { allow: 0, flag: 1, block: 2 };
+      const parts = {};
+      let verdict = 'allow';
+      if (b.system_prompt) parts.scan = analyze(String(b.system_prompt));
+      if (b.input) {
+        const fwv = withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic));
+        parts.firewall = fwv;
+        if (rank[fwv.action] > rank[verdict]) verdict = fwv.action;
+      }
+      if (hasTool) {
+        const tv = toolcheck.check(String(b.tool_call.name), b.tool_call.arguments || {}, inspect);
+        parts.tool = tv;
+        if (rank[tv.action] > rank[verdict]) verdict = tv.action;
+      }
+      return json({ ok: verdict === 'allow', verdict, parts });
     }
     // Lead capture — waitlist / book-a-demo. Stores to KV; emails are never exposed without a token.
     if (request.method === 'POST' && url.pathname === '/lead') {
@@ -1907,6 +1931,7 @@ function renderDocs() {
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → risk of an agent tool call</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /agentcheck <span style="color:#616b80">{ system_prompt?, input?, tool_call? } → unified verdict (all 3 surfaces)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
@@ -1955,6 +1980,14 @@ function openApiDoc() {
           description: 'Given a {name, arguments} call, returns allow/flag/block by checking the tool name + argument values for destructive / exfil / privilege / SSRF / local-file / unbounded-financial patterns (reuses the firewall on arg values).',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } },
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string' } } } } } } }, '400': { description: 'name required' } },
+        },
+      },
+      '/agentcheck': {
+        post: {
+          summary: 'Unified check — run scanner + firewall(+semantic) + tool-call check in one call.',
+          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts. Reuses the same engines.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { system_prompt: { type: 'string' }, input: { type: 'string' }, semantic: { type: 'boolean' }, tool_call: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } } } },
+          responses: { '200': { description: 'unified verdict', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, verdict: { type: 'string', enum: ['allow', 'flag', 'block'] }, parts: { type: 'object' } } } } } }, '400': { description: 'provide at least one surface' } },
         },
       },
       '/review': {
