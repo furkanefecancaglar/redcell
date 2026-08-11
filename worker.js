@@ -12,6 +12,7 @@
 import fw from './redcell.js';
 import scan from './redcell_scanner.js';
 import semantic from './redcell_semantic.js';
+import toolcheck from './redcell_toolcheck.js';
 // The 0-dependency source files, imported as text (wrangler Text rule) so /src/<file>.py
 // serves exactly what the vendoring instructions reference.
 import SRC_STATIC from './redcell_static.py';
@@ -19,12 +20,16 @@ import SRC_FIREWALL from './redcell_firewall.py';
 import SRC_CI from './redcell_ci.py';
 import SRC_MCP from './redcell_mcp.py';
 import SRC_FWCHECK from './redcell_fw_check.py';
+import SRC_TOOLCHECK from './redcell_toolcheck.py';
+import SRC_SEMANTIC from './redcell_semantic.py';
 const SRC_FILES = {
   'redcell_static.py': SRC_STATIC,
   'redcell_firewall.py': SRC_FIREWALL,
   'redcell_ci.py': SRC_CI,
   'redcell_mcp.py': SRC_MCP,
   'redcell_fw_check.py': SRC_FWCHECK,
+  'redcell_toolcheck.py': SRC_TOOLCHECK,
+  'redcell_semantic.py': SRC_SEMANTIC,
 };
 
 const inspect = fw.inspect;
@@ -72,7 +77,7 @@ function html(body, status = 200, extra) {
 
 // Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
 // waitUntil, so a burst of concurrent hits can lose an increment (undercounts, never over).
-const STAT_KEYS = ['landing', 'scan', 'firewall', 'review', 'lead', 'scan_live'];
+const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'review', 'lead', 'scan_live'];
 function bump(env, ctx, key) {
   if (!env || !env.LEADS || !ctx) return;
   ctx.waitUntil((async () => {
@@ -401,6 +406,13 @@ export default {
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
       bump(env, ctx, 'scan');
       return json(analyze(String(b.system_prompt)));
+    }
+    // Agent tool-call firewall: assess a proposed {name, arguments} call → allow/flag/block.
+    if (request.method === 'POST' && url.pathname === '/toolcheck') {
+      const b = await request.json().catch(() => ({}));
+      if (!b || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
+      bump(env, ctx, 'toolcheck');
+      return json(toolcheck.check(String(b.name), b.arguments || {}, inspect));
     }
     // Lead capture — waitlist / book-a-demo. Stores to KV; emails are never exposed without a token.
     if (request.method === 'POST' && url.pathname === '/lead') {
@@ -1864,6 +1876,7 @@ function renderDocs() {
     + '<h2>API (0-API surfaces need no key)</h2>'
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → risk of an agent tool call</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
@@ -1905,6 +1918,14 @@ function openApiDoc() {
           responses: { '200': { description: 'report', content: { 'application/json': { schema: { type: 'object', properties: { score: { type: 'integer', minimum: 0, maximum: 100 }, grade: { type: 'string' }, passed: { type: 'integer' }, has_critical: { type: 'boolean' }, findings: { type: 'array', items: Finding } } } } } }, '400': { description: 'system_prompt required' } },
         },
         get: { summary: 'Convenience: score ?system_prompt= (POST is canonical; do not put production prompts in URLs).', parameters: [{ name: 'system_prompt', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'report' } } },
+      },
+      '/toolcheck': {
+        post: {
+          summary: 'Assess a proposed agent tool/function call for risk (0 API).',
+          description: 'Given a {name, arguments} call, returns allow/flag/block by checking the tool name + argument values for destructive / exfil / privilege / SSRF / local-file / unbounded-financial patterns (reuses the firewall on arg values).',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } },
+          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string' } } } } } } }, '400': { description: 'name required' } },
+        },
       },
       '/review': {
         post: {
