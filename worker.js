@@ -1737,6 +1737,35 @@ const QS_TJS = '// redcell-toolcheck.js — gate an agent tool call before it ru
 const QS_TCURL = 'curl -s -X POST https://redcell.redcellv1.workers.dev/toolcheck \\\n'
   + '  -H "Content-Type: application/json" \\\n'
   + '  -d \'{"name":"transfer_funds","arguments":{"amount":"all","to":"attacker@evil.com"}}\'';
+const QS_AJS = '// redcell-agent.js — one middleware for the whole platform (input + tool calls)\n'
+  + 'const REDCELL = "https://redcell.redcellv1.workers.dev";\n'
+  + 'async function agentCheck(payload) {\n'
+  + '  const r = await fetch(REDCELL + "/agentcheck", {\n'
+  + '    method: "POST",\n'
+  + '    headers: { "Content-Type": "application/json" },\n'
+  + '    body: JSON.stringify(payload)\n'
+  + '  });\n'
+  + '  return r.json(); // { ok, verdict: "allow"|"flag"|"block", parts }\n'
+  + '}\n\n'
+  + '// 1) guard untrusted input before the model sees it\n'
+  + 'async function onUserInput(text) {\n'
+  + '  const v = await agentCheck({ input: text, semantic: true });\n'
+  + '  if (v.verdict === "block") throw new Error("REDCELL blocked input: " + reasons(v));\n'
+  + '  return text;\n'
+  + '}\n\n'
+  + '// 2) guard a proposed tool call before you execute it\n'
+  + 'async function onToolCall(name, args) {\n'
+  + '  const v = await agentCheck({ tool_call: { name, arguments: args } });\n'
+  + '  if (v.verdict === "block") throw new Error("REDCELL blocked tool call " + name + ": " + reasons(v));\n'
+  + '  if (v.verdict === "flag") await requireHumanApproval(name, args, v);  // your confirmation step\n'
+  + '  return callYourTool(name, args);\n'
+  + '}\n\n'
+  + 'function reasons(v) {\n'
+  + '  const p = v.parts || {}, out = [];\n'
+  + '  if (p.firewall && p.firewall.matches) out.push(...p.firewall.matches.map(m => m.id));\n'
+  + '  if (p.tool && p.tool.reasons) out.push(...p.tool.reasons);\n'
+  + '  return out.join(", ");\n'
+  + '}';
 
 function _qsBlock(label, id, code) {
   return '<div class=card><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class=ey style="margin:0">' + esc(label) + '</div>'
@@ -1768,6 +1797,9 @@ function renderQuickstart() {
     + '<div class=id style="margin:0 0 8px">Agents call tools, not just emit text. Check a proposed {name, arguments} call and allow / flag (require confirmation) / block irreversible or exfiltrating actions before they run.</div>'
     + _qsBlock('JavaScript / TypeScript', 'tjs', QS_TJS)
     + _qsBlock('curl', 'tcurl', QS_TCURL)
+    + '<h2 style="font-size:15px;color:#eaedf4;margin:30px 0 2px">4 · One middleware for the whole platform</h2>'
+    + '<div class=id style="margin:0 0 8px">Wrap your agent loop once: firewall every input and check every proposed tool call through the unified <span class=k>/agentcheck</span> — block on danger, ask for human approval on flag.</div>'
+    + _qsBlock('JavaScript / TypeScript', 'ajs', QS_AJS)
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want it self-hosted / 0-network?</b>'
     + '<div class=id style="margin:6px 0 12px">The firewall is a single zero-dependency file (Python or JS) you can vendor and run in-process — no call out at all. Same rules.</div>'
     + '<a class=cta href="/mcp">Vendor it / add as MCP →</a></div>'
