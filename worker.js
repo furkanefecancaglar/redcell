@@ -1724,7 +1724,8 @@ function renderMethodology() {
     + _mCard('Runtime firewall — allow / flag / block',
         'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 34 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
         + 'Beyond literal patterns it <b>deobfuscates</b> each input — base64 (standard / url-safe / one nested level), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible Unicode-tag (U+E0000–E007F) smuggling — then re-runs the rules on the normalized text. '
-        + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting.')
+        + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting. '
+        + 'An <b>optional 0-API semantic layer</b> (opt in with <code>?semantic=1</code> or <code>{semantic:true}</code>) catches paraphrased attacks that share no keywords with the rules — it only escalates an <code>allow</code> to <code>flag</code>, never blocks on the semantic signal alone.')
     + _mCard('Live red-team engine (paid)',
         'The only surface that uses a model: it fires a real adversarial attack corpus at a live model wearing your system prompt, then scores each response with a <b>separate judge model</b> — actual attack, actual judge, not heuristics. This runs where your provider key can stay secret; it uses model quota.')
     + _mCard('Data &amp; privacy',
@@ -1891,7 +1892,7 @@ function openApiDoc() {
         post: {
           summary: 'Inspect untrusted input for prompt-injection / jailbreak / exfiltration (0 API).',
           description: 'Runs ' + (fw.RULES.length + 3) + ' detectors plus deobfuscation (base64/url-safe/nested, leetspeak, homoglyph, zero-width, unicode-tag). Inspects the first 16 KB.',
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' } } } } } },
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' }, semantic: { type: 'boolean', description: 'opt in to the 0-API semantic layer (escalates allow→flag on a paraphrased attack; never blocks alone)' } } } } } },
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
         },
         get: { summary: 'Convenience: inspect ?input= (POST is canonical; do not put production data in URLs).', parameters: [{ name: 'input', in: 'query', required: true, schema: { type: 'string', maxLength: 4096 } }], responses: { '200': { description: 'verdict' } } },
