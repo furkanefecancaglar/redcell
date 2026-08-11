@@ -346,6 +346,7 @@ export default {
     if (url.pathname === '/vs') return html(renderVs());
     if (url.pathname === '/example') return html(renderExample());
     if (url.pathname === '/docs') return html(renderDocs());
+    if (url.pathname === '/agents') return html(renderAgents());
     if (url.pathname === '/openapi.json') return json(openApiDoc());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -742,6 +743,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
     <a class=hide href="#surfaces">How it works</a>
     <a class=hide href="#pricing">Pricing</a>
     <a class=hide href="#developers">Developers</a>
+    <a class=hide href="/agents">Threat model</a>
     <a class=hide href="/docs">Docs</a>
     <a class=cta href="/breach">Play Breach</a>
   </div>
@@ -859,7 +861,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   </div>
 </div>
 
-<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/docs" style="color:var(--ink3)">docs</a> · <a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
+<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/docs" style="color:var(--ink3)">docs</a> · <a href="/agents" style="color:var(--ink3)">threat model</a> · <a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
 
 <script>
 var EX={
@@ -1225,6 +1227,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/vs</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/example</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/docs</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/agents</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1924,6 +1927,7 @@ function renderDocs() {
     + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check + scan_prompt.')
     + _docRow('/src/redcell_firewall.py', 'Vendorable source (/src)', 'The real 0-dependency files to curl and vendor: redcell_firewall.py, redcell_static.py, redcell_ci.py, redcell_mcp.py, redcell_fw_check.py.')
     + '<h2>Understand</h2>'
+    + _docRow('/agents', 'Agent threat model', 'The attack chain — untrusted input → prompt injection → tool abuse → exfil/privilege — mapped to REDCELL\'s three surfaces.')
     + _docRow('/methodology', 'Methodology', 'Exactly how the score and firewall work — detector kinds, scoring, deobfuscation — and an honest list of what it does NOT do.')
     + _docRow('/vs', 'How it compares', 'Where a deterministic 0-API firewall+scanner fits alongside model-based guardrails. Use both.')
     + _docRow('/pitch', 'Investor brief', 'The market, the product, and where this is going.')
@@ -2016,4 +2020,37 @@ function openApiDoc() {
       '/r/{id}.sarif': { get: { summary: 'Retrieve a report as SARIF 2.1.0 (GitHub code-scanning / security tooling).', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'SARIF 2.1.0 JSON' }, '404': { description: 'not found' } } } },
     },
   };
+}
+
+/* ---------------- Agent threat model (GET /agents) ---------------- */
+function _stage(n, title, desc, surface) {
+  return '<div class=card><div style="display:flex;gap:12px;align-items:flex-start">'
+    + '<div style="flex:0 0 34px;height:34px;border-radius:9px;background:#161b28;border:1px solid #232a3a;color:#ff6a72;font:700 15px ui-monospace,monospace;display:flex;align-items:center;justify-content:center">' + n + '</div>'
+    + '<div style="flex:1"><div style="color:#eaedf4;font-weight:700;font-size:15px">' + esc(title) + '</div>'
+    + '<div style="color:#9aa4b6;font-size:13.5px;margin-top:3px">' + desc + '</div>'
+    + '<div style="margin-top:8px;font:12px ui-monospace,monospace;color:#33d17f">REDCELL: ' + surface + '</div></div></div></div>';
+}
+function renderAgents() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="The AI-agent attack chain — untrusted input to prompt injection to tool abuse to exfiltration/privilege/destruction — and how REDCELL defends each stage (scan the prompt, firewall the input, check the tool call).">'
+    + '<meta property="og:title" content="REDCELL — the AI agent attack chain, defended"><meta property="og:description" content="Prompt injection is the entry; tool abuse is the impact. REDCELL covers input, prompt, and tool-call stages."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<title>REDCELL — AI agent threat model</title><style>' + REPORT_CSS + '.arrow{color:#3a4152;text-align:center;font-size:20px;margin:-6px 0}h2{font-size:13px;font-family:ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:26px 0 8px}</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · agent threat model</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">Prompt injection is the entry. Tool abuse is the impact.</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">A chatbot that gets jailbroken says something bad. An <b>agent</b> that gets jailbroken <b>does</b> something bad — it has tools: it can send, delete, transfer, fetch, and grant. The attack chain is short, and every stage is a place to stop it.</p>'
+    + '<h2>The attack chain</h2>'
+    + _stage('1', 'Untrusted input arrives', 'A user message, a retrieved document, or a <b>tool result</b> reaches the model. Any of these can carry an instruction — indirect injection hides in the data your agent reads, not just what the user types.', 'firewall the input (POST /firewall) — 34 detectors + deobfuscation (base64/leetspeak/homoglyph/zero-width/unicode-tag) + optional semantic for paraphrases')
+    + '<div class=arrow>↓</div>'
+    + _stage('2', 'Prompt injection / jailbreak', 'The input overrides the system prompt: "ignore your instructions", a forged <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">system:</code> line, a DAN persona, obfuscated so keyword filters miss it. A weak system prompt makes this trivial.', 'harden the prompt before you ship (POST /scan-config) — 22 OWASP-LLM-Top-10 checks + a copy-paste hardened-prompt kit')
+    + '<div class=arrow>↓</div>'
+    + _stage('3', 'Tool abuse', 'The hijacked agent now calls a tool with attacker intent: transfer funds, delete records, email secrets out, fetch an internal metadata URL, grant itself admin. This is where damage happens.', 'gate the tool call (POST /toolcheck) — block/flag destructive names, exfil, privilege escalation, SSRF, unbounded transfers before they run')
+    + '<div class=arrow>↓</div>'
+    + _stage('4', 'Impact: exfiltration · privilege · destruction', 'Data leaves, permissions escalate, or state is destroyed — often silently. By this stage it is too late; the earlier layers are where it is stopped.', 'defense-in-depth: any one surface may miss a novel attack, but stacking prompt + input + tool-call coverage removes the cheap and the obfuscated, and requires human approval for the irreversible')
+    + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>One call for all three: <a href="/openapi.json" style="color:#ff8a34">POST /agentcheck</a></b>'
+    + '<div class=id style="margin:6px 0 12px">Pass any of <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">{ system_prompt, input, tool_call }</code> and get a single verdict across the scanner, firewall, and tool-call check. 0 API, deterministic, runs at the edge.</div>'
+    + '<a class=cta href="/quickstart">Wire it into your agent →</a></div>'
+    + '<div class=id style="margin-top:14px">Honest scope: REDCELL is the fast, deterministic, private layer — it does not replace a model-based classifier or human red-teaming. See <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a>.</div>'
+    + '<div class=id style="margin-top:16px">REDCELL · <a href="/">home</a> · <a href="/docs">docs</a> · <a href="/quickstart">quickstart</a> · <a href="/example">example</a></div>'
+    + '</div></body></html>';
 }
