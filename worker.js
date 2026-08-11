@@ -80,6 +80,7 @@ const REASON_LABELS = {
   'local-file-access': 'reads or writes a sensitive filesystem path',
   'secret-env-access': 'reads or sets a secret environment variable',
   'ssrf-internal-target': 'a request to an internal / metadata / private-network address (SSRF)',
+  'command-injection-arg': 'shell command-injection markers in an argument (\$(), backticks, or an operator + a shell command)',
 };
 function reasonLabel(id) { return REASON_LABELS[id] || id; }
 function html(body, status = 200, extra) {
@@ -2128,6 +2129,7 @@ function renderAgents() {
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>local-file-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['local-file-access']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>secret-env-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['secret-env-access']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>ssrf-internal-target</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['ssrf-internal-target']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>command-injection-arg</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['command-injection-arg']) + '</div></span></div>'
     + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, encoded payloads).</div></div>'
     + '<h2>Coverage map — attack class → what catches it</h2>'
     + '<div class=id style="margin-bottom:6px">Real detector / reason ids, so you can see exactly where each class is handled. Deterministic layers; the paraphrase long-tail is the optional semantic layer + your model classifier.</div>'
@@ -2147,6 +2149,7 @@ function renderAgents() {
         ['SSRF / internal fetch', 'firewall · toolcheck', 'ssrf-exfil; tool: ssrf-internal-target'],
         ['Secret / credential access', 'scanner · toolcheck', 'scan: secret exposure; tool: secret-env-access'],
         ['Sensitive filesystem / persistence', 'toolcheck', 'tool: local-file-access'],
+        ['Command injection in a tool arg', 'firewall · toolcheck', 'code-execution, tool-param-injection; tool: command-injection-arg'],
         ['Resource exhaustion', 'firewall · scanner', 'repeat-flood; scan: unbounded consumption'],
       ].map(function (r) {
         return '<tr><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#eaedf4">' + esc(r[0]) + '</td><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#9aa4b6">' + esc(r[1]) + '</td><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#616b80;font:11.5px ui-monospace,monospace">' + esc(r[2]) + '</td></tr>';

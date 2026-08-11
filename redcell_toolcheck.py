@@ -55,6 +55,15 @@ _SSRF_INTERNAL = re.compile(
     r"|[a-z0-9.-]+\.(?:internal|svc\.cluster\.local)(?=[:/ \]]|$)"
     r"|[a-z0-9.-]+\.local(?=[:/ \]]|$))",
     re.IGNORECASE)
+# command-injection markers in an argument value: $(...) / backtick command substitution, or a
+# shell operator (; && || |) immediately followed by a shell command. Bare operators alone are
+# NOT flagged (they're common in queries/text) — only when paired with substitution/commands.
+_CMDINJ = re.compile(
+    r"\$\([^)]{1,200}\)"
+    r"|`[^`]{0,200}\b(id|whoami|curl|wget|bash|sh|nc|ncat|cat|rm|chmod|env|uname|python\d?|perl|node)\b[^`]{0,200}`"
+    r"|(?:;|&&|\|\||\|)\s*(?:bash|sh|zsh|curl|wget|nc|ncat|rm|chmod|chown|cat|eval|exec|python\d?|perl|ruby|node|/bin/|/usr/bin/)\b"
+    r"|\bnc\s+-e\b|bash\s+-i\b",
+    re.IGNORECASE)
 
 
 def check(name, arguments):
@@ -90,6 +99,8 @@ def check(name, arguments):
         add("secret-env-access", 22, "flag")
     if _SSRF_INTERNAL.search(kv):
         add("ssrf-internal-target", 22, "flag")
+    if _CMDINJ.search(kv):
+        add("command-injection-arg", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"
