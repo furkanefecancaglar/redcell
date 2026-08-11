@@ -723,13 +723,13 @@ textarea:focus{outline:2px solid var(--red);outline-offset:1px;border-color:tran
 .section{padding:64px 0;border-top:1px solid var(--line)}
 .section h2{font-size:clamp(24px,3.4vw,34px);letter-spacing:-.03em;font-weight:800;margin:10px 0 0}
 .section .lede{color:var(--ink2);max-width:60ch;margin:12px 0 0}
-.surf{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:34px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.surf{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-top:34px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .surf .s{padding:22px;border-right:1px solid var(--line)}
 .surf .s:last-child{border-right:0}
 .surf .n{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
 .surf .s h3{font-size:15px;margin:12px 0 6px;font-weight:700}
 .surf .s p{font-size:13px;color:var(--ink2);margin:0}
-@media(max-width:820px){.surf{grid-template-columns:repeat(2,1fr)}.surf .s:nth-child(2){border-right:0}.surf .s:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+@media(max-width:820px){.surf{grid-template-columns:repeat(2,1fr)}.surf .s{border-bottom:1px solid var(--line)}.surf .s:nth-child(2n){border-right:0}.surf .s:last-child{border-bottom:0}}
 @media(max-width:480px){.surf{grid-template-columns:1fr}.surf .s{border-right:0;border-bottom:1px solid var(--line)}.surf .s:last-child{border-bottom:0}}
 
 /* breach band */
@@ -804,13 +804,14 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
 
 <div class="wrap section" id=surfaces>
   <div class=eyebrow>The platform</div>
-  <h2>One security layer, four surfaces.</h2>
-  <p class=lede>The same offensive-security core — test the prompt, gate the pipeline, attack the live agent, and firewall production traffic.</p>
+  <h2>One security layer, five surfaces.</h2>
+  <p class=lede>The same offensive-security core — test the prompt, gate the pipeline, attack the live agent, firewall untrusted input, and screen every tool call. One call — <a href="/agents" style="color:var(--crit)">/agentcheck</a> — runs all of it and returns the worst verdict.</p>
   <div class=surf>
     <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
     <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>34 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
+    <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection. 8 reason classes, 0 API.</p></div>
   </div>
 </div>
 
