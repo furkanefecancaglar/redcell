@@ -358,6 +358,7 @@ export default {
     if (url.pathname === '/example') return html(renderExample());
     if (url.pathname === '/docs') return html(renderDocs());
     if (url.pathname === '/agents') return html(renderAgents());
+    if (url.pathname === '/changelog') return html(renderChangelog());
     if (url.pathname === '/openapi.json') return json(openApiDoc());
     if (url.pathname === '/og.svg') return new Response(OG_SVG, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
     if (url.pathname === '/robots.txt') return new Response(ROBOTS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -365,7 +366,7 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
-        surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)',
+        surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)', toolcheck: 'tool-call (0 API)', agentcheck: 'unified (0 API)',
           scan: env && env.REDCELL_NIM_KEYS ? 'live engine (configured)' : 'live engine (set REDCELL_NIM_KEYS secret to enable)' },
         detectors: scan.DET.length, firewall_rules: fw.RULES.length + 3, attacks: CORPUS.length + 1,
         scan_gated: !!(env && env.REDCELL_SCAN_TOKEN) });
@@ -872,7 +873,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   </div>
 </div>
 
-<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/docs" style="color:var(--ink3)">docs</a> · <a href="/agents" style="color:var(--ink3)">threat model</a> · <a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · authorized security testing only</span></div></footer>
+<footer><div class="wrap foot"><span>RED<b style="color:var(--red)">CELL</b> · the security layer for AI agents</span><span><a href="/docs" style="color:var(--ink3)">docs</a> · <a href="/agents" style="color:var(--ink3)">threat model</a> · <a href="/methodology" style="color:var(--ink3)">methodology</a> · <a href="/example" style="color:var(--ink3)">example</a> · <a href="/vs" style="color:var(--ink3)">compare</a> · <a href="/quickstart" style="color:var(--ink3)">quickstart</a> · <a href="/changelog" style="color:var(--ink3)">changelog</a> · authorized security testing only</span></div></footer>
 
 <script>
 var EX={
@@ -1239,6 +1240,7 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/example</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/docs</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/agents</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+<url><loc>https://redcell.redcellv1.workers.dev/changelog</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
@@ -1975,6 +1977,7 @@ function renderDocs() {
     + _docRow('/methodology', 'Methodology', 'Exactly how the score and firewall work — detector kinds, scoring, deobfuscation — and an honest list of what it does NOT do.')
     + _docRow('/vs', 'How it compares', 'Where a deterministic 0-API firewall+scanner fits alongside model-based guardrails. Use both.')
     + _docRow('/pitch', 'Investor brief', 'The market, the product, and where this is going.')
+    + _docRow('/changelog', 'Changelog', 'A factual, dated list of shipped surfaces and detection capabilities.')
     + '<h2>API (0-API surfaces need no key)</h2>'
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
@@ -2105,5 +2108,39 @@ function renderAgents() {
     + '<a class=cta href="/quickstart">Wire it into your agent →</a></div>'
     + '<div class=id style="margin-top:14px">Honest scope: REDCELL is the fast, deterministic, private layer — it does not replace a model-based classifier or human red-teaming. See <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a>.</div>'
     + '<div class=id style="margin-top:16px">REDCELL · <a href="/">home</a> · <a href="/docs">docs</a> · <a href="/quickstart">quickstart</a> · <a href="/example">example</a></div>'
+    + '</div></body></html>';
+}
+
+/* ---------------- Changelog (GET /changelog) ---------------- */
+function _clDay(date, entries) {
+  var items = entries.map(function (e) { return '<div class=find><span class=bar style="background:#33d17f"></span><span class=ttl>' + esc(e) + '</span></div>'; }).join('');
+  return '<div class=card><div class=ey>' + esc(date) + '</div><div style="margin-top:6px">' + items + '</div></div>';
+}
+function renderChangelog() {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>'
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="REDCELL changelog — a factual, dated list of shipped surfaces and detection capabilities.">'
+    + '<title>REDCELL — changelog</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
+    + '<div class=ey>' + _mk() + 'REDCELL · changelog</div>'
+    + '<h1 style="font-size:24px;margin:10px 0 4px">What has shipped</h1>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">A factual, dated record of the product. Every item is live on this URL, 0-API, and covered by the test suite (currently 154 tests incl. an automated Python↔JS parity gate). No metrics are claimed here that aren’t verifiable in the code.</p>'
+    + _clDay('2026-08-11 · Agent-native platform', [
+        'Tool-call firewall (POST /toolcheck): assesses a proposed {name, arguments} call — 7 risk classes incl. SSRF-to-internal, sensitive-file & secret-env access, destructive names, exfil, unbounded financial. Probe-verified 0 false positives on a benign tool-call corpus.',
+        'Unified check (POST /agentcheck): scanner + firewall + tool-call in one call → worst verdict. Also exposed as a 4th MCP tool (agent_check) and a one-file agent middleware in /quickstart.',
+        'Optional 0-API semantic layer (?semantic=1): escalates a paraphrased attack (no keyword overlap) from allow → flag; never blocks on it alone.',
+        'Agent threat-model page (/agents): the attack chain (input → injection → tool abuse → impact) mapped to each surface.',
+      ])
+    + _clDay('2026-08-10 · Detection engine & hardening', [
+        'Runtime firewall: 34 detectors across the OWASP LLM Top 10 (incl. role-prefix injection, sensitive-data exfil).',
+        'Deobfuscation pre-pass: base64 (standard/url-safe/nested), leetspeak, Cyrillic/Greek homoglyphs, zero-width, invisible Unicode-tag ASCII smuggling.',
+        'Static prompt scanner: 22 detectors + a copy-paste hardened-prompt kit with a projected score.',
+        'Reliability: ReDoS audit + 16 KB inspection caps; a fuzz suite; a self-regression corpus; an automated Python↔JS parity gate; the repo runs all of it in its own CI.',
+      ])
+    + _clDay('2026-08-10 · Reports, adoption & trust', [
+        'Shareable reports (POST /review → /r/<id>): HTML, JSON, Markdown, SARIF 2.1.0, and a per-report OG image.',
+        'Adoption surfaces: a GitHub Action CI gate (/ci, two gates), an MCP server (/mcp), vendorable 0-dependency source (/src), a 30-second quickstart (/quickstart).',
+        'Honest positioning: /methodology (how it works + limits), /vs (vs model-based guardrails), /example (real before/after from the live engine).',
+      ])
+    + '<div class=id style="margin-top:16px">REDCELL · <a href="/">home</a> · <a href="/docs">docs</a> · <a href="/agents">threat model</a> · <a href="/openapi.json">openapi</a></div>'
     + '</div></body></html>';
 }
