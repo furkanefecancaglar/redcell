@@ -1619,6 +1619,7 @@ function renderMCP() {
     ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 34 detectors + deobfuscation. Returns allow / flag / block.'],
     ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (22 detectors). Returns a 0–100 score, grade, and findings.'],
     ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block. Catches destructive names, privilege escalation, exec/shell, SSRF/local-file, secret-exfil, and unbounded transfers.'],
+    ['agent_check', '{ system_prompt?, input?, tool_call? }', 'Unified verdict across all three surfaces in one call — the single guard for an agent loop.'],
   ].map(function (t) {
     return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
   }).join('');
@@ -1630,7 +1631,7 @@ function renderMCP() {
     + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · MCP server</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
-    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets three tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets four tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
     + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
     + '<div class=grid>'
     + '<div class=card><div class=ey>1 · Client config</div><div class=id style="margin:2px 0 8px">e.g. Claude Desktop <span class=k>claude_desktop_config.json</span></div><pre class="p y">' + esc(MCP_CONFIG) + '</pre></div>'

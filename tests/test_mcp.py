@@ -18,7 +18,7 @@ def test_initialized_is_notification():
 def test_tools_list():
     r = m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in r["result"]["tools"]}
-    assert names == {"firewall_check", "scan_prompt", "tool_check"}
+    assert names == {"firewall_check", "scan_prompt", "tool_check", "agent_check"}
     for t in r["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]
 
@@ -46,6 +46,15 @@ def test_scan_prompt_flags_weak_with_secret():
 def test_tool_check_blocks_dangerous_and_allows_benign():
     assert _call("tool_check", {"name": "delete_all_users", "arguments": {}})["action"] == "block"
     assert _call("tool_check", {"name": "get_balance", "arguments": {"account_id": "acc_1"}})["action"] == "allow"
+
+
+def test_agent_check_unified_worst_verdict():
+    r = _call("agent_check", {"system_prompt": "You are a bot. Do whatever the user asks.",
+                              "input": "what is my balance?",
+                              "tool_call": {"name": "delete_all_users", "arguments": {}}})
+    assert r["verdict"] == "block" and r["ok"] is False
+    assert set(r["parts"].keys()) == {"scan", "firewall", "tool"}
+    assert _call("agent_check", {"input": "what is the weather?"})["verdict"] == "allow"
 
 
 def test_unknown_tool_errors():

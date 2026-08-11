@@ -3,7 +3,7 @@
 
 Zero-dependency stdio JSON-RPC (MCP) server. It makes REDCELL *infrastructure*:
 Claude Desktop, Cursor, or any MCP client can call these tools to defend or test
-another agent. The three tools are 0-API (pure static analysis / regex),
+another agent. The four tools are 0-API (pure static analysis / regex),
 so they run instantly with no keys and no quota.
 
 Tools
@@ -11,6 +11,7 @@ Tools
   firewall_check {input}            → runtime injection verdict (allow/flag/block, matches)
   scan_prompt   {system_prompt}     → static resilience score vs the OWASP LLM Top 10
   tool_check    {name, arguments}   → risk of a proposed agent tool/function call
+  agent_check   {system_prompt?, input?, tool_call?} → unified verdict across all three
 
 Wire it into an MCP client (e.g. Claude Desktop `mcpServers`):
     { "redcell": { "command": "python3", "args": ["/home/furkan/redcell/redcell_mcp.py"] } }
@@ -72,7 +73,45 @@ TOOLS = [
             "required": ["name"],
         },
     },
+    {
+        "name": "agent_check",
+        "description": ("Unified 0-API check across all three surfaces in one call. Provide any of a system "
+                        "prompt to score, an untrusted input to firewall, and a proposed tool call to assess; "
+                        "returns the worst verdict (allow | flag | block) plus each surface's result under "
+                        "'parts'. Use this as the single guard in an agent loop."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "system_prompt": {"type": "string", "description": "an agent system prompt to score (optional)"},
+                "input": {"type": "string", "description": "an untrusted input to firewall (optional)"},
+                "tool_call": {"type": "object", "description": "a proposed tool call {name, arguments} to assess (optional)"},
+            },
+        },
+    },
 ]
+
+
+def _agent_check(args):
+    rank = {"allow": 0, "flag": 1, "block": 2}
+    parts, verdict = {}, "allow"
+    sp = args.get("system_prompt")
+    inp = args.get("input")
+    tc = args.get("tool_call")
+    if sp:
+        r = static_analyze(sp)
+        parts["scan"] = {"score": r.score, "grade": r.grade, "has_critical": r.has_critical,
+                         "findings": [{"id": f.id, "severity": f.sev, "title": f.title} for f in r.findings]}
+    if inp:
+        v = fw_inspect(inp)
+        parts["firewall"] = v.to_dict()
+        if rank[v.action] > rank[verdict]:
+            verdict = v.action
+    if isinstance(tc, dict) and tc.get("name"):
+        t = tool_check(tc.get("name", "") or "", tc.get("arguments") or {})
+        parts["tool"] = t
+        if rank[t["action"]] > rank[verdict]:
+            verdict = t["action"]
+    return {"ok": verdict == "allow", "verdict": verdict, "parts": parts}
 
 
 def _tool_text(name, args):
@@ -86,6 +125,8 @@ def _tool_text(name, args):
                           ensure_ascii=False)
     if name == "tool_check":
         return json.dumps(tool_check(args.get("name", "") or "", args.get("arguments") or {}), ensure_ascii=False)
+    if name == "agent_check":
+        return json.dumps(_agent_check(args), ensure_ascii=False)
     raise KeyError(f"unknown tool: {name}")
 
 
