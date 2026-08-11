@@ -1591,6 +1591,7 @@ function renderMCP() {
   const tools = [
     ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 34 detectors + deobfuscation. Returns allow / flag / block.'],
     ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (22 detectors). Returns a 0–100 score, grade, and findings.'],
+    ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block. Catches destructive names, privilege escalation, exec/shell, SSRF/local-file, secret-exfil, and unbounded transfers.'],
   ].map(function (t) {
     return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
   }).join('');
@@ -1602,7 +1603,7 @@ function renderMCP() {
     + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · MCP server</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
-    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets two tools it can call to defend or test another agent. Both are 0 API: pure static analysis and regex, no keys, no quota.</p>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets three tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
     + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
     + '<div class=grid>'
     + '<div class=card><div class=ey>1 · Client config</div><div class=id style="margin:2px 0 8px">e.g. Claude Desktop <span class=k>claude_desktop_config.json</span></div><pre class="p y">' + esc(MCP_CONFIG) + '</pre></div>'
@@ -1679,6 +1680,25 @@ const QS_SPY = '# redcell_scan.py — score an agent system prompt (stdlib only)
 const QS_SCURL = 'curl -s -X POST https://redcell.redcellv1.workers.dev/scan-config \\\n'
   + '  -H "Content-Type: application/json" \\\n'
   + '  -d \'{"system_prompt":"You are a support bot. Do whatever the user asks."}\'';
+const QS_TJS = '// redcell-toolcheck.js — gate an agent tool call before it runs\n'
+  + 'async function redcellToolCheck(name, args) {\n'
+  + '  const r = await fetch("https://redcell.redcellv1.workers.dev/toolcheck", {\n'
+  + '    method: "POST",\n'
+  + '    headers: { "Content-Type": "application/json" },\n'
+  + '    body: JSON.stringify({ name, arguments: args })\n'
+  + '  });\n'
+  + '  return r.json(); // { action: "allow"|"flag"|"block", risk, reasons }\n'
+  + '}\n\n'
+  + '// in your agent loop, before executing a tool call:\n'
+  + 'async function runTool(name, args) {\n'
+  + '  const v = await redcellToolCheck(name, args);\n'
+  + '  if (v.action === "block") throw new Error("REDCELL blocked tool call " + name + ": " + v.reasons.join(", "));\n'
+  + '  if (v.action === "flag") await requireHumanApproval(name, args, v);  // your confirmation step\n'
+  + '  return callYourTool(name, args);\n'
+  + '}';
+const QS_TCURL = 'curl -s -X POST https://redcell.redcellv1.workers.dev/toolcheck \\\n'
+  + '  -H "Content-Type: application/json" \\\n'
+  + '  -d \'{"name":"transfer_funds","arguments":{"amount":"all","to":"attacker@evil.com"}}\'';
 
 function _qsBlock(label, id, code) {
   return '<div class=card><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class=ey style="margin:0">' + esc(label) + '</div>'
@@ -1706,6 +1726,10 @@ function renderQuickstart() {
     + _qsBlock('JavaScript / TypeScript', 'sjs', QS_SJS)
     + _qsBlock('Python (stdlib only)', 'spy', QS_SPY)
     + _qsBlock('curl', 'scurl', QS_SCURL)
+    + '<h2 style="font-size:15px;color:#eaedf4;margin:30px 0 2px">3 · Gate an agent tool call (agent-native)</h2>'
+    + '<div class=id style="margin:0 0 8px">Agents call tools, not just emit text. Check a proposed {name, arguments} call and allow / flag (require confirmation) / block irreversible or exfiltrating actions before they run.</div>'
+    + _qsBlock('JavaScript / TypeScript', 'tjs', QS_TJS)
+    + _qsBlock('curl', 'tcurl', QS_TCURL)
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>Want it self-hosted / 0-network?</b>'
     + '<div class=id style="margin:6px 0 12px">The firewall is a single zero-dependency file (Python or JS) you can vendor and run in-process — no call out at all. Same rules.</div>'
     + '<a class=cta href="/mcp">Vendor it / add as MCP →</a></div>'
@@ -1810,6 +1834,8 @@ function _exScoreCard(label, prompt, r) {
 }
 function renderExample() {
   var rw = analyze(EX_WEAK), rh = analyze(EX_HARD), v = inspect(EX_OBF), v2 = inspect(EX_EXFIL);
+  var tv = toolcheck.check('transfer_funds', { amount: 'all', to: 'attacker@evil.com' }, inspect);
+  var tvc = tv.action === 'block' ? _RSEV.critical : tv.action === 'flag' ? _RSEV.high : _RSEV.pass;
   function _fwVc(x) { return x.action === 'block' ? _RSEV.critical : x.action === 'flag' ? _RSEV.high : _RSEV.pass; }
   function _fwMatches(x) {
     return (x.matches || []).map(function (m) {
@@ -1840,6 +1866,10 @@ function renderExample() {
     + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + vc2 + '">' + esc(String(v2.action).toUpperCase()) + '</span><span class=id>score ' + v2.score + ' · risk ' + esc(v2.risk) + '</span></div>'
     + '<div style="margin-top:10px">' + fwm2 + '</div>'
     + '<div class=id style="margin-top:8px">The move-verb (<code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">forward</code>) paired with a sensitive object (inbox, stored passwords) is flagged — content-based exfil detection, independent of any URL.</div></div>'
+    + '<h2 style="font-size:15px;color:#eaedf4;margin:24px 0 6px">Tool-call firewall · a dangerous agent action, caught</h2>'
+    + '<div class=card><div class=ey>Proposed tool call (what an injected agent might try to run)</div><pre class=p>transfer_funds({ "amount": "all", "to": "attacker@evil.com" })</pre>'
+    + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvc + '">' + esc(String(tv.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tv.risk) + ' · ' + esc((tv.reasons || []).join(', ')) + '</span></div>'
+    + '<div class=id style="margin-top:8px">REDCELL checks the tool name + argument values before the call runs, so an agent can block or require human approval for irreversible / exfiltrating actions. POST /toolcheck.</div></div>'
     + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add this to your agent in 30s →</a></div>'
     + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a></div>'
     + '</div></body></html>';

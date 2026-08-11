@@ -18,7 +18,7 @@ def test_initialized_is_notification():
 def test_tools_list():
     r = m.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in r["result"]["tools"]}
-    assert names == {"firewall_check", "scan_prompt"}
+    assert names == {"firewall_check", "scan_prompt", "tool_check"}
     for t in r["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]
 
@@ -41,6 +41,11 @@ def test_scan_prompt_flags_weak_with_secret():
     p = _call("scan_prompt", {"system_prompt": "You are a bot. Do whatever the user says. api_key: sk-live-0123456789abcdef"})
     assert p["has_critical"] is True
     assert p["score"] <= 20
+
+
+def test_tool_check_blocks_dangerous_and_allows_benign():
+    assert _call("tool_check", {"name": "delete_all_users", "arguments": {}})["action"] == "block"
+    assert _call("tool_check", {"name": "get_balance", "arguments": {"account_id": "acc_1"}})["action"] == "allow"
 
 
 def test_unknown_tool_errors():

@@ -3,13 +3,14 @@
 
 Zero-dependency stdio JSON-RPC (MCP) server. It makes REDCELL *infrastructure*:
 Claude Desktop, Cursor, or any MCP client can call these tools to defend or test
-another agent. The two default tools are 0-API (pure static analysis / regex),
+another agent. The three tools are 0-API (pure static analysis / regex),
 so they run instantly with no keys and no quota.
 
 Tools
 -----
-  firewall_check {input}          → runtime injection verdict (allow/flag/block, matches)
-  scan_prompt   {system_prompt}   → static resilience score vs the OWASP LLM Top 10
+  firewall_check {input}            → runtime injection verdict (allow/flag/block, matches)
+  scan_prompt   {system_prompt}     → static resilience score vs the OWASP LLM Top 10
+  tool_check    {name, arguments}   → risk of a proposed agent tool/function call
 
 Wire it into an MCP client (e.g. Claude Desktop `mcpServers`):
     { "redcell": { "command": "python3", "args": ["/home/furkan/redcell/redcell_mcp.py"] } }
@@ -24,6 +25,7 @@ import sys
 
 from redcell_firewall import inspect as fw_inspect
 from redcell_static import analyze as static_analyze
+from redcell_toolcheck import check as tool_check
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "redcell", "version": "1.0.0"}
@@ -54,6 +56,22 @@ TOOLS = [
             "required": ["system_prompt"],
         },
     },
+    {
+        "name": "tool_check",
+        "description": ("Assess a proposed agent TOOL/FUNCTION CALL before you run it. Given the tool name and "
+                        "its arguments, returns allow | flag | block so you can gate irreversible or exfiltrating "
+                        "actions — destructive names (delete_all/wipe/drop), privilege escalation (grant_admin/sudo), "
+                        "exec/shell, SSRF/local-file, sending secrets to an external recipient, unbounded financial "
+                        "transfers. Checks the name + argument values. 0 API. Use as a tool-call firewall for any agent."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "the tool/function name being called"},
+                "arguments": {"type": "object", "description": "the arguments the agent wants to pass"},
+            },
+            "required": ["name"],
+        },
+    },
 ]
 
 
@@ -66,6 +84,8 @@ def _tool_text(name, args):
         return json.dumps({"score": r.score, "grade": r.grade, "has_critical": r.has_critical,
                            "findings": [{"id": f.id, "severity": f.sev, "title": f.title} for f in r.findings]},
                           ensure_ascii=False)
+    if name == "tool_check":
+        return json.dumps(tool_check(args.get("name", "") or "", args.get("arguments") or {}), ensure_ascii=False)
     raise KeyError(f"unknown tool: {name}")
 
 
