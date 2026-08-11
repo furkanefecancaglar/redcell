@@ -2103,6 +2103,29 @@ function renderAgents() {
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>secret-env-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['secret-env-access']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>ssrf-internal-target</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['ssrf-internal-target']) + '</div></span></div>'
     + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, encoded payloads).</div></div>'
+    + '<h2>Coverage map — attack class → what catches it</h2>'
+    + '<div class=id style="margin-bottom:6px">Real detector / reason ids, so you can see exactly where each class is handled. Deterministic layers; the paraphrase long-tail is the optional semantic layer + your model classifier.</div>'
+    + '<div class=card style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr><th style="text-align:left;padding:7px 8px;border-bottom:1px solid #232a3a;color:#616b80;font:11px ui-monospace,monospace">Attack class</th><th style="text-align:left;padding:7px 8px;border-bottom:1px solid #232a3a;color:#616b80;font:11px ui-monospace,monospace">Surface</th><th style="text-align:left;padding:7px 8px;border-bottom:1px solid #232a3a;color:#616b80;font:11px ui-monospace,monospace">Detector / reason ids</th></tr></thead><tbody>'
+    + [
+        ['Direct prompt injection / override', 'firewall · scanner', 'direct-injection, new-directive, refusal-suppression; scan: no instruction-hierarchy'],
+        ['Jailbreak / persona (DAN, dev-mode)', 'firewall · scanner', 'role-jailbreak, dan-variants, virtualization, safety-off; scan: jailbreak surface, persona override'],
+        ['System-prompt extraction', 'firewall · scanner', 'prompt-extraction, translation-leak, completion-attack; scan: prompt not confidential'],
+        ['Forged system/role/tool lines (indirect)', 'firewall · scanner', 'role-prefix-injection, role-impersonation, template-injection, structured-override; scan: tool-output / RAG provenance'],
+        ['Obfuscated injection', 'firewall (deobfuscation)', 'obfuscated-injection, unicode-tag-smuggling, homoglyph-spoofing, hidden-characters'],
+        ['Paraphrased / novel (no keyword)', 'firewall (optional)', 'semantic-similarity (?semantic=1) — deep tail: a model classifier'],
+        ['Data exfiltration', 'firewall · toolcheck', 'exfil-url, data-exfil, link-spoofing, ssrf-exfil; tool: tool-data-exfil'],
+        ['Destructive action', 'firewall · toolcheck', 'destructive-cmd, code-execution; tool: dangerous-tool-name'],
+        ['Excessive agency / no confirmation', 'scanner · toolcheck', 'scan: excessive agency, unsupervised autonomy; tool: unbounded-financial-action'],
+        ['Privilege / authority spoof', 'firewall · scanner · toolcheck', 'authority-spoof, structured-override; scan: over-trust, identity binding; tool: dangerous-tool-name'],
+        ['SSRF / internal fetch', 'firewall · toolcheck', 'ssrf-exfil; tool: ssrf-internal-target'],
+        ['Secret / credential access', 'scanner · toolcheck', 'scan: secret exposure; tool: secret-env-access'],
+        ['Sensitive filesystem / persistence', 'toolcheck', 'tool: local-file-access'],
+        ['Resource exhaustion', 'firewall · scanner', 'repeat-flood; scan: unbounded consumption'],
+      ].map(function (r) {
+        return '<tr><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#eaedf4">' + esc(r[0]) + '</td><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#9aa4b6">' + esc(r[1]) + '</td><td style="padding:7px 8px;border-bottom:1px solid #1b2130;color:#616b80;font:11.5px ui-monospace,monospace">' + esc(r[2]) + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>One call for all three: <a href="/openapi.json" style="color:#ff8a34">POST /agentcheck</a></b>'
     + '<div class=id style="margin:6px 0 12px">Pass any of <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">{ system_prompt, input, tool_call }</code> and get a single verdict across the scanner, firewall, and tool-call check. 0 API, deterministic, runs at the edge.</div>'
     + '<a class=cta href="/quickstart">Wire it into your agent →</a></div>'
