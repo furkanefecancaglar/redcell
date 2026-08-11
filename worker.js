@@ -752,7 +752,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
 <div class="wrap hero">
   <div class=eyebrow>Runtime firewall <b>·</b> live red-team <b>·</b> OWASP LLM Top&nbsp;10</div>
   <h1>Your AI agent will do what an <em>attacker</em> tells it.</h1>
-  <p class=sub>REDCELL scores an agent's prompt against the OWASP LLM Top 10 and blocks live attacks before they reach the model — even ones hidden in base64, leetspeak, homoglyphs, or invisible Unicode. As a firewall, a CI gate, or an SDK. Try it right here — or <a href="/example" style="color:var(--crit)">see a worked example</a>.</p>
+  <p class=sub>An attacker hijacks your agent through untrusted input, then makes it <em>act</em>. REDCELL guards all three stages — it scores the system prompt, firewalls the input (even injections hidden in base64, leetspeak, homoglyphs, or invisible Unicode), and <b>checks the tool call before it runs</b>. Deterministic, at the edge, no key. <a href="/agents" style="color:var(--crit)">See the attack chain</a> or <a href="/example" style="color:var(--crit)">a worked example</a>.</p>
   <div class=trust>
     <span><span class=dot></span>Live on the edge</span>
     <span><b>34</b>&nbsp;firewall detectors</span>
