@@ -20,7 +20,8 @@ Most prompt-injection tools stop at the input. But the damage from a jailbroken 
 
 - Input firewall (POST /firewall) — 34 detectors across the OWASP LLM Top 10, plus deobfuscation: de-leetspeaks, base64/url-safe/nested-decodes, folds Cyrillic/Greek homoglyphs, strips zero-width, decodes invisible Unicode-tag "ASCII smuggling". Optional 0-API semantic layer catches paraphrases with no keyword overlap.
 - Prompt scanner (POST /scan-config) — score a system prompt 0–100 against 22 checks; get a copy-paste hardened-prompt kit + projected score.
-- Tool-call firewall (POST /toolcheck) — the agent-native part: give it {name, arguments} and it returns allow/flag/block. `delete_all_users()` → block; `transfer_funds({amount:"all"})` → flag (requires human approval); `get_balance({account_id})` → allow. 0 false positives on a benign-tool-call corpus.
+- Tool-call firewall (POST /toolcheck) — the agent-native part: give it {name, arguments} and it returns allow/flag/block across 7 risk classes: destructive tool names, secret/record exfil, unbounded money transfers, sensitive-file writes (~/.ssh, /etc, .env), secret-env reads (AWS/OPENAI keys), and SSRF to internal/metadata hosts (169.254.169.254, localhost, 10.x, *.svc.cluster.local). `delete_all_users()` → block; `fetch({url:"http://169.254.169.254/..."})` → flag; `get_balance({account_id})` → allow. Probe-verified 0 false positives on a benign tool-call corpus.
+- One middleware for all of it (POST /agentcheck) — wrap your agent loop once: firewall every input, check every proposed tool call, get one verdict. Copy-paste JS in /quickstart.
 - One call for all three: POST /agentcheck {system_prompt?, input?, tool_call?} → worst verdict + per-surface breakdown.
 
 Deterministic (regex/policy, not a model) → fast, private (text never leaves the edge), explainable (every verdict names the rule). Python↔JS engines are byte-for-byte identical, locked by an automated parity test; 154 tests incl. fuzz + a self-regression suite that runs the firewall on a real-attack corpus. Vendorable as single 0-dependency files, a 4-tool MCP server, a GitHub Action; reports export as JSON / Markdown / SARIF.
@@ -60,7 +61,9 @@ REDCELL is a 0-API firewall that guards the tool call, not just the prompt. Free
 
 2/ The dangerous moment is the tool call. Give REDCELL {name, arguments}:
 • delete_all_users() → BLOCK
-• transfer_funds({amount:"all"}) → FLAG (require confirmation)
+• transfer_funds({amount:"all"}) → FLAG
+• fetch(url: http://169.254.169.254/...) → FLAG (SSRF to metadata)
+• read_env(AWS_SECRET_ACCESS_KEY) → FLAG
 • get_balance({account_id}) → ALLOW
 0 false positives on benign tool calls.
 
@@ -81,7 +84,7 @@ First comment (maker): Built this because giving agents real tools is the new at
 
 ---
 ## 6) REDCELL vs prompt-only firewalls (honest comparison paragraph)
-Most LLM-security tools focus on the input: detect the prompt injection or jailbreak before it reaches the model. That's necessary but not sufficient for agents. An agent's blast radius is its tools, and an injection that slips through (novel phrasing, a trusted-looking retrieved doc) only matters if the resulting tool call does damage. REDCELL adds that missing layer — a deterministic check on the tool call itself ({name, arguments} → allow/flag/block) — and unifies prompt-scan + input-firewall + tool-check in one call. It's deterministic and 0-API by design (fast, private, explainable, free), which makes it a complement to, not a replacement for, model-based classifiers: run REDCELL as the cheap first pass and CI gate, add a model layer for the semantic long tail. (No claims here about any specific competitor's internals — this is about the category.)
+Most LLM-security tools focus on the input: detect the prompt injection or jailbreak before it reaches the model. That's necessary but not sufficient for agents. An agent's blast radius is its tools, and an injection that slips through (novel phrasing, a trusted-looking retrieved doc) only matters if the resulting tool call does damage. REDCELL adds that missing layer — a deterministic check on the tool call itself ({name, arguments} → allow/flag/block) — and unifies prompt-scan + input-firewall + tool-check in one call. The tool-check spans 7 classes — destructive actions, secret/record exfil, unbounded transfers, sensitive-file writes, secret-env reads, and SSRF to internal/metadata hosts. It's deterministic and 0-API by design (fast, private, explainable, free), which makes it a complement to, not a replacement for, model-based classifiers: run REDCELL as the cheap first pass and CI gate, add a model layer for the semantic long tail. (No claims here about any specific competitor's internals — this is about the category.)
 
 ---
 ## 7) Cold email — design partner (AI-agent teams)
