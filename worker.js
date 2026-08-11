@@ -71,6 +71,16 @@ function esc(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
+
+// Human-readable labels for /toolcheck reason ids (the ids themselves stay stable for tooling).
+const REASON_LABELS = {
+  'dangerous-tool-name': 'the tool name itself is destructive or privilege-granting',
+  'tool-data-exfil': 'a send/forward tool whose arguments carry secrets or records',
+  'unbounded-financial-action': 'a money transfer with an unbounded amount (all / *)',
+  'local-file-access': 'reads or writes a sensitive filesystem path',
+  'secret-env-access': 'reads or sets a secret environment variable',
+};
+function reasonLabel(id) { return REASON_LABELS[id] || id; }
 function html(body, status = 200, extra) {
   return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, CORS, extra || {}) });
 }
@@ -1896,7 +1906,7 @@ function renderExample() {
     + '<div class=id style="margin-top:8px">The move-verb (<code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">forward</code>) paired with a sensitive object (inbox, stored passwords) is flagged — content-based exfil detection, independent of any URL.</div></div>'
     + '<h2 style="font-size:15px;color:#eaedf4;margin:24px 0 6px">Tool-call firewall · a dangerous agent action, caught</h2>'
     + '<div class=card><div class=ey>Proposed tool call (what an injected agent might try to run)</div><pre class=p>transfer_funds({ "amount": "all", "to": "attacker@evil.com" })</pre>'
-    + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvc + '">' + esc(String(tv.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tv.risk) + ' · ' + esc((tv.reasons || []).join(', ')) + '</span></div>'
+    + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvc + '">' + esc(String(tv.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tv.risk) + ' · ' + esc((tv.reasons || []).map(reasonLabel).join('; ')) + '</span></div>'
     + '<div class=id style="margin-top:8px">REDCELL checks the tool name + argument values before the call runs, so an agent can block or require human approval for irreversible / exfiltrating actions. POST /toolcheck.</div></div>'
     + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add this to your agent in 30s →</a></div>'
     + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a></div>'
@@ -2048,6 +2058,14 @@ function renderAgents() {
     + _stage('3', 'Tool abuse', 'The hijacked agent now calls a tool with attacker intent: transfer funds, delete records, email secrets out, fetch an internal metadata URL, grant itself admin. This is where damage happens.', 'gate the tool call (POST /toolcheck) — block/flag destructive names, exfil, privilege escalation, SSRF, unbounded transfers before they run')
     + '<div class=arrow>↓</div>'
     + _stage('4', 'Impact: exfiltration · privilege · destruction', 'Data leaves, permissions escalate, or state is destroyed — often silently. By this stage it is too late; the earlier layers are where it is stopped.', 'defense-in-depth: any one surface may miss a novel attack, but stacking prompt + input + tool-call coverage removes the cheap and the obfuscated, and requires human approval for the irreversible')
+    + '<h2>What the tool-call firewall flags</h2>'
+    + '<div class=card><div class=id style="margin-bottom:6px">POST /toolcheck returns a stable reason id per hit — allow / flag / block:</div>'
+    + '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>dangerous-tool-name</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['dangerous-tool-name']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>tool-data-exfil</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['tool-data-exfil']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>unbounded-financial-action</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['unbounded-financial-action']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>local-file-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['local-file-access']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>secret-env-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['secret-env-access']) + '</div></span></div>'
+    + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, SSRF, encoded payloads).</div></div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>One call for all three: <a href="/openapi.json" style="color:#ff8a34">POST /agentcheck</a></b>'
     + '<div class=id style="margin:6px 0 12px">Pass any of <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">{ system_prompt, input, tool_call }</code> and get a single verdict across the scanner, firewall, and tool-call check. 0 API, deterministic, runs at the edge.</div>'
     + '<a class=cta href="/quickstart">Wire it into your agent →</a></div>'
