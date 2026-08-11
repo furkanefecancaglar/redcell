@@ -1998,10 +1998,10 @@ function renderDocs() {
     + '<h2>Integrate</h2>'
     + _docRow('/quickstart', 'Quickstart — guard your agent in 30s', 'Copy-paste JS / Python / curl for the runtime firewall and the prompt scanner. 0 dependencies, no key.')
     + _docRow('/ci', 'CI gates', 'Fail the build when a prompt regresses (resilience score) or when a known injection stops being caught (firewall regression).')
-    + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check + scan_prompt.')
+    + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check, scan_prompt, tool_check + agent_check.')
     + _docRow('/src/redcell_firewall.py', 'Vendorable source (/src)', 'The real 0-dependency files to curl and vendor: redcell_firewall.py, redcell_static.py, redcell_ci.py, redcell_mcp.py, redcell_fw_check.py.')
     + '<h2>Understand</h2>'
-    + _docRow('/agents', 'Agent threat model', 'The attack chain — untrusted input → prompt injection → tool abuse → exfil/privilege — mapped to REDCELL\'s three surfaces.')
+    + _docRow('/agents', 'Agent threat model', 'The attack chain — untrusted input → prompt injection → tool abuse → exfil/privilege — mapped to REDCELL\'s input firewall, tool-call firewall, and unified /agentcheck.')
     + _docRow('/methodology', 'Methodology', 'Exactly how the score and firewall work — detector kinds, scoring, deobfuscation — and an honest list of what it does NOT do.')
     + _docRow('/vs', 'How it compares', 'Where a deterministic 0-API firewall+scanner fits alongside model-based guardrails. Use both.')
     + _docRow('/pitch', 'Investor brief', 'The market, the product, and where this is going.')
