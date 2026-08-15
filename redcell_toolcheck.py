@@ -27,6 +27,16 @@ _NAME = re.compile(
     re.IGNORECASE)
 _EXFIL_VERB = re.compile(r"^(send|forward|upload|post|email|transmit|leak|share|export)_?", re.IGNORECASE)
 _FIN_VERB = re.compile(r"^(transfer|pay|payout|wire|refund|withdraw|remit|send)_?(money|funds|payment)?", re.IGNORECASE)
+# Financial-action tool whose destination arg VALUE names an attacker-ish identity
+# (attacker/evil/hacker/scam/fraud in the recipient key). The FIN_VERB name gate keeps a
+# benign search/query that merely MENTIONS 'transfer money to attacker' from flagging, and
+# the destination-key gate keeps large-but-legit transfers (supplier@corp.com) allow. The
+# unbounded-financial-action rule already covers amount=all; this closes the named-
+# attacker-destination hole (probe: 5/5 attacks allow before, flag after; 5/5 benign allow).
+_ATTACKER_DEST = re.compile(
+    r"\b(?:to|recipient|payee|destination|receiver|account|target)\b\W{0,6}[\"']?"
+    r"(?:[\w.+-]+@)?(?:attacker|evil[a-z]*|hacker|scam[a-z]*|fraud[a-z]*|phish[a-z]*)",
+    re.IGNORECASE)
 _SENSITIVE = re.compile(
     r"\b(inbox|passwords?|api ?keys?|credentials?|secrets?|private keys?|ssn|social security|"
     r"customer (records?|data|database)|user (records?|database)|database dump|(the )?whole database)\b",
@@ -172,6 +182,8 @@ def check(name, arguments):
         add("tool-data-exfil", 40, "block")
     if _FIN_VERB.search(name) and _AMT_ALL.search(kv):
         add("unbounded-financial-action", 22, "flag")
+    if _FIN_VERB.search(name) and _ATTACKER_DEST.search(kv):
+        add("attacker-destination", 22, "flag")
     if _LOCALPATH.search(kv):
         add("local-file-access", 22, "flag")
     if _ENVSEC.search(name.replace("_", " ") + " " + kv):

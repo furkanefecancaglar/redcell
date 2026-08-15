@@ -77,6 +77,7 @@ const REASON_LABELS = {
   'dangerous-tool-name': 'the tool name itself is destructive or privilege-granting',
   'tool-data-exfil': 'a send/forward tool whose arguments carry secrets or records',
   'unbounded-financial-action': 'a money transfer with an unbounded amount (all / *)',
+  'attacker-destination': 'a money-movement tool call whose destination names an attacker-ish identity (attacker / evil / hacker / scam / fraud / phish)',
   'local-file-access': 'reads or writes a sensitive filesystem path',
   'secret-env-access': 'reads or sets a secret environment variable',
   'ssrf-internal-target': 'a request to an internal / metadata / private-network address (SSRF)',
@@ -695,9 +696,14 @@ header{position:sticky;top:0;z-index:20;background:rgba(11,13,18,.72);backdrop-f
 .trust{display:flex;gap:22px;flex-wrap:wrap;margin-top:26px;font-family:var(--mono);font-size:12px;color:var(--ink3)}
 .trust span{display:flex;align-items:center;gap:7px}.trust b{color:var(--ink);font-weight:600}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--pass);box-shadow:0 0 8px var(--pass)}
+.trust .live b{color:var(--pass)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.trust .live .dot{animation:pulse 2.4s ease-in-out infinite}
 
 /* console */
-.console{margin:36px 0 8px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel),var(--bg));overflow:hidden;box-shadow:0 30px 80px -40px rgba(0,0,0,.8)}
+.console{margin:36px 0 8px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel),var(--bg));overflow:hidden;box-shadow:0 30px 80px -40px rgba(0,0,0,.8);transition:border-color .14s,box-shadow .14s}
+.console:hover{border-color:var(--line2)}
+.console:focus-within{border-color:var(--redb);box-shadow:0 30px 80px -40px rgba(0,0,0,.8),0 0 0 3px var(--redglow)}
 .chead{display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .chead .d{width:11px;height:11px;border-radius:50%;background:var(--line2)}.chead .d.r{background:var(--red)}
 .chead .t{font-family:var(--mono);font-size:12px;color:var(--ink3);margin-left:6px}
@@ -706,12 +712,18 @@ header{position:sticky;top:0;z-index:20;background:rgba(11,13,18,.72);backdrop-f
 textarea{width:100%;min-height:104px;resize:vertical;background:#0a0c11;color:var(--ink);border:1px solid var(--line);border-radius:11px;padding:14px;font-family:var(--mono);font-size:13px;line-height:1.6}
 textarea:focus{outline:2px solid var(--red);outline-offset:1px;border-color:transparent}
 .cact{display:flex;gap:10px;align-items:center;margin-top:13px;flex-wrap:wrap}
-.btn{font-family:var(--sans);font-weight:600;font-size:14px;border-radius:10px;padding:11px 18px;cursor:pointer;border:1px solid transparent;transition:.14s}
+.btn{font-family:var(--sans);font-weight:600;font-size:14px;border-radius:10px;padding:11px 18px;cursor:pointer;border:1px solid transparent;position:relative;overflow:hidden;transition:transform .14s,border-color .14s,background .14s}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.7;cursor:default}
+.btn.busy::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 25%,rgba(255,255,255,.18) 50%,transparent 75%);transform:translateX(-100%);animation:scan 1.1s ease-in-out infinite;pointer-events:none}
+@keyframes scan{to{transform:translateX(100%)}}
 .btn:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 .btn.pri{background:var(--red);color:#fff}.btn.pri:hover{background:var(--redb)}
 .btn.gho{background:transparent;border-color:var(--line2);color:var(--ink)}.btn.gho:hover{border-color:var(--ink3)}
 .exl{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
 .exl b{color:var(--redb);cursor:pointer;margin-left:10px;font-weight:500}.exl b:hover{color:var(--red)}
+a:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
+.btn:focus-visible,.play:focus-visible,.nav .cta:focus-visible,.exl b:focus-visible{border-radius:6px}
 /* readout */
 #out{display:none;margin-top:16px;border-top:1px solid var(--line);padding-top:16px}
 #out.show{display:block;animation:fade .3s ease}
@@ -739,6 +751,8 @@ textarea:focus{outline:2px solid var(--red);outline-offset:1px;border-color:tran
 .surf .n{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--red)}
 .surf .s h3{font-size:15px;margin:12px 0 6px;font-weight:700}
 .surf .s p{font-size:13px;color:var(--ink2);margin:0}
+.surf .s{transition:background .14s}
+.surf .s:hover{background:var(--panel2)}
 @media(max-width:820px){.surf{grid-template-columns:repeat(2,1fr)}.surf .s{border-bottom:1px solid var(--line)}.surf .s:nth-child(2n){border-right:0}.surf .s:last-child{border-bottom:0}}
 @media(max-width:480px){.surf{grid-template-columns:1fr}.surf .s{border-right:0;border-bottom:1px solid var(--line)}.surf .s:last-child{border-bottom:0}}
 
@@ -770,6 +784,13 @@ textarea:focus{outline:2px solid var(--red);outline-offset:1px;border-color:tran
 
 footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
 .foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.pricegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:32px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+@media(max-width:720px){
+  .exl{flex-basis:100%;margin-left:0;line-height:2.3}
+  .pricegrid{grid-template-columns:1fr}
+  .pricegrid>div{border-right:0!important;border-bottom:1px solid var(--line)}
+  .pricegrid>div:last-child{border-bottom:0}
+}
 </style></head><body>
 
 <header><div class="wrap nav">
@@ -794,6 +815,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
     <span><b>35</b>&nbsp;firewall detectors</span>
     <span><b>22</b>&nbsp;static checks · 4 languages</span>
     <span><b>0</b>&nbsp;API keys to try it</span>
+    <span class=live id=trustlive style="display:none"><span class=dot></span><b id=stblk>0</b>&nbsp;attacks stopped</span>
   </div>
 
   <div class=console id=console>
@@ -805,7 +827,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
         <button class="btn pri" id=bscan onclick="scan()">Scan resilience</button>
         <button class="btn gho" id=bfw onclick="fw()">Firewall check</button>
         <button class="btn gho" id=btc onclick="tc()">Tool-call</button>
-        <span class=exl>load:<b onclick="ex('weak')">weak bot</b><b onclick="ex('attack')">attack</b><b onclick="ex('hard')">hardened</b><b onclick="obfTry()" style="color:var(--crit)">obfuscated ▶</b><b onclick="tcTry()" style="color:var(--crit)">tool call ▶</b></span>
+        <span class=exl>load:<b tabindex=0 role=button onclick="ex('weak')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ex('weak')}">weak bot</b><b tabindex=0 role=button onclick="ex('attack')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ex('attack')}">attack</b><b tabindex=0 role=button onclick="ex('hard')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ex('hard')}">hardened</b><b tabindex=0 role=button onclick="obfTry()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();obfTry()}" style="color:var(--crit)">obfuscated ▶</b><b tabindex=0 role=button onclick="tcTry()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcTry()}" style="color:var(--crit)">tool call ▶</b></span>
       </div>
       <div id=out></div>
     </div>
@@ -821,7 +843,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
     <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>35 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
-    <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 12 reason classes, 0 API.</p></div>
+    <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
   </div>
 </div>
 
@@ -841,7 +863,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
   <div class=eyebrow>Pricing</div>
   <h2>Free to test. Paid to protect.</h2>
   <p class=lede>The scanner, firewall and CI gate are free forever. The live red-team engine and runtime protection are for teams shipping agents to production.</p>
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:32px;border:1px solid var(--line);border-radius:14px;overflow:hidden">
+  <div class=pricegrid>
     <div style="padding:24px;border-right:1px solid var(--line)">
       <div style="font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3)">Free</div>
       <div style="font-size:34px;font-weight:800;margin:10px 0;letter-spacing:-.02em">$0</div>
@@ -924,7 +946,7 @@ async function tc(){var t=document.getElementById('in').value.trim();if(!t){docu
  busy(b,false);}
 function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 var out=document.getElementById('out');
-function busy(b,on,label){b.disabled=on;b.textContent=on?label:b.getAttribute('data-l');}
+function busy(b,on,label){b.disabled=on;if(on){b.classList.add('busy')}else{b.classList.remove('busy')}b.textContent=on?label:b.getAttribute('data-l');}
 document.getElementById('bscan').setAttribute('data-l','Scan resilience');
 document.getElementById('bfw').setAttribute('data-l','Firewall check');
 document.getElementById('btc').setAttribute('data-l','Tool-call');
@@ -961,7 +983,7 @@ function reviewBox(kind){return '<div style="margin-top:16px;padding:14px 16px;b
 +'<div style="font-weight:700;font-size:14.5px;color:var(--ink)">Want the full security review?</div>'
 +'<div style="color:var(--ink3);font-size:13px;margin:4px 0 10px">Get a shareable report — all 22 checks plus a runtime firewall pass on this prompt. Free, instant.</div>'
 +'<div style="display:flex;gap:8px;flex-wrap:wrap"><input id=revmail type=email placeholder="you@company.com" style="flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px;color:var(--ink);padding:9px 11px;font-size:14px" />'
-+'<button onclick="review(\''+kind+'\')" style="background:var(--crit);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer">Get my review</button></div>'
++'<button onclick="review(\\''+kind+'\\')" style="background:var(--crit);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer">Get my review</button></div>'
 +'<div id=revmsg class=mono style="display:none;font-size:13px;margin-top:8px"></div></div>';}
 async function review(kind){var e=(document.getElementById('revmail').value||'').trim();var m=document.getElementById('revmsg');
  if(!validEmail(e)){m.style.display='block';m.style.color='var(--high)';m.textContent='Enter a valid email.';return;}
@@ -980,6 +1002,9 @@ async function join(){var e=(document.getElementById('lemail').value||'').trim()
   else{m.style.color='var(--high)';m.textContent=(r&&r.error)||'Please try again.';}
  }catch(err){m.style.display='block';m.style.color='var(--high)';m.textContent='Network error — try again.';}
  b.disabled=false;b.textContent='Request access';}
+/* live trust counter — real counts from /breach/stats (attempts/wins/blocked); hidden until it loads, never fabricated */
+(function(){function paint(s){var e=document.getElementById('trustlive');if(!e||!s||typeof s.blocked!=='number')return false;document.getElementById('stblk').textContent=s.blocked.toLocaleString();e.style.display='flex';return true;}
+fetch('/breach/stats').then(function(x){return x.json();}).then(paint).catch(function(){});setInterval(function(){fetch('/breach/stats').then(function(x){return x.json();}).then(paint).catch(function(){});},60000);})();
 </script>
 </body></html>`;
 
@@ -995,7 +1020,8 @@ const BREACH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
-:root{--ink:#eef0f4;--ink3:#8b93a3;--paper:#0e1014;--card:#181b22;--line:#2a2f3a;--brand:#ef5350;--brandd:#b93b38;--tint:#2a1918;--pass:#54c07f;--mono:ui-monospace,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:ui-monospace,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--paper:var(--bg);--card:var(--panel);--brand:var(--red);--brandd:var(--redb);--tint:#2a1918}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans)}
 .wrap{max-width:760px;margin:0 auto;padding:0 18px}
 header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(14,16,20,.9);backdrop-filter:blur(8px);z-index:5}
@@ -1003,12 +1029,12 @@ header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba
 .brand{font-weight:850;letter-spacing:-.02em}.brand b{color:var(--brand)}
 .lv{font:700 12px var(--mono);color:var(--brand);background:var(--tint);padding:4px 10px;border-radius:999px}
 .def{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}.chip{font:600 10px var(--mono);color:var(--ink3);border:1px solid var(--line);border-radius:999px;padding:3px 8px}
-.intro{color:var(--ink3);font-size:14px;margin:16px 0}
+.intro{color:var(--ink2);font-size:14px;margin:16px 0}
 #log{display:flex;flex-direction:column;gap:10px;margin:16px 0;min-height:120px}
 .msg{max-width:85%;padding:10px 13px;border-radius:12px;font-size:14.5px;white-space:pre-wrap;word-break:break-word}
 .me{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:3px}
 .ai{align-self:flex-start;background:var(--card);border:1px solid var(--line);border-bottom-left-radius:3px}
-.sys{align-self:center;color:var(--ink3);font:12px var(--mono)}
+.sys{align-self:center;color:var(--ink2);font:12px var(--mono)}
 .row{display:flex;gap:8px;position:sticky;bottom:0;background:var(--paper);padding:12px 0}
 input{flex:1;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px;font:14px var(--sans)}
 input:focus{outline:2px solid var(--brand);border-color:transparent}
@@ -1023,7 +1049,7 @@ a{color:var(--brand)}
 <div id=log></div>
 <div id=winbox></div>
 <div class=row><input id=in placeholder="Try to make it reveal the secret…" onkeydown="if(event.key==='Enter')go()"><button id=send onclick=go()>Send</button></div>
-<p style="color:var(--ink3);font-size:12px">Level 1–5 · defenses escalate: hardened prompt → input firewall → output redaction → full REDCELL. <a href="/">About REDCELL</a></p>
+<p style="color:var(--ink2);font-size:12px">Level 1–5 · defenses escalate: hardened prompt → input firewall → output redaction → full REDCELL. <a href="/">About REDCELL</a></p>
 <div id=moat style="max-width:560px;margin:26px auto 0;display:none">
 <h3 style="font:11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:0 0 8px">Attack techniques the firewall has caught <span id=moatn style="color:#3a4152"></span></h3>
 <div id=moatlist></div>
@@ -1066,7 +1092,8 @@ const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
 <style>
-:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--pass:#33d17f;--mono:"IBM Plex Mono",monospace;--sans:"Archivo",system-ui,sans-serif}
+:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:"IBM Plex Mono",monospace;--sans:"Archivo",system-ui,sans-serif}
+a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);background-image:radial-gradient(55% 40% at 82% -6%,var(--redglow),transparent 60%);background-repeat:no-repeat}
 .wrap{max-width:820px;margin:0 auto;padding:0 24px}
 a{color:var(--redb)}
@@ -1113,7 +1140,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <div class=card><span class=k>Test · /scan-config</span><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — resilience score, findings, exploit links, and a hardened-prompt kit. The CI gate fails the build when a prompt regresses; SDKs (pip/npm) + MCP tool.</p></div>
 <div class=card><span class=k>Attack · /scan</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
 <div class=card><span class=k>Defend · /firewall</span><h3>Runtime input firewall</h3><p>35 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, bidi, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
-<div class=card><span class=k>Guard · /toolcheck</span><h3>Tool-call firewall</h3><p>Screens a proposed {name, arguments} call before it runs — dangerous names, data exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 12 reason classes, 0 API.</p></div>
+<div class=card><span class=k>Guard · /toolcheck</span><h3>Tool-call firewall</h3><p>Screens a proposed {name, arguments} call before it runs — dangerous names, data exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
 <div class=card style="grid-column:1/-1"><span class=k>One call · /agentcheck</span><h3>Unified agent check</h3><p>Runs the scanner, input firewall and tool-call firewall in a single call and returns the <strong>worst verdict</strong> — block on danger, pause for human approval on flag. The single guard to wrap an agent loop.</p></div>
 </div>
 <p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) drove 15M+ messages / 300k+ users. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
@@ -1152,22 +1179,26 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 /* ---------------- founder dashboard (/dashboard) — token entered client-side ---------------- */
 const DASHBOARD_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — dashboard</title>
+<meta name=description content="REDCELL founder dashboard — funnel counts, breach-attack data, and live self-check. Token stays in the browser.">
+<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — founder dashboard"><meta property="og:description" content="Funnel counts, breach-attack data, and live self-check for the REDCELL security layer for AI agents."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/dashboard"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — founder dashboard"><meta name="twitter:description" content="Funnel counts, breach-attack data, and live self-check. Token stays in the browser."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
-body{margin:0;background:#0b0d12;color:#eaedf4;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:ui-monospace,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans)}
 .wrap{max-width:720px;margin:0 auto;padding:28px 22px}
-h1{font-size:20px;letter-spacing:-.02em;margin:0 0 4px}h1 b{color:#ff3b46}
-.sub{color:#616b80;font:12px ui-monospace,monospace;margin:0 0 20px}
+h1{font-size:20px;letter-spacing:-.02em;margin:0 0 4px}h1 b{color:var(--red)}
+.sub{color:var(--ink2);font:12px var(--mono);margin:0 0 20px}
 .row{display:flex;gap:8px;margin:14px 0}
-input{flex:1;background:#111520;color:#eaedf4;border:1px solid #232a3a;border-radius:9px;padding:11px;font:13px ui-monospace,monospace}
-button{background:#ff3b46;color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:600;cursor:pointer}
+input{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:11px;font:13px var(--mono)}
+button{background:var(--red);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:600;cursor:pointer}button:hover{background:var(--redb)}
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
-.c{background:#111520;border:1px solid #232a3a;border-radius:12px;padding:16px}
-.c .n{font:11px ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:#616b80}
+.c{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.c .n{font:11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
 .c .v{font-size:28px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
-h2{font:11px ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#616b80;margin:22px 0 8px}
-table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{text-align:left;padding:9px 8px;border-bottom:1px solid #232a3a}th{color:#616b80;font:11px ui-monospace,monospace;font-weight:500}
-td.m{font-family:ui-monospace,monospace;color:#9aa4b6}
-.err{color:#ff8a34;font:12px ui-monospace,monospace}
+h2{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:22px 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{color:var(--ink3);font:11px var(--mono);font-weight:500}
+td.m{font-family:var(--mono);color:var(--ink2)}
+.err{color:var(--high);font:12px var(--mono)}
 @media(max-width:560px){.cards{grid-template-columns:repeat(2,1fr)}}
 </style></head><body><div class=wrap>
 <h1>RED<b>CELL</b> — founder dashboard</h1>
@@ -1288,22 +1319,32 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 
 /* ---------------- shared security report (GET /r/<id>) ---------------- */
 const _RSEV = { critical: '#ff3b46', high: '#ff8a34', medium: '#ffc73a', low: '#5aa0ff', pass: '#33d17f' };
-const REPORT_CSS = 'body{margin:0;background:#0b0d12;color:#eaedf4;font:15px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif}'
-  + '.wrap{max-width:820px;margin:0 auto;padding:34px 22px 70px}a{color:#33d17f}'
-  + '.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}'
+// Design tokens mirror LANDING (:root in the homepage <style>). Shared by every report-style
+// page (CI, MCP, quickstart, methodology, vs, example, docs, agents, changelog) so the
+// --bg/--panel/--line/--ink/--red family stays identical across the site. The generic
+// :focus-visible rule is the a11y baseline the homepage only applies to .btn.
+const REPORT_CSS = ':root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;'
+  + '--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;'
+  + '--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);'
+  + '--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;'
+  + '--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--sans:-apple-system,Segoe UI,Roboto,Arial,sans-serif}'
+  + 'a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--redb);outline-offset:2px}'
+  + 'body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans)}'
+  + '.wrap{max-width:820px;margin:0 auto;padding:34px 22px 70px}a{color:var(--pass)}'
+  + '.mono{font-family:var(--mono)}'
   + '.mk{display:inline-flex;gap:3px;vertical-align:middle;margin-right:9px}.mk i{width:9px;height:9px;border-radius:2px;display:block}'
-  + '.ey{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#616b80}'
-  + '.card{border:1px solid #232a3a;border-radius:14px;background:#111520;padding:20px 22px;margin:16px 0}'
-  + '.score{font-size:52px;font-weight:900;line-height:1}.score small{font-size:18px;color:#616b80;font-weight:600}'
-  + '.grade{font-family:ui-monospace,monospace;font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid #2c3547;margin-left:12px}'
+  + '.ey{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink3)}'
+  + '.card{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:20px 22px;margin:16px 0}'
+  + '.score{font-size:52px;font-weight:900;line-height:1}.score small{font-size:18px;color:var(--ink3);font-weight:600}'
+  + '.grade{font-family:var(--mono);font-size:13px;padding:4px 11px;border-radius:999px;border:1px solid var(--line2);margin-left:12px}'
   + '.find{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-top:1px solid #1b2130}'
-  + '.bar{width:3px;align-self:stretch;border-radius:2px;flex:none}.ttl{flex:1}.sv{font-family:ui-monospace,monospace;font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.05)}'
-  + '.id{font-family:ui-monospace,monospace;font-size:11px;color:#616b80}'
-  + '.verdict{display:inline-flex;align-items:center;gap:10px;font-family:ui-monospace,monospace;font-size:13px}'
+  + '.bar{width:3px;align-self:stretch;border-radius:2px;flex:none}.ttl{flex:1}.sv{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,.05)}'
+  + '.id{font-family:var(--mono);font-size:11px;color:var(--ink2)}'
+  + '.verdict{display:inline-flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13px}'
   + '.vb{color:#fff;padding:3px 11px;border-radius:7px;font-weight:700}'
-  + 'pre.p{white-space:pre-wrap;word-break:break-word;background:#0e1017;border:1px solid #232a3a;border-radius:10px;padding:14px;font-size:13px;color:#9aa4b6;max-height:280px;overflow:auto}'
-  + '.btn{display:inline-block;margin:4px 8px 0 0;border:1px solid #2c3547;color:#eaedf4;text-decoration:none;border-radius:8px;padding:8px 15px;font-size:13px}'
-  + '.cta{background:#ff3b46;color:#fff;border:0;border-radius:9px;padding:11px 20px;font-weight:700;text-decoration:none;display:inline-block}';
+  + 'pre.p{white-space:pre-wrap;word-break:break-word;background:#0e1017;border:1px solid var(--line);border-radius:10px;padding:14px;font-size:13px;color:var(--ink2);max-height:280px;overflow:auto}'
+  + '.btn{display:inline-block;margin:4px 8px 0 0;border:1px solid var(--line2);color:var(--ink);text-decoration:none;border-radius:8px;padding:8px 15px;font-size:13px}'
+  + '.cta{background:var(--red);color:#fff;border:0;border-radius:9px;padding:11px 20px;font-weight:700;text-decoration:none;display:inline-block}';
 
 function _mk() {
   let s = '<span class=mk>';
@@ -1623,6 +1664,7 @@ function renderCI() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="REDCELL CI gate — fail the build when an AI agent’s system prompt regresses below a resilience threshold. GitHub Action, 0 API, copy-paste YAML.">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — CI gate for agent prompts"><meta property="og:description" content="Fail the build when an AI agent system prompt regresses below a resilience threshold. GitHub Action, 0 API, copy-paste YAML."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/ci"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — CI gate for agent prompts"><meta name="twitter:description" content="Fail the build when an agent prompt regresses. GitHub Action, 0 API, copy-paste YAML."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — CI gate for agent prompts</title><style>' + REPORT_CSS
     + '.k{color:#ff8a34}.g{color:#33d17f}pre.y{white-space:pre;overflow-x:auto}'
     + '</style></head><body><div class=wrap>'
@@ -1672,14 +1714,15 @@ function renderMCP() {
   const tools = [
     ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 35 detectors + deobfuscation (incl. bidi-injection for Unicode directional/override smuggling). Returns allow / flag / block.'],
     ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (22 detectors). Returns a 0–100 score, grade, and findings.'],
-    ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block across 12 reason classes: 11 tool-aware (dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec, executable-data-url) plus the input firewall bubbled up over the serialized argument values.'],
-    ['agent_check', '{ system_prompt?, input?, tool_call? }', 'Unified verdict across scanner + input firewall + tool-call firewall (tool surface carries the same 12 reason classes as tool_check) in one call — the single guard for an agent loop.'],
+    ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block across 13 reason classes: 12 tool-aware (dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec, executable-data-url, attacker-destination) plus the input firewall bubbled up over the serialized argument values.'],
+    ['agent_check', '{ system_prompt?, input?, tool_call? }', 'Unified verdict across scanner + input firewall + tool-call firewall (tool surface carries the same 13 reason classes as tool_check) in one call — the single guard for an agent loop.'],
   ].map(function (t) {
     return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
   }).join('');
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="Add REDCELL as an MCP server — give any agent (Claude Desktop, Cursor) a prompt-injection firewall and an OWASP-LLM-Top-10 prompt scanner as callable tools. 0 API, zero dependencies.">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — MCP server for agents"><meta property="og:description" content="Add REDCELL as an MCP server — four callable tools that firewall input, scan prompts, and check tool calls. 0 API, zero dependencies."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/mcp"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — MCP server for agents"><meta name="twitter:description" content="Give any MCP client a prompt-injection firewall as callable tools. 0 API, zero dependencies."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — MCP server for agents</title><style>' + REPORT_CSS
     + '.k{color:#ff8a34}pre.y{white-space:pre;overflow-x:auto}.grid{display:grid;gap:14px}@media(min-width:720px){.grid{grid-template-columns:1fr 1fr}}'
     + '</style></head><body><div class=wrap>'
@@ -1687,10 +1730,10 @@ function renderMCP() {
     + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets four tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
     + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
-    + '<div class=card><div class=ey>tool_check · 12 reason classes</div>'
+    + '<div class=card><div class=ey>tool_check · 13 reason classes</div>'
     + '<div class=id style="margin:2px 0 8px">Eleven tool-aware checks + the input firewall bubbled up over the serialized argument values (any firewall match id that fires on an argument&apos;s content is a 12th-class reason):</div>'
     + '<div class=id style="color:#9aa4b6;line-height:1.8;font-family:ui-monospace,monospace">'
-    + 'dangerous-tool-name <span style="color:#ff8a34">(block)</span> · tool-data-exfil <span style="color:#ff8a34">(block)</span> · unbounded-financial-action · local-file-access · secret-env-access · ssrf-internal-target · command-injection-arg · windows-sensitive-path · privileged-identity-arg · privileged-container-exec · executable-data-url'
+    + 'dangerous-tool-name <span style="color:#ff8a34">(block)</span> · tool-data-exfil <span style="color:#ff8a34">(block)</span> · unbounded-financial-action · local-file-access · secret-env-access · ssrf-internal-target · command-injection-arg · windows-sensitive-path · privileged-identity-arg · privileged-container-exec · executable-data-url · attacker-destination'
     + '</div></div>'
     + '<div class=grid>'
     + '<div class=card><div class=ey>1 · Client config</div><div class=id style="margin:2px 0 8px">e.g. Claude Desktop <span class=k>claude_desktop_config.json</span></div><pre class="p y">' + esc(MCP_CONFIG) + '</pre></div>'
@@ -1843,7 +1886,7 @@ function renderQuickstart() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="Guard your AI agent against prompt injection in 30 seconds — a 0-dependency call to REDCELL\'s runtime firewall. Copy-paste JS, Python, or curl. No API key.">'
-    + '<meta property="og:title" content="REDCELL — guard your agent in 30 seconds"><meta property="og:description" content="0-dependency runtime firewall for LLM agents. Copy-paste JS/Python/curl. No key."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — guard your agent in 30 seconds"><meta property="og:description" content="0-dependency runtime firewall for LLM agents. Copy-paste JS/Python/curl. No key."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/quickstart"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — guard your agent in 30 seconds"><meta name="twitter:description" content="0-dependency runtime firewall for LLM agents. Copy-paste JS/Python/curl. No key."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — 30-second quickstart</title><style>' + REPORT_CSS + '.y{white-space:pre;overflow-x:auto}' + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · quickstart</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Guard your agent in 30 seconds.</h1>'
@@ -1886,7 +1929,7 @@ function renderMethodology() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="How REDCELL works — the static scanner scoring, the runtime firewall detectors and deobfuscation, the tool-call firewall and unified /agentcheck, the 0-API stance, and an honest list of what it does NOT do.">'
-    + '<meta property="og:title" content="REDCELL — methodology"><meta property="og:description" content="Exactly how the score and firewall work — and their limits. No overclaiming."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — methodology"><meta property="og:description" content="Exactly how the score and firewall work — and their limits. No overclaiming."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/methodology"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — methodology"><meta name="twitter:description" content="Exactly how the score and firewall work — and their limits."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — methodology</title><style>' + REPORT_CSS + 'h2{font-size:15px;color:#eaedf4;margin:26px 0 6px}code{background:#0e1017;border:1px solid #232a3a;border-radius:5px;padding:1px 6px;font-size:13px;color:#9aa4b6}</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · methodology</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">How it works — and what it doesn’t do.</h1>'
@@ -1901,7 +1944,7 @@ function renderMethodology() {
         + 'An <b>optional 0-API semantic layer</b> (opt in with <code>?semantic=1</code> or <code>{semantic:true}</code>) catches paraphrased attacks that share no keywords with the rules — it only escalates an <code>allow</code> to <code>flag</code>, never blocks on the semantic signal alone.')
     + _mCard('Tool-call firewall — screening the action, not just the text',
         'Agents don’t only read; they <b>act</b>. This surface (<code>POST /toolcheck</code>) inspects a proposed <code>{name, arguments}</code> call <b>before it runs</b> and returns allow / flag / block. It first <b>bubbles up the input firewall</b> — running the same 35 detectors over the serialized argument values, so a shell/SSRF/exfil payload smuggled into an argument is caught — then adds eleven tool-aware checks on the name and structured args. Twelve reason classes in all: '
-        + '<code>dangerous-tool-name</code> and <code>tool-data-exfil</code> <b>block</b> (score 40); <code>unbounded-financial-action</code>, <code>local-file-access</code>, <code>secret-env-access</code>, <code>ssrf-internal-target</code>, <code>command-injection-arg</code>, <code>windows-sensitive-path</code>, <code>privileged-identity-arg</code>, <code>privileged-container-exec</code>, and <code>executable-data-url</code> <b>flag</b> (score 22, for human approval); plus the firewall bubble-up itself. '
+        + '<code>dangerous-tool-name</code> and <code>tool-data-exfil</code> <b>block</b> (score 40); <code>unbounded-financial-action</code>, <code>local-file-access</code>, <code>secret-env-access</code>, <code>ssrf-internal-target</code>, <code>command-injection-arg</code>, <code>windows-sensitive-path</code>, <code>privileged-identity-arg</code>, <code>privileged-container-exec</code>, <code>executable-data-url</code>, and <code>attacker-destination</code> <b>flag</b> (score 22, for human approval); plus the firewall bubble-up itself. '
         + 'Live: <code>delete_all_users → block</code>, <code>transfer_funds{amount:all} → flag</code>, <code>read_file{/etc/passwd} → flag</code>, <code>read_env{AWS_SECRET_ACCESS_KEY} → flag</code>, <code>fetch{169.254.169.254} → flag</code>, <code>run{x$(whoami)} → flag</code> — while <code>get_balance</code>, <code>transfer{amount:25.00}</code> and <code>read_file{reports/q3.csv}</code> stay <code>allow</code>. '
         + 'Every detector ships under a <b>probe-first, 0-false-positive rule</b>: 15+ benign tool calls and 15+ attacks are run first, and a check is added only if it catches new attacks with <b>zero</b> benign false positives and byte-for-byte Python↔JS parity. Where a check couldn’t clear that bar it stays a <b>documented negative</b> — e.g. a per-call spend-limit or an accept-user-tools flag would false-positive on legitimate calls, so they’re deliberately not shipped rather than shipped noisy.')
     + _mCard('Unified check — /agentcheck',
@@ -1924,7 +1967,7 @@ function renderVs() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="Where a deterministic 0-API firewall + prompt scanner fits alongside model-based LLM guardrails — strengths, honest limits, and why you want both. No benchmarks, no disparagement.">'
-    + '<meta property="og:title" content="REDCELL vs model-based guardrails — an honest fit guide"><meta property="og:description" content="Deterministic + private + free vs model-based semantic depth. Use both."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL vs model-based guardrails — an honest fit guide"><meta property="og:description" content="Deterministic + private + free vs model-based semantic depth. Use both."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/vs"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL vs model-based guardrails — an honest fit guide"><meta name="twitter:description" content="Deterministic + private + free vs model-based semantic depth. Use both."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — how it compares</title><style>' + REPORT_CSS + 'h2{font-size:15px;color:#eaedf4;margin:24px 0 6px}.two{display:grid;gap:14px}@media(min-width:720px){.two{grid-template-columns:1fr 1fr}}li{margin:5px 0;color:#c7cdd9}ul{padding-left:18px;margin:8px 0}</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · how it compares</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Where REDCELL fits — honestly.</h1>'
@@ -1936,7 +1979,7 @@ function renderVs() {
     + '<li>you need <b>explainability</b>: every verdict names the exact rule and OWASP class it matched.</li>'
     + '<li>you want a <b>deterministic CI gate</b> — same input, same result, no model drift — to stop a PR that weakens a prompt or un-blocks a known injection.</li>'
     + '<li>you want to <b>harden the system prompt itself</b> (the 22-check scanner) — a static concern most runtime classifiers don’t cover.</li>'
-    + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF, command injection, privileged identities, Windows paths, and privileged container exec, and executable data URLs — 12 reason classes, 0 API — and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
+    + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF, command injection, privileged identities, Windows paths, and privileged container exec, and executable data URLs — 13 reason classes, 0 API — and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
     + '<li>you want it <b>free and 0-dependency</b>, vendored as one file, no key, no vendor lock-in.</li></ul></div>'
     + '<div class=card><div class=ey style="color:#ff8a34">Reach for a model layer when…</div><ul>'
     + '<li>the attack is <b>novel or semantic</b> — a paraphrase or social-engineering framing that shares no keywords or structure with known patterns.</li>'
@@ -1996,7 +2039,7 @@ function renderExample() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="Real before/after from the live REDCELL engine — a weak agent prompt vs a hardened one, and an obfuscated injection getting caught. Computed on request, nothing mocked.">'
-    + '<meta property="og:title" content="REDCELL — a worked example (real engine output)"><meta property="og:description" content="Weak 12/100 vs hardened 100/100, plus a leetspeak injection caught. No mockups."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — a worked example (real engine output)"><meta property="og:description" content="Weak 12/100 vs hardened 100/100, plus a leetspeak injection caught. No mockups."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/example"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — a worked example (real engine output)"><meta name="twitter:description" content="Weak 12/100 vs hardened 100/100, plus a leetspeak injection caught. No mockups."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — worked example</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · worked example</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">See it work — on real output, not a mockup.</h1>'
@@ -2040,7 +2083,7 @@ function renderDocs() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="REDCELL docs index — every page in one place: live demos, the 30-second integration, CI gates, MCP, the vendorable source, methodology, and how it compares.">'
-    + '<meta property="og:title" content="REDCELL — docs"><meta property="og:description" content="Every REDCELL page in one place."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — docs"><meta property="og:description" content="Every REDCELL page in one place."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/docs"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — docs"><meta name="twitter:description" content="Every REDCELL page in one place."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — docs</title><style>' + REPORT_CSS + 'h2{font-size:12px;font-family:ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:24px 0 4px}</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · docs</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Everything, in one place.</h1>'
@@ -2063,7 +2106,7 @@ function renderDocs() {
     + '<h2>API (0-API surfaces need no key)</h2>'
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
-    + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → allow / flag / block — 12 reason classes (dangerous names, data exfil, unbounded financial, sensitive files/env, SSRF, command-injection in an arg, Windows paths, privileged identities, privileged container exec, executable data URLs)</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → allow / flag / block — 13 reason classes (dangerous names, data exfil, unbounded financial, sensitive files/env, SSRF, command-injection in an arg, Windows paths, privileged identities, privileged container exec, executable data URLs)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /agentcheck <span style="color:#616b80">{ system_prompt?, input?, tool_call? } → unified verdict (scanner + input firewall + tool-call firewall)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
@@ -2110,15 +2153,15 @@ function openApiDoc() {
       '/toolcheck': {
         post: {
           summary: 'Assess a proposed agent tool/function call for risk (0 API).',
-          description: 'Given a {name, arguments} call, returns allow/flag/block from 12 reason classes: the firewall bubble-up on the serialized argument values plus 11 tool-aware checks — dangerous-tool-name and tool-data-exfil block (score 40); unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec and executable-data-url flag (score 22, for human approval).',
+          description: 'Given a {name, arguments} call, returns allow/flag/block from 13 reason classes: the firewall bubble-up on the serialized argument values plus 12 tool-aware checks — dangerous-tool-name and tool-data-exfil block (score 40); unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec, executable-data-url and attacker-destination flag (score 22, for human approval).',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } },
-          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string', enum: ['none', 'medium', 'high'] }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string', description: 'stable reason ids: dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec, executable-data-url, plus firewall match ids bubbled up from the argument values' } } } } } } }, '400': { description: 'name required' } },
+          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string', enum: ['none', 'medium', 'high'] }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string', description: 'stable reason ids: dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec, executable-data-url, attacker-destination, plus firewall match ids bubbled up from the argument values' } } } } } } }, '400': { description: 'name required' } },
         },
       },
       '/agentcheck': {
         post: {
           summary: 'Unified check — run scanner + firewall(+semantic) + tool-call check in one call.',
-          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts ({scan, firewall, tool}). The tool surface carries the same 12 reason classes as /toolcheck (11 tool-aware + firewall bubble-up). Reuses the same engines.',
+          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts ({scan, firewall, tool}). The tool surface carries the same 13 reason classes as /toolcheck (12 tool-aware + firewall bubble-up). Reuses the same engines.',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { system_prompt: { type: 'string' }, input: { type: 'string' }, semantic: { type: 'boolean' }, tool_call: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } } } },
           responses: { '200': { description: 'unified verdict', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, verdict: { type: 'string', enum: ['allow', 'flag', 'block'] }, parts: { type: 'object' } } } } } }, '400': { description: 'provide at least one surface' } },
         },
@@ -2163,7 +2206,7 @@ function renderAgents() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="The AI-agent attack chain — untrusted input to prompt injection to tool abuse to exfiltration/privilege/destruction — and how REDCELL defends each stage (scan the prompt, firewall the input, check the tool call).">'
-    + '<meta property="og:title" content="REDCELL — the AI agent attack chain, defended"><meta property="og:description" content="Prompt injection is the entry; tool abuse is the impact. REDCELL covers input, prompt, and tool-call stages."><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — the AI agent attack chain, defended"><meta property="og:description" content="Prompt injection is the entry; tool abuse is the impact. REDCELL covers input, prompt, and tool-call stages."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/agents"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — the AI agent attack chain, defended"><meta name="twitter:description" content="Prompt injection is the entry; tool abuse is the impact. REDCELL covers input, prompt, and tool-call stages."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — AI agent threat model</title><style>' + REPORT_CSS + '.arrow{color:#3a4152;text-align:center;font-size:20px;margin:-6px 0}h2{font-size:13px;font-family:ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:26px 0 8px}</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · agent threat model</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Prompt injection is the entry. Tool abuse is the impact.</h1>'
@@ -2189,6 +2232,7 @@ function renderAgents() {
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>privileged-identity-arg</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['privileged-identity-arg']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>privileged-container-exec</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['privileged-container-exec']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>executable-data-url</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['executable-data-url']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>attacker-destination</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['attacker-destination']) + '</div></span></div>'
     + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, encoded payloads).</div></div>'
     + '<h2>Coverage map — attack class → what catches it</h2>'
     + '<div class=id style="margin-bottom:6px">19 attack classes → real detector / reason ids, so you can see exactly where each class is handled. Deterministic layers; the paraphrase long-tail is the optional semantic layer + your model classifier.</div>'
@@ -2203,7 +2247,7 @@ function renderAgents() {
         ['Paraphrased / novel (no keyword)', 'firewall (optional)', 'semantic-similarity (?semantic=1) — deep tail: a model classifier'],
         ['Data exfiltration', 'firewall · toolcheck', 'exfil-url, data-exfil, link-spoofing, ssrf-exfil; tool: tool-data-exfil'],
         ['Destructive action', 'firewall · toolcheck', 'destructive-cmd, code-execution; tool: dangerous-tool-name'],
-        ['Excessive agency / no confirmation', 'scanner · toolcheck', 'scan: excessive agency, unsupervised autonomy; tool: unbounded-financial-action'],
+        ['Excessive agency / no confirmation', 'scanner · toolcheck', 'scan: excessive agency, unsupervised autonomy; tool: unbounded-financial-action, attacker-destination'],
         ['Privilege / authority spoof', 'firewall · scanner · toolcheck', 'authority-spoof, structured-override; scan: over-trust, identity binding; tool: dangerous-tool-name, privileged-identity-arg'],
         ['Privilege impersonation (run_as / impersonate / assign_role)', 'toolcheck', 'tool: privileged-identity-arg (identity = admin / root / superuser / sysadmin)'],
         ['SSRF / internal fetch', 'firewall · toolcheck', 'ssrf-exfil; tool: ssrf-internal-target'],
@@ -2235,6 +2279,7 @@ function renderChangelog() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>'
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=description content="REDCELL changelog — a factual, dated list of shipped surfaces and detection capabilities.">'
+    + '<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — changelog"><meta property="og:description" content="A factual, dated list of shipped REDCELL surfaces and detection capabilities."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/changelog"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — changelog"><meta name="twitter:description" content="A factual, dated list of shipped REDCELL surfaces and detection capabilities."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">'
     + '<title>REDCELL — changelog</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · changelog</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">What has shipped</h1>'
@@ -2245,6 +2290,7 @@ function renderChangelog() {
         'Tool-call firewall: new reason class privileged-container-exec — an execution-surface tool (bash/run/shell/cmd/…) whose argument enters a container, pod, or host namespace (docker/kubectl/podman exec, sudo→shell, nsenter, docker run --privileged, chroot) or controls the host docker daemon (systemctl restart/stop/kill docker). Name-gated so prose/search MENTIONS stay allow. Probe-verified 0 FP on 18 benign container/ops commands + 8 mention-traps, 0 FN on 15 privileged-exec commands, byte-for-byte Python↔JS parity; tool-aware checks 9→10, reason classes 10→11.',
         'local-file-access extended to file:// host/UNC forms (file://server/share) — the local triple-slash form was already flagged; a host form is the same file-read / SSRF class.',
         'Tool-call firewall: new reason class executable-data-url — a browser-execution tool (navigate/goto/open_url/browser_navigate/open/click) handed a data: HTML/JS URL with an executable marker (<script>/<iframe>/onload/onerror/onclick/meta-refresh, or application/javascript). Name-gated so search/read tools that merely MENTION or inertly read such a payload stay allow; benign data:text/html literals without a marker (e.g. data:text/html,<b>hi</b>) stay allow. Probe-verified 0 FP on 16 benign + 2 control calls, 0 FN on 12 executable data URLs, byte-for-byte Python↔JS parity; tool-aware checks 10→11, reason classes 11→12 (G11, closes G8 subset #2).',
+        'Tool-call firewall: new reason class attacker-destination — a money-movement tool (transfer/pay/wire/send_money/refund/withdraw) whose destination argument VALUE names an attacker-ish identity (attacker, evil*, hacker, scam*, fraud*, phish*). FIN_VERB + destination-key double gate keeps search-mention queries and legit recipients (supplier@corp.com, finance@company.com — any amount) allow. Probe-verified 0 FP on 6 benign calls incl. large-amount legit transfers and a transfer-money-to-attacker mention, 0 FN on 5 attacks — closing the named-attacker-destination hole the unbounded-amount rule could not see; tool-aware checks 11→12, reason classes 12→13 (G12).',
         'Tool-call firewall coverage fixes: list-valued arguments (e.g. attachments=[…] with a secret path) are now serialized flat so the sensitive-path rules actually see them — emailing /etc/passwd or /home/user/.ssh/id_rsa via an attachments array previously slipped to allow; and absolute home dotfiles (/home/<user>/.ssh, /Users/<user>/.aws, .kube, .bashrc) are flagged, while lookalike dirs (.ssh-sync, .sshooks) and /home/../projects stays allow. Probe-verified 0 FP.',
         'Deliberate documented negatives kept out: time-based/boolean SQLi tokens (SLEEP/WAITFOR/pg_sleep) and a bare privileged-value rule false-positive on benign sleep/schedule/search calls, so they stay unshipped rather than noisy.',
       ])

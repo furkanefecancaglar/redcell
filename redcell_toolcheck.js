@@ -16,6 +16,7 @@
   const NAME = /\b((grant|give|escalate|set)_?\w*(admin|root|sudo|superuser|privilege)|sudo|disable_?\w*(safety|guardrail|filter|moderation)|(delete|drop|wipe|erase|truncate|destroy)_?\w*(all|database|table|everything|users?|records?|accounts?)|exfiltrat\w*|run_?(shell|command|code)|exec(ute)?_?(shell|code|command)?|eval|system_?call|shell_?exec)\b/i;
   const EXFIL_VERB = /^(send|forward|upload|post|email|transmit|leak|share|export)_?/i;
   const FIN_VERB = /^(transfer|pay|payout|wire|refund|withdraw|remit|send)_?(money|funds|payment)?/i;
+  const ATTACKER_DEST = /\b(?:to|recipient|payee|destination|receiver|account|target)\b\W{0,6}["']?(?:[\w.+-]+@)?(?:attacker|evil[a-z]*|hacker|scam[a-z]*|fraud[a-z]*|phish[a-z]*)/i;
   const SENSITIVE = /\b(inbox|passwords?|api ?keys?|credentials?|secrets?|private keys?|ssn|social security|customer (records?|data|database)|user (records?|database)|database dump|(the )?whole database)\b/i;
   const AMT_ALL = /\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b/i;
   const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\S|(\/home|\/Users)\/[^\/'"]*?\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)(\/|$))/i;
@@ -68,6 +69,7 @@
     if (NAME.test(name)) add('dangerous-tool-name', 40, 'block');
     if (EXFIL_VERB.test(name) && SENSITIVE.test(kv)) add('tool-data-exfil', 40, 'block');
     if (FIN_VERB.test(name) && AMT_ALL.test(kv)) add('unbounded-financial-action', 22, 'flag');
+    if (FIN_VERB.test(name) && ATTACKER_DEST.test(kv)) add('attacker-destination', 22, 'flag');
     if (LOCALPATH.test(kv)) add('local-file-access', 22, 'flag');
     if (ENVSEC.test(name.replace(/_/g, ' ') + ' ' + kv)) add('secret-env-access', 22, 'flag');
     if (SSRF_INTERNAL.test(kv)) add('ssrf-internal-target', 22, 'flag');
