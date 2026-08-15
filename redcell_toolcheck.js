@@ -31,6 +31,17 @@
   // merely MENTIONS the command stays allow (mirrors PRIVUSER_NAME gate; byte-for-byte parity).
   const PRIVEXEC_NAME = /^(?:exec|execute|run|bash|sh|shell|zsh|fish|cmd|command|system|os|spawn|popen|terminal|console|script|subprocess|run_command|run_shell|exec_shell|shell_exec|os_command|os_system|command_line|cmd_exec)$/i;
   const PRIVEXEC_ARG = /\b(?:docker|podman|nerdctl|crictl|ctr|kubectl|oc)\s+exec\b|\bsudo\s+(?:-[is]\b|su\b|bash\b|sh\b|zsh\b|fish\b)|\bnsenter\b|--privileged\b|\bchroot\b|\bsystemctl\s+(?:restart|stop|kill)\s+docker\b/i;
+  // browser-execution tool NAMES that take a URL and navigate/render it. The NAME gate is
+  // essential: a search/read tool that merely MENTIONS such a URL, or read_data_uri/read
+  // that treats the payload as inert text, must stay allow (mirrors PRIVUSER_NAME gate;
+  // byte-for-byte parity with redcell_toolcheck.py).
+  const URLCONSUME_NAME = /^(?:navigate|goto|open_url|browser_navigate|open|click)$/i;
+  // data: URL whose payload is an executable web document handed to a browser-execution tool:
+  // data:text/html carrying a <script> / <iframe> tag, an event-handler attribute
+  // (onload/onerror/onclick), or a meta-refresh redirect — or the application/javascript media
+  // type itself. Benign data:text/html literals WITHOUT an executable marker (e.g.
+  // data:text/html,<b>hi</b>) stay allow; data:application/json / data:image/* never match.
+  const EXEC_DATA_URL = /\bdata:(?:text\/html[^<]*<\s*(?:script|iframe)\b|text\/html[^<]*<[a-z][^>]*\bon(?:load|error|click)\s*=|text\/html[^<]*<meta[^>]*http-equiv\s*=\s*["']?refresh|application\/javascript(?:;|,|$))/i;
 
   function check(name, args, inspect) {
     name = name || '';
@@ -64,6 +75,7 @@
     if (WINPATH.test(kv)) add('windows-sensitive-path', 22, 'flag');
     if (PRIVUSER_NAME.test(name) && PRIVUSER_KV.test(kv)) add('privileged-identity-arg', 22, 'flag');
     if (PRIVEXEC_NAME.test(name) && PRIVEXEC_ARG.test(kv)) add('privileged-container-exec', 22, 'flag');
+    if (URLCONSUME_NAME.test(name) && EXEC_DATA_URL.test(kv)) add('executable-data-url', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };

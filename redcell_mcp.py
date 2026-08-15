@@ -61,7 +61,7 @@ TOOLS = [
         "name": "tool_check",
         "description": ("Assess a proposed agent TOOL/FUNCTION CALL before you run it. Given the tool name and "
                         "its arguments, returns allow | flag | block so you can gate irreversible or exfiltrating "
-                        "actions — 11 reason classes: 10 tool-aware (dangerous-tool-name and tool-data-exfil block; "
+                        "actions — 12 reason classes: 11 tool-aware (dangerous-tool-name and tool-data-exfil block; "
                         "unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, "
                         "command-injection-arg, windows-sensitive-path, privileged-identity-arg and "
                         "privileged-container-exec flag) plus the input firewall bubbled up over the serialized "
@@ -81,7 +81,7 @@ TOOLS = [
         "description": ("Unified 0-API check across all three surfaces in one call. Provide any of a system "
                         "prompt to score, an untrusted input to firewall, and a proposed tool call to assess; "
                         "returns the worst verdict (allow | flag | block) plus each surface's result under "
-                        "'parts'; the tool surface carries the same 11 reason classes as tool_check (10 tool-aware "
+                        "'parts'; the tool surface carries the same 12 reason classes as tool_check (11 tool-aware "
                         "+ input-firewall bubble-up). Use this as the single guard in an agent loop."),
         "inputSchema": {
             "type": "object",

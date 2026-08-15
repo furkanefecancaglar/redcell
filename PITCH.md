@@ -16,7 +16,7 @@ red-teams their agents before production — and the ones who try do it by hand,
 | 2 | **CI gate** | Fails the build when a PR weakens an agent's prompt below threshold (GitHub Action) | every commit |
 | 3 | **Live engine** | Fires a real adversarial corpus at the live agent and scores each response with a **separate judge model** — PASS/FAIL, not heuristics | pre-release |
 | 4 | **Runtime input firewall** `/firewall` | Inspects every untrusted input in production and blocks injection/exfil/jailbreak in microseconds — 35 detectors (31 pattern rules + hidden-character / unicode-tag / obfuscated-injection / bidi-injection signals) plus base64/leetspeak/homoglyph/zero-width deobfuscation, 0 FP/FN on the test corpus | every request |
-| 5 | **Tool-call firewall** `/toolcheck` | Screens a proposed {name, arguments} tool call before it runs — dangerous names, data exfil, unbounded transfers, local-file & secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec. 11 reason classes (10 tool-aware + the firewall bubble-up), 0 API | before every tool call |
+| 5 | **Tool-call firewall** `/toolcheck` | Screens a proposed {name, arguments} tool call before it runs — dangerous names, data exfil, unbounded transfers, local-file & secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec. 12 reason classes (11 tool-aware + the firewall bubble-up), 0 API | before every tool call |
 
 **Unified `/agentcheck`** — one call runs the scanner, input firewall and tool-call firewall and returns the **worst verdict** (block on danger, pause for human approval on flag). The single guard to wrap an agent loop.
 

@@ -118,6 +118,27 @@ _PRIVEXEC_ARG = re.compile(
     r"|\bchroot\b"
     r"|\bsystemctl\s+(?:restart|stop|kill)\s+docker\b",
     re.IGNORECASE)
+# Browser-execution tool NAMES that take a URL and navigate/render it. The NAME gate is
+# essential: a search/read tool that merely MENTIONS such a URL, or read_data_uri/read
+# that treats the payload as inert text, must stay allow — only a tool that would
+# navigate/render the URL actually executes the script (present-kind trap, same design
+# as the privileged-identity-arg / privileged-container-exec gates).
+_URLCONSUME_NAME = re.compile(
+    r"^(?:navigate|goto|open_url|browser_navigate|open|click)$",
+    re.IGNORECASE)
+# data: URL whose payload is an executable web document handed to a browser-execution
+# tool: data:text/html carrying a <script> / <iframe> tag, an event-handler attribute
+# (onload/onerror/onclick), or a meta-refresh redirect — or the application/javascript
+# media type itself. Benign data:text/html literals WITHOUT an executable marker (e.g.
+# data:text/html,<b>hi</b>) stay allow, and data:application/json / data:image/* URLs
+# never match. probe-verified 0 FP; G8 subset #2 (non-http schemes).
+_EXEC_DATA_URL = re.compile(
+    r"\bdata:(?:"
+    r"text/html[^<]*<\s*(?:script|iframe)\b"
+    r"|text/html[^<]*<[a-z][^>]*\bon(?:load|error|click)\s*="
+    r"|text/html[^<]*<meta[^>]*http-equiv\s*=\s*[\"']?refresh"
+    r"|application/javascript(?:;|,|$))",
+    re.IGNORECASE)
 
 
 def check(name, arguments):
@@ -165,6 +186,8 @@ def check(name, arguments):
         add("privileged-identity-arg", 22, "flag")
     if _PRIVEXEC_NAME.search(name) and _PRIVEXEC_ARG.search(kv):
         add("privileged-container-exec", 22, "flag")
+    if _URLCONSUME_NAME.search(name) and _EXEC_DATA_URL.search(kv):
+        add("executable-data-url", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"
