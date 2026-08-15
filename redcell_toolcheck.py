@@ -38,7 +38,8 @@ _AMT_ALL = re.compile(r"\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ba
 # file-read / SSRF-class access, symmetric with the local form already flagged.
 _LOCALPATH = re.compile(
     r"((=|:|\s|^)(/(etc|usr|bin|sbin|boot|root|var/spool/cron)/|/proc/self|"
-    r"~/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh/authorized_keys|\.env\b|/etc/cron|crontab\b)|\bfile://\S)",
+    r"~/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh/authorized_keys|\.env\b|/etc/cron|crontab\b)|\bfile://\S"
+    r"|(?:/home|/Users)/[^/'\"]*?/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)(?:/|$))",
     re.IGNORECASE)
 # reading/setting secret or exploitation-relevant environment variables
 _ENVSEC = re.compile(
@@ -122,8 +123,12 @@ _PRIVEXEC_ARG = re.compile(
 def check(name, arguments):
     name = name or ""
     if isinstance(arguments, dict):
-        kv = " ".join("%s=%s" % (k, v) for k, v in arguments.items())
-        vals = " ".join(str(v) for v in arguments.values())
+        def _flat(v):
+            if isinstance(v, (list, tuple)):
+                return ", ".join(str(x) for x in v)
+            return str(v)
+        kv = " ".join("%s=%s" % (k, _flat(v)) for k, v in arguments.items())
+        vals = " ".join(_flat(v) for v in arguments.values())
     else:
         kv = "" if arguments is None else str(arguments)
         vals = kv

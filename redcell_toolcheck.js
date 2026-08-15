@@ -18,7 +18,7 @@
   const FIN_VERB = /^(transfer|pay|payout|wire|refund|withdraw|remit|send)_?(money|funds|payment)?/i;
   const SENSITIVE = /\b(inbox|passwords?|api ?keys?|credentials?|secrets?|private keys?|ssn|social security|customer (records?|data|database)|user (records?|database)|database dump|(the )?whole database)\b/i;
   const AMT_ALL = /\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b/i;
-  const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\S)/i;
+  const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\S|(\/home|\/Users)\/[^\/'"]*?\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)(\/|$))/i;
   const ENVSEC = /\b(LD_PRELOAD|LD_LIBRARY_PATH|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|(api|secret|private)_?key|secret_?access|npm_?token)\b/i;
   const SSRF_INTERNAL = /\b(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|metadata\.google\.internal)\b|(?:https?:\/\/|@|url=|host=|endpoint=|\/\/)\[?(?:localhost(?=[:/ \]]|$)|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|::1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|[a-z0-9.-]+\.(?:internal|svc\.cluster\.local)(?=[:/ \]]|$)|[a-z0-9.-]+\.local(?=[:/ \]]|$))/i;
   const CMDINJ = /\$\([^)]{1,200}\)|`[^`]{0,200}\b(id|whoami|curl|wget|bash|sh|nc|ncat|cat|rm|chmod|env|uname|python\d?|perl|node)\b[^`]{0,200}`|(?:;|&&|\|\||\|)\s*(?:bash|sh|zsh|curl|wget|nc|ncat|rm|chmod|chown|cat|eval|exec|python\d?|perl|ruby|node|\/bin\/|\/usr\/bin\/)\b|\bnc\s+-e\b|bash\s+-i\b/i;
@@ -37,8 +37,9 @@
     let kv, vals;
     if (args && typeof args === 'object' && !Array.isArray(args)) {
       const keys = Object.keys(args);
-      kv = keys.map(function (k) { return k + '=' + args[k]; }).join(' ');
-      vals = keys.map(function (k) { return String(args[k]); }).join(' ');
+      function flat(v) { return Array.isArray(v) ? v.map(String).join(', ') : String(v); }
+      kv = keys.map(function (k) { return k + '=' + flat(args[k]); }).join(' ');
+      vals = keys.map(function (k) { return flat(args[k]); }).join(' ');
     } else {
       kv = (args == null) ? '' : String(args);
       vals = kv;
