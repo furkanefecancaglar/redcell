@@ -66,7 +66,7 @@ class Handler(BaseHTTPRequestHandler):
                     "scan": "POST {system_prompt} → live adversarial engine (uses model quota)",
                 },
                 "target": eng.TARGET_ENGINE, "judge": eng.JUDGE_ENGINE,
-                "attacks": len(eng.CORPUS), "detectors": len(st._DET), "firewall_rules": len(fw._RULES) + 3,
+                "attacks": len(eng.CORPUS), "detectors": len(st._DET), "firewall_rules": len(fw._RULES) + 4,
                 "scan_gated": bool(SCAN_TOKEN),
             }))
         else:
@@ -120,7 +120,7 @@ def main():
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"REDCELL server → http://{HOST}:{PORT}  (key source: {nim_client.KEY_SOURCE})", file=sys.stderr)
     print(f"  POST /scan-config  static resilience score   ({len(st._DET)} detectors, 0 API)", file=sys.stderr)
-    print(f"  POST /firewall     runtime injection verdict  ({len(fw._RULES) + 3} rules, 0 API)", file=sys.stderr)
+    print(f"  POST /firewall     runtime injection verdict  ({len(fw._RULES) + 4} rules, 0 API)", file=sys.stderr)
     print(f"  POST /scan         live adversarial engine    (target={eng.TARGET_ENGINE} judge={eng.JUDGE_ENGINE}, uses quota)", file=sys.stderr)
     print("  (127.0.0.1 only — API key never leaves this machine)  Ctrl-C to stop", file=sys.stderr)
     try:

@@ -372,7 +372,7 @@ export default {
       return json({ ok: true, edge: true,
         surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)', toolcheck: 'tool-call (0 API)', agentcheck: 'unified (0 API)',
           scan: env && env.REDCELL_NIM_KEYS ? 'live engine (configured)' : 'live engine (set REDCELL_NIM_KEYS secret to enable)' },
-        detectors: scan.DET.length, firewall_rules: fw.RULES.length + 3, attacks: CORPUS.length + 1,
+        detectors: scan.DET.length, firewall_rules: fw.RULES.length + 4, attacks: CORPUS.length + 1,
         scan_gated: !!(env && env.REDCELL_SCAN_TOKEN) });
     }
     // In-process reliability probe: exercises each 0-API surface with a known input and
@@ -790,7 +790,7 @@ footer{border-top:1px solid var(--line);margin-top:64px;padding:30px 0}
   <p class=sub>An attacker hijacks your agent through untrusted input, then makes it <em>act</em>. REDCELL guards all three stages — it scores the system prompt, firewalls the input (even injections hidden in base64, leetspeak, homoglyphs, or invisible Unicode), and <b>checks the tool call before it runs</b>. Deterministic, at the edge, no key. <a href="/agents" style="color:var(--crit)">See the attack chain</a> or <a href="/example" style="color:var(--crit)">a worked example</a>.</p>
   <div class=trust>
     <span><span class=dot></span>Live on the edge</span>
-    <span><b>34</b>&nbsp;firewall detectors</span>
+    <span><b>35</b>&nbsp;firewall detectors</span>
     <span><b>22</b>&nbsp;static checks · 4 languages</span>
     <span><b>0</b>&nbsp;API keys to try it</span>
   </div>
@@ -819,7 +819,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
-    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>34 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
+    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>35 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
     <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec. 11 reason classes, 0 API.</p></div>
   </div>
 </div>
@@ -1111,7 +1111,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <div class=grid>
 <div class=card><span class=k>Test · /scan-config</span><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — resilience score, findings, exploit links, and a hardened-prompt kit. The CI gate fails the build when a prompt regresses; SDKs (pip/npm) + MCP tool.</p></div>
 <div class=card><span class=k>Attack · /scan</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
-<div class=card><span class=k>Defend · /firewall</span><h3>Runtime input firewall</h3><p>34 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
+<div class=card><span class=k>Defend · /firewall</span><h3>Runtime input firewall</h3><p>35 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, bidi, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
 <div class=card><span class=k>Guard · /toolcheck</span><h3>Tool-call firewall</h3><p>Screens a proposed {name, arguments} call before it runs — dangerous names, data exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec. 11 reason classes, 0 API.</p></div>
 <div class=card style="grid-column:1/-1"><span class=k>One call · /agentcheck</span><h3>Unified agent check</h3><p>Runs the scanner, input firewall and tool-call firewall in a single call and returns the <strong>worst verdict</strong> — block on danger, pause for human approval on flag. The single guard to wrap an agent loop.</p></div>
 </div>
@@ -1669,10 +1669,10 @@ printf '%s\\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 redcel
 
 function renderMCP() {
   const tools = [
-    ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 34 detectors + deobfuscation. Returns allow / flag / block.'],
+    ['firewall_check', '{ input }', 'Inspect an untrusted input (user message, retrieved doc, tool result) for injection / jailbreak / exfil before it reaches your model. 35 detectors + deobfuscation (incl. bidi-injection for Unicode directional/override smuggling). Returns allow / flag / block.'],
     ['scan_prompt', '{ system_prompt }', 'Score an agent system prompt for resilience against the OWASP LLM Top 10 (22 detectors). Returns a 0–100 score, grade, and findings.'],
-    ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block. Catches destructive names, privilege escalation, exec/shell, SSRF/local-file, secret-exfil, and unbounded transfers.'],
-    ['agent_check', '{ system_prompt?, input?, tool_call? }', 'Unified verdict across all three surfaces in one call — the single guard for an agent loop.'],
+    ['tool_check', '{ name, arguments }', 'Assess a proposed agent tool/function call → allow / flag / block across 11 reason classes: 10 tool-aware (dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, privileged-container-exec) plus the input firewall bubbled up over the serialized argument values.'],
+    ['agent_check', '{ system_prompt?, input?, tool_call? }', 'Unified verdict across scanner + input firewall + tool-call firewall (tool surface carries the same 11 reason classes as tool_check) in one call — the single guard for an agent loop.'],
   ].map(function (t) {
     return '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>' + esc(t[0]) + '</b> <span class=id>' + esc(t[1]) + '</span><div class=id style="color:#9aa4b6;margin-top:3px">' + esc(t[2]) + '</div></span></div>';
   }).join('');
@@ -1686,6 +1686,11 @@ function renderMCP() {
     + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets four tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
     + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
+    + '<div class=card><div class=ey>tool_check · 11 reason classes</div>'
+    + '<div class=id style="margin:2px 0 8px">Ten tool-aware checks + the input firewall bubbled up over the serialized argument values (any firewall match id that fires on an argument&apos;s content is an 11th-class reason):</div>'
+    + '<div class=id style="color:#9aa4b6;line-height:1.8;font-family:ui-monospace,monospace">'
+    + 'dangerous-tool-name <span style="color:#ff8a34">(block)</span> · tool-data-exfil <span style="color:#ff8a34">(block)</span> · unbounded-financial-action · local-file-access · secret-env-access · ssrf-internal-target · command-injection-arg · windows-sensitive-path · privileged-identity-arg · privileged-container-exec'
+    + '</div></div>'
     + '<div class=grid>'
     + '<div class=card><div class=ey>1 · Client config</div><div class=id style="margin:2px 0 8px">e.g. Claude Desktop <span class=k>claude_desktop_config.json</span></div><pre class="p y">' + esc(MCP_CONFIG) + '</pre></div>'
     + '<div class=card><div class=ey>2 · Vendor &amp; verify</div><pre class="p y">' + esc(MCP_SETUP) + '</pre></div>'
@@ -1842,7 +1847,7 @@ function renderQuickstart() {
     + '<div class=ey>' + _mk() + 'REDCELL · quickstart</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Guard your agent in 30 seconds.</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 4px">One call to the runtime firewall inspects any untrusted input — user messages, retrieved docs, tool results — and returns <b>allow</b> / <b>flag</b> / <b>block</b> before it reaches your model. 0 dependencies, no API key, runs at the edge.</p>'
-    + '<div class=id style="margin:0 0 8px">Same 34-detector engine as the live demo — including base64/leetspeak/homoglyph/unicode-tag deobfuscation.</div>'
+    + '<div class=id style="margin:0 0 8px">Same 35-detector engine as the live demo — including base64/leetspeak/homoglyph/unicode-tag deobfuscation.</div>'
     + '<h2 style="font-size:15px;color:#eaedf4;margin:26px 0 2px">1 · Firewall untrusted input at runtime</h2>'
     + '<div class=id style="margin:0 0 8px">allow / flag / block on every user message, retrieved doc, or tool result before it reaches your model.</div>'
     + _qsBlock('JavaScript / TypeScript', 'js', QS_JS)
@@ -1889,12 +1894,12 @@ function renderMethodology() {
         'Scores an agent <b>system prompt</b> against 22 detectors mapped to the OWASP LLM Top 10 (instruction hierarchy, confidentiality, excessive agency, secret exposure, insecure output handling, RAG &amp; tool-output provenance, memory poisoning, identity binding, and more). Each detector is one of: <code>absent</code> (a defense you should have but don’t), <code>present</code> (a risky phrase you shouldn’t have), <code>cond</code> (a risky capability without its guard), <code>len</code>, or <code>hidden</code>. '
         + 'Score starts at 100 and subtracts a severity weight per finding — critical −34, high −20, medium −11, low −5 — floored at 0. Grades: Hardened ≥85, Resilient ≥70, Exposed ≥45, Vulnerable ≥20, else Critical. Like the firewall, it inspects the first 16 KB (a real system prompt is far smaller).')
     + _mCard('Runtime firewall — allow / flag / block',
-        'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 34 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, and structured-override classes. '
+        'Inspects <b>untrusted input</b> (user messages, retrieved documents, tool results) before it reaches your model, against 35 detectors across injection, jailbreak, exfiltration, tool/role impersonation, SSRF, structured-override, bidi-smuggling and zero-width classes. '
         + 'Beyond literal patterns it <b>deobfuscates</b> each input — base64 (standard / url-safe / one nested level), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, and invisible Unicode-tag (U+E0000–E007F) smuggling — then re-runs the rules on the normalized text. '
         + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting. '
         + 'An <b>optional 0-API semantic layer</b> (opt in with <code>?semantic=1</code> or <code>{semantic:true}</code>) catches paraphrased attacks that share no keywords with the rules — it only escalates an <code>allow</code> to <code>flag</code>, never blocks on the semantic signal alone.')
     + _mCard('Tool-call firewall — screening the action, not just the text',
-        'Agents don’t only read; they <b>act</b>. This surface (<code>POST /toolcheck</code>) inspects a proposed <code>{name, arguments}</code> call <b>before it runs</b> and returns allow / flag / block. It first <b>bubbles up the input firewall</b> — running the same 34 detectors over the serialized argument values, so a shell/SSRF/exfil payload smuggled into an argument is caught — then adds ten tool-aware checks on the name and structured args. Eleven reason classes in all: '
+        'Agents don’t only read; they <b>act</b>. This surface (<code>POST /toolcheck</code>) inspects a proposed <code>{name, arguments}</code> call <b>before it runs</b> and returns allow / flag / block. It first <b>bubbles up the input firewall</b> — running the same 35 detectors over the serialized argument values, so a shell/SSRF/exfil payload smuggled into an argument is caught — then adds ten tool-aware checks on the name and structured args. Eleven reason classes in all: '
         + '<code>dangerous-tool-name</code> and <code>tool-data-exfil</code> <b>block</b> (score 40); <code>unbounded-financial-action</code>, <code>local-file-access</code>, <code>secret-env-access</code>, <code>ssrf-internal-target</code>, <code>command-injection-arg</code>, <code>windows-sensitive-path</code>, <code>privileged-identity-arg</code>, and <code>privileged-container-exec</code> <b>flag</b> (score 22, for human approval); plus the firewall bubble-up itself. '
         + 'Live: <code>delete_all_users → block</code>, <code>transfer_funds{amount:all} → flag</code>, <code>read_file{/etc/passwd} → flag</code>, <code>read_env{AWS_SECRET_ACCESS_KEY} → flag</code>, <code>fetch{169.254.169.254} → flag</code>, <code>run{x$(whoami)} → flag</code> — while <code>get_balance</code>, <code>transfer{amount:25.00}</code> and <code>read_file{reports/q3.csv}</code> stay <code>allow</code>. '
         + 'Every detector ships under a <b>probe-first, 0-false-positive rule</b>: 15+ benign tool calls and 15+ attacks are run first, and a check is added only if it catches new attacks with <b>zero</b> benign false positives and byte-for-byte Python↔JS parity. Where a check couldn’t clear that bar it stays a <b>documented negative</b> — e.g. a per-call spend-limit or an accept-user-tools flag would false-positive on legitimate calls, so they’re deliberately not shipped rather than shipped noisy.')
@@ -2086,7 +2091,7 @@ function openApiDoc() {
       '/firewall': {
         post: {
           summary: 'Inspect untrusted input for prompt-injection / jailbreak / exfiltration (0 API).',
-          description: 'Runs ' + (fw.RULES.length + 3) + ' detectors plus deobfuscation (base64/url-safe/nested, leetspeak, homoglyph, zero-width, unicode-tag). Inspects the first 16 KB.',
+          description: 'Runs ' + (fw.RULES.length + 4) + ' detectors plus deobfuscation (base64/url-safe/nested, leetspeak, homoglyph, zero-width, unicode-tag). Inspects the first 16 KB.',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' }, semantic: { type: 'boolean', description: 'opt in to the 0-API semantic layer (escalates allow→flag on a paraphrased attack; never blocks alone)' } } } } } },
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
         },
@@ -2163,7 +2168,7 @@ function renderAgents() {
     + '<h1 style="font-size:24px;margin:10px 0 4px">Prompt injection is the entry. Tool abuse is the impact.</h1>'
     + '<p style="color:#9aa4b6;margin:0 0 6px">A chatbot that gets jailbroken says something bad. An <b>agent</b> that gets jailbroken <b>does</b> something bad — it has tools: it can send, delete, transfer, fetch, and grant. The attack chain is short, and every stage is a place to stop it.</p>'
     + '<h2>The attack chain</h2>'
-    + _stage('1', 'Untrusted input arrives', 'A user message, a retrieved document, or a <b>tool result</b> reaches the model. Any of these can carry an instruction — indirect injection hides in the data your agent reads, not just what the user types.', 'firewall the input (POST /firewall) — 34 detectors + deobfuscation (base64/leetspeak/homoglyph/zero-width/unicode-tag) + optional semantic for paraphrases')
+    + _stage('1', 'Untrusted input arrives', 'A user message, a retrieved document, or a <b>tool result</b> reaches the model. Any of these can carry an instruction — indirect injection hides in the data your agent reads, not just what the user types.', 'firewall the input (POST /firewall) — 35 detectors + deobfuscation (base64/leetspeak/homoglyph/zero-width/bidi/unicode-tag) + optional semantic for paraphrases')
     + '<div class=arrow>↓</div>'
     + _stage('2', 'Prompt injection / jailbreak', 'The input overrides the system prompt: "ignore your instructions", a forged <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">system:</code> line, a DAN persona, obfuscated so keyword filters miss it. A weak system prompt makes this trivial.', 'harden the prompt before you ship (POST /scan-config) — 22 OWASP-LLM-Top-10 checks + a copy-paste hardened-prompt kit')
     + '<div class=arrow>↓</div>'
@@ -2233,6 +2238,7 @@ function renderChangelog() {
     + '<p style="color:#9aa4b6;margin:0 0 6px">A factual, dated record of the product. Every item is live on this URL, 0-API, and covered by the test suite (currently 160 tests incl. an automated Python↔JS parity gate). No metrics are claimed here that aren’t verifiable in the code.</p>'
     + _clDay('2026-08-15 · Tool-call coverage gaps', [
         'Tool-call firewall: two new reason classes — privileged-identity-arg (impersonation / role-assignment tools called with user/account/role = admin, root, superuser, sysadmin) and windows-sensitive-path (SAM / registry hives, hosts, web.config, per-user .ssh/.aws/.kube/.docker keys, .env). Probe-verified 0 FP on +39 benign tool calls, 0 FN on the new attacks, byte-for-byte Python↔JS parity.',
+        'Input firewall: new reason class bidi-injection — Unicode directional control chars (U+202A-202E, U+2066-2069, LRM/RLM, ALM) escalate only when paired with an injection directive; pure RTL typesetting (formatted Arabic/Hebrew, mixed-direction quotes) stays allow. U+202A-202E/LRM/RLM previously false-flagged legit RTL text; U+2066-2069 isolates were previously undetected (a bidi-split directive was a false negative). Probe-verified 0 FP on the benign corpus wrapped in 8 bidi carriers, 0 FN on RLO/isolate/RLE overrides, byte-for-byte Python↔JS parity; firewall detectors 34→35.',
         'Tool-call firewall: new reason class privileged-container-exec — an execution-surface tool (bash/run/shell/cmd/…) whose argument enters a container, pod, or host namespace (docker/kubectl/podman exec, sudo→shell, nsenter, docker run --privileged, chroot) or controls the host docker daemon (systemctl restart/stop/kill docker). Name-gated so prose/search MENTIONS stay allow. Probe-verified 0 FP on 18 benign container/ops commands + 8 mention-traps, 0 FN on 15 privileged-exec commands, byte-for-byte Python↔JS parity; tool-aware checks 9→10, reason classes 10→11.',
         'local-file-access extended to file:// host/UNC forms (file://server/share) — the local triple-slash form was already flagged; a host form is the same file-read / SSRF class.',
         'Deliberate documented negatives kept out: time-based/boolean SQLi tokens (SLEEP/WAITFOR/pg_sleep) and a bare privileged-value rule false-positive on benign sleep/schedule/search calls, so they stay unshipped rather than noisy.',

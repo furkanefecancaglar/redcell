@@ -128,8 +128,11 @@
     id, owasp, severity: sev, why, re: new RegExp(pat, 'is'),
   }));
 
-  const HIDDEN = /[​-‏‪-‮⁠-⁤﻿­]/;
-  const HIDDEN_G = /[​-‏‪-‮⁠-⁤﻿­]/g;
+  // Mirror of redcell_firewall: invisible zero-width (always-high hidden-characters) vs
+  // bidirectional control chars (context-dependent bidi-injection). fold() strips BOTH.
+  const HIDDEN = /[\u200B-\u200D\u2060-\u2064\uFEFF\u00AD]/;
+  const BIDI = /[\u061C\u200E-\u200F\u202A-\u202E\u2066-\u2069]/;
+  const FOLD_G = /[\u00AD\u061C\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
 
   // --- evasion normalization (deobfuscation) — byte-for-byte mirror of redcell_firewall.py
   const HOMO = {
@@ -146,7 +149,7 @@
   const TAG = /[\u{E0000}-\u{E007F}]/u;
 
   function fold(text) {
-    const s = text.replace(HIDDEN_G, '').toLowerCase();
+    const s = text.replace(FOLD_G, '').toLowerCase();
     let out = '';
     for (const ch of s) out += (HOMO[ch] || LEET[ch] || ch);
     return out;
@@ -189,6 +192,14 @@
     return out;
   }
 
+  function hasDirective(s) {
+    for (const rule of RULES) {
+      if (rule.id === 'homoglyph-spoofing') continue;
+      if (rule.re.test(s)) return true;
+    }
+    return false;
+  }
+
   function obfuscatedHits(text, rawSeen) {
     const hits = new Set();
     const views = [fold(text)].concat(b64decodes(text));
@@ -227,7 +238,13 @@
     const hm = HIDDEN.exec(text);
     if (hm) {
       const code = hm[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
-      matches.push({ id: 'hidden-characters', owasp: 'LLM01', severity: 'high', why: 'invisible/bidi control characters hiding instructions', snippet: 'U+' + code });
+      matches.push({ id: 'hidden-characters', owasp: 'LLM01', severity: 'high', why: 'invisible zero-width characters hiding instructions', snippet: 'U+' + code });
+      score += W.high;
+    }
+    const bm = BIDI.exec(text);
+    if (bm && hasDirective(fold(text))) {
+      const bcode = bm[0].codePointAt(0).toString(16).toUpperCase().padStart(4, '0');
+      matches.push({ id: 'bidi-injection', owasp: 'LLM01', severity: 'high', why: 'bidi (Unicode directional) control chars paired with an injection directive', snippet: 'U+' + bcode });
       score += W.high;
     }
     const tg = TAG.exec(text);

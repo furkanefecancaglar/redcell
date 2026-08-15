@@ -36,7 +36,7 @@ TOOLS = [
         "name": "firewall_check",
         "description": ("Inspect an UNTRUSTED input (a user message, retrieved document, or tool result) for "
                         "prompt-injection / jailbreak / data-exfiltration attempts BEFORE it reaches your agent's "
-                        "model. 34 detectors plus deobfuscation of base64, leetspeak, homoglyphs, zero-width and "
+                        "model. 35 detectors plus deobfuscation of base64, leetspeak, homoglyphs, zero-width, bidi and "
                         "invisible Unicode-tag smuggling. Returns a verdict: allow | flag | block, a risk score, and "
                         "the matched attack rules. 0 API, microsecond latency. Use as an input firewall for any LLM agent."),
         "inputSchema": {
@@ -61,9 +61,12 @@ TOOLS = [
         "name": "tool_check",
         "description": ("Assess a proposed agent TOOL/FUNCTION CALL before you run it. Given the tool name and "
                         "its arguments, returns allow | flag | block so you can gate irreversible or exfiltrating "
-                        "actions — destructive names (delete_all/wipe/drop), privilege escalation (grant_admin/sudo), "
-                        "exec/shell, SSRF/local-file, sending secrets to an external recipient, unbounded financial "
-                        "transfers. Checks the name + argument values. 0 API. Use as a tool-call firewall for any agent."),
+                        "actions — 11 reason classes: 10 tool-aware (dangerous-tool-name and tool-data-exfil block; "
+                        "unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, "
+                        "command-injection-arg, windows-sensitive-path, privileged-identity-arg and "
+                        "privileged-container-exec flag) plus the input firewall bubbled up over the serialized "
+                        "argument values, so a prompt-injection / SSRF / exfil payload smuggled into an argument is "
+                        "caught too. Checks the name + argument values. 0 API. Use as a tool-call firewall for any agent."),
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -78,7 +81,8 @@ TOOLS = [
         "description": ("Unified 0-API check across all three surfaces in one call. Provide any of a system "
                         "prompt to score, an untrusted input to firewall, and a proposed tool call to assess; "
                         "returns the worst verdict (allow | flag | block) plus each surface's result under "
-                        "'parts'. Use this as the single guard in an agent loop."),
+                        "'parts'; the tool surface carries the same 11 reason classes as tool_check (10 tool-aware "
+                        "+ input-firewall bubble-up). Use this as the single guard in an agent loop."),
         "inputSchema": {
             "type": "object",
             "properties": {
