@@ -73,6 +73,8 @@ function esc(s) {
 }
 
 // Human-readable labels for /toolcheck reason ids (the ids themselves stay stable for tooling).
+const FAVICON = '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%276%27 fill=%27%230b0d12%27/%3E%3Crect x=%276%27 y=%276%27 width=%2720%27 height=%2720%27 fill=%27none%27 stroke=%27%23ff3b46%27 stroke-width=%272%27/%3E%3Cpath d=%27M11 22V10h6a4 4 0 0 1 0 8h-2l4 4%27 stroke=%27%23ff3b46%27 stroke-width=%272.4%27 fill=%27none%27/%3E%3C/svg%3E">';
+
 const REASON_LABELS = {
   'dangerous-tool-name': 'the tool name itself is destructive or privilege-granting',
   'tool-data-exfil': 'a send/forward tool whose arguments carry secrets or records',
@@ -654,6 +656,7 @@ const LANDING = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name="twitter:title" content="REDCELL — the security layer for AI agents">
 <meta name="twitter:description" content="Test, red-team and firewall your AI agents against prompt injection.">
 <meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
+' + FAVICON + '
 <link rel="canonical" href="https://redcell.redcellv1.workers.dev/">
 <link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
@@ -1010,7 +1013,7 @@ fetch('/breach/stats').then(function(x){return x.json();}).then(paint).catch(fun
 
 /* ---------------- REDCELL Breach game page ---------------- */
 const BREACH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL Breach — jailbreak challenge</title>
+${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL Breach — jailbreak challenge</title>
 <meta name=description content="Can you jailbreak the guard? A live prompt-injection challenge — climb the levels and beat REDCELL's firewall.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
 <meta property="og:title" content="REDCELL Breach — can you jailbreak the guard?">
@@ -1080,7 +1083,7 @@ renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the p
 
 /* ---------------- investor pitch page (/pitch) ---------------- */
 const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — investor brief</title>
+${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — investor brief</title>
 <meta name=description content="REDCELL — the security layer for AI agents. Market, product, and traction brief.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
 <meta property="og:title" content="REDCELL — investor brief">
@@ -1178,7 +1181,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 
 /* ---------------- founder dashboard (/dashboard) — token entered client-side ---------------- */
 const DASHBOARD_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — dashboard</title>
+${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — dashboard</title>
 <meta name=description content="REDCELL founder dashboard — funnel counts, breach-attack data, and live self-check. Token stays in the browser.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — founder dashboard"><meta property="og:description" content="Funnel counts, breach-attack data, and live self-check for the REDCELL security layer for AI agents."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/dashboard"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — founder dashboard"><meta name="twitter:description" content="Funnel counts, breach-attack data, and live self-check. Token stays in the browser."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
@@ -1452,7 +1455,7 @@ function renderReport(rec, id) {
     + '<meta property="og:description" content="' + ((r.findings || []).length) + ' findings across 22 static checks + a runtime firewall pass. Scan your AI agent free.">'
     + '<meta property="og:image" content="https://redcell.redcellv1.workers.dev/r/' + id + '/og.svg">'
     + '<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/r/' + id + '/og.svg">'
-    + '<title>REDCELL security report</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
+    + '' + FAVICON + '<title>REDCELL security report</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · security report</div>'
     + '<h1 style="font-size:23px;margin:10px 0 2px">Your prompt’s security report</h1>'
     + '<div class=id style="margin-bottom:6px">Static resilience across 22 checks + a runtime firewall pass. Private link — not indexed.</div>'
@@ -1601,7 +1604,7 @@ const REPORT_OG_MISS = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" hei
   + '<text x="92" y="392" font-size="26" fill="#9aa4b6">This link is invalid or has expired.</text>'
   + '<text x="90" y="596" font-family="monospace" font-size="21" fill="#616b80">redcell.redcellv1.workers.dev · <tspan fill="#33d17f">scan your agent free</tspan></text></svg>';
 
-const REPORT_MISSING = '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex"><title>Report not found — REDCELL</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap><div class=ey>REDCELL</div><h1 style="font-size:22px">Report not found</h1><p class=id>This report link is invalid or has expired (reports are kept for 30 days). Run a new scan to generate one.</p><a class=cta href="/">Run a scan →</a></div></body></html>';
+const REPORT_MISSING = '<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex">' + FAVICON + '<title>Report not found — REDCELL</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap><div class=ey>REDCELL</div><h1 style="font-size:22px">Report not found</h1><p class=id>This report link is invalid or has expired (reports are kept for 30 days). Run a new scan to generate one.</p><a class=cta href="/">Run a scan →</a></div></body></html>';
 
 /* ---------------- CI gate docs (GET /ci) ---------------- */
 const CI_YAML = `# .github/workflows/redcell.yml — REDCELL agent prompt-resilience gate
