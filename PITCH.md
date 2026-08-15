@@ -1,6 +1,6 @@
 # REDCELL — the security layer for AI agents
 
-> Continuous adversarial testing and runtime defense for LLM agents. Test → Prevent → Attack → Defend.
+> Continuous adversarial testing and runtime defense for LLM agents. Test → Prevent → Attack → Defend → Guard.
 
 ## The problem
 Every company is shipping LLM agents wired to tools, data, and customers. An agent with tool access
@@ -9,15 +9,18 @@ can hijack it into leaking data, issuing refunds, or deleting records. Prompt in
 LLM **#1** risk and it is unsolved. Traditional AppSec doesn't see the prompt layer. Almost no one
 red-teams their agents before production — and the ones who try do it by hand, once.
 
-## The product — four surfaces, one security layer
+## The product — five surfaces, one security layer
 | # | Surface | What it does | When it runs |
 |---|---------|--------------|--------------|
-| 1 | **Scanner** (public, free) | Static resilience score of an agent's system prompt vs the OWASP LLM Top 10 — 18 detectors, findings→exploit links, hardened-prompt kit | design time |
+| 1 | **Static scanner** `/scan-config` (public, free) | Static resilience score of an agent's system prompt vs the OWASP LLM Top 10 — 22 detectors, findings→exploit links, hardened-prompt kit | design time |
 | 2 | **CI gate** | Fails the build when a PR weakens an agent's prompt below threshold (GitHub Action) | every commit |
 | 3 | **Live engine** | Fires a real adversarial corpus at the live agent and scores each response with a **separate judge model** — PASS/FAIL, not heuristics | pre-release |
-| 4 | **Runtime firewall** | Inspects every untrusted input in production and blocks injection/exfil/jailbreak in microseconds — 18 rules, 0 FP/FN on the test corpus | every request |
+| 4 | **Runtime input firewall** `/firewall` | Inspects every untrusted input in production and blocks injection/exfil/jailbreak in microseconds — 34 detectors (31 pattern rules + hidden-character / unicode-tag / obfuscated-injection signals) plus base64/leetspeak/homoglyph/zero-width deobfuscation, 0 FP/FN on the test corpus | every request |
+| 5 | **Tool-call firewall** `/toolcheck` | Screens a proposed {name, arguments} tool call before it runs — dangerous names, data exfil, unbounded transfers, local-file & secret-env reads, SSRF, command injection, privileged identities, Windows paths. 10 reason classes (9 tool-aware + the firewall bubble-up), 0 API | before every tool call |
 
-Test → Prevent → Attack → Defend. The same offensive knowledge powers all four.
+**Unified `/agentcheck`** — one call runs the scanner, input firewall and tool-call firewall and returns the **worst verdict** (block on danger, pause for human approval on flag). The single guard to wrap an agent loop.
+
+Test → Prevent → Attack → Defend → Guard. The same offensive knowledge powers all five, and one endpoint unifies them.
 
 ## Wedge & motion
 - **Top of funnel:** the free browser scanner + the CI gate (zero-friction, zero-API, viral in dev channels).
@@ -43,9 +46,9 @@ nine figures — the category is validated; the winner isn't decided.
 | Enterprise | Custom | Unlimited agents · runtime firewall at scale · compliance evidence exports · private attack tuning · SSO |
 
 ## Status — what's built vs what remains
-**Built, verified, committed, deploy-ready** (this repo): all four surfaces, one unified server
-(`/scan-config`, `/firewall`, `/scan`, `/health`), a Python static core matching the browser scanner
-exactly, a 57-test regression suite (green), Docker/Fly/Render/Railway configs, env-indirected keys, and
+**Built, verified, committed, deploy-ready** (this repo): all five surfaces, one unified server
+(`/scan-config`, `/firewall`, `/scan`, `/toolcheck`, `/agentcheck`, `/health`), a Python static core matching the browser scanner
+exactly, a 158-test regression suite (green), Docker/Fly/Render/Railway configs, env-indirected keys, and
 a one-command deploy.
 
 **Honest limits:** the free scanner is heuristic static analysis (a fast first read, not a full audit —

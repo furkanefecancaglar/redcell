@@ -33,14 +33,14 @@ def check(paths, require="flag"):
         print("no fixture files matched — nothing to check", file=sys.stderr)
         return 0
     caught_ok = {"block"} if require == "block" else {"block", "flag"}
-    total = misses = 0
+    total = misses = unreadable = 0
     for path in files:
         try:
             with open(path, encoding="utf-8") as f:
                 lines = f.readlines()
         except OSError as e:
             print(f"MISS  {path}  (read error: {e})")
-            misses += 1
+            unreadable += 1
             continue
         for i, line in enumerate(lines, 1):
             line = line.strip()
@@ -53,8 +53,9 @@ def check(paths, require="flag"):
             else:
                 misses += 1
                 print(f"MISS  {path}:{i}  {v.action} (needed {require}+): {line[:60]}")
-    print(f"\n{total - misses}/{total} known injections caught (require={require})")
-    return 1 if misses else 0
+    print(f"\n{total - misses}/{total} known injections caught (require={require})"
+          + (f"; {unreadable} file(s) unreadable" if unreadable else ""))
+    return 1 if (misses or unreadable) else 0
 
 
 def main():

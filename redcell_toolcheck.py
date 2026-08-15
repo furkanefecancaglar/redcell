@@ -33,10 +33,12 @@ _SENSITIVE = re.compile(
     re.IGNORECASE)
 _AMT_ALL = re.compile(r"\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b", re.IGNORECASE)
 # sensitive filesystem paths (persistence / privilege / secret files), boundary-anchored so
-# a URL like https://cdn/etc/logo.png does NOT match.
+# a URL like https://cdn/etc/logo.png does NOT match. The file:// arm matches any file://
+# form (local file:///… AND UNC/host file://server/share) — a host-form file:// is still a
+# file-read / SSRF-class access, symmetric with the local form already flagged.
 _LOCALPATH = re.compile(
     r"((=|:|\s|^)(/(etc|usr|bin|sbin|boot|root|var/spool/cron)/|/proc/self|"
-    r"~/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh/authorized_keys|\.env\b|/etc/cron|crontab\b)|\bfile:///)",
+    r"~/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh/authorized_keys|\.env\b|/etc/cron|crontab\b)|\bfile://\S)",
     re.IGNORECASE)
 # reading/setting secret or exploitation-relevant environment variables
 _ENVSEC = re.compile(
@@ -63,6 +65,35 @@ _CMDINJ = re.compile(
     r"|`[^`]{0,200}\b(id|whoami|curl|wget|bash|sh|nc|ncat|cat|rm|chmod|env|uname|python\d?|perl|node)\b[^`]{0,200}`"
     r"|(?:;|&&|\|\||\|)\s*(?:bash|sh|zsh|curl|wget|nc|ncat|rm|chmod|chown|cat|eval|exec|python\d?|perl|ruby|node|/bin/|/usr/bin/)\b"
     r"|\bnc\s+-e\b|bash\s+-i\b",
+    re.IGNORECASE)
+# Privileged-identity tool args: an impersonation / role-assignment tool NAME (run_as,
+# impersonate, switch_account, become, login_as, set_role, assign_role, …) called with an
+# identity-keyed arg whose VALUE is a privileged user (admin / root / superuser / sysadmin /
+# prefix compounds). The NAME gate is essential: it keeps a benign search query that merely
+# MENTIONS 'user=admin' or a get_user(username=root) lookup from flagging (present-kind trap).
+_PRIVUSER_NAME = re.compile(
+    r"\b(?:run|execute|act|switch|impersonate|become|login|sudo|assume|set|change|update|"
+    r"grant|assign|exec)[_-]?(?:as|to|user|account|identity|role|sudo|privilege|current)\w*\b|"
+    r"\b(?:impersonate|become|sudo|login)\b",
+    re.IGNORECASE)
+_PRIVUSER_KV = re.compile(
+    r"\b(?:as|as_user|user|username|account|identity|role|privileges?|permissions?|sudoer|current)\b"
+    r"\s*[\"']?[=:]\s*[\"'\[ ]*(?:super|cluster|db|net|domain|site)?-?"
+    r"(?:admin|administrator|root|superuser|sysadmin)(?![\w-])",
+    re.IGNORECASE)
+# Sensitive WINDOWS filesystem paths (SAM/registry hives, hosts, web.config, per-user
+# .ssh/.aws/.kube/.docker dotfiles, .env). Gate on a path-carrying arg KEY so a benign
+# support query that MENTIONS C:\Windows\System32 (or .ssh) is not flagged — unlike /etc/passwd,
+# Windows path strings are common in ordinary prose, so the key context is what keeps 0-FP.
+_WINPATH = re.compile(
+    r"\b(?:path|file|filename|source|target|dest|destination|location|output|input|from|to)\b"
+    r"\s*[\"']?[=:]?\s*[\"']?(?:[a-z]:[\\/])?(?:"
+    r"windows[\\/]system32[\\/]config(?:[\\/]|$)|"
+    r"windows[\\/]system32[\\/]drivers[\\/]etc[\\/]hosts|"
+    r"inetpub[\\/]wwwroot[\\/]web\.config|"
+    r"users[\\/][^\\/'\"\s]+[\\/]\.(?:ssh|aws|kube|npmrc|docker)(?:[\\/]|$)|"
+    r"(?:[^\\/'\"\s]+[\\/])*\.env(?:[\\/]|$)|"
+    r"(?:[^\\/'\"\s]+[\\/])*\.ssh[\\/]authorized_keys)",
     re.IGNORECASE)
 
 
@@ -101,6 +132,10 @@ def check(name, arguments):
         add("ssrf-internal-target", 22, "flag")
     if _CMDINJ.search(kv):
         add("command-injection-arg", 22, "flag")
+    if _WINPATH.search(kv):
+        add("windows-sensitive-path", 22, "flag")
+    if _PRIVUSER_NAME.search(name) and _PRIVUSER_KV.search(kv):
+        add("privileged-identity-arg", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"

@@ -18,10 +18,13 @@
   const FIN_VERB = /^(transfer|pay|payout|wire|refund|withdraw|remit|send)_?(money|funds|payment)?/i;
   const SENSITIVE = /\b(inbox|passwords?|api ?keys?|credentials?|secrets?|private keys?|ssn|social security|customer (records?|data|database)|user (records?|database)|database dump|(the )?whole database)\b/i;
   const AMT_ALL = /\b(amount|sum|value)\b\W{0,4}(all|\*|everything|max)|\ball (funds|money|the balance|balances)\b/i;
-  const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\/)/i;
+  const LOCALPATH = /((=|:|\s|^)(\/(etc|usr|bin|sbin|boot|root|var\/spool\/cron)\/|\/proc\/self|~\/\.(ssh|bashrc|zshrc|profile|aws|kube|npmrc|docker)\b|\.ssh\/authorized_keys|\.env\b|\/etc\/cron|crontab\b)|\bfile:\/\/\S)/i;
   const ENVSEC = /\b(LD_PRELOAD|LD_LIBRARY_PATH|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|(api|secret|private)_?key|secret_?access|npm_?token)\b/i;
   const SSRF_INTERNAL = /\b(169\.254\.169\.254|169\.254\.170\.2|100\.100\.100\.200|metadata\.google\.internal)\b|(?:https?:\/\/|@|url=|host=|endpoint=|\/\/)\[?(?:localhost(?=[:/ \]]|$)|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|0\.0\.0\.0|::1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|[a-z0-9.-]+\.(?:internal|svc\.cluster\.local)(?=[:/ \]]|$)|[a-z0-9.-]+\.local(?=[:/ \]]|$))/i;
   const CMDINJ = /\$\([^)]{1,200}\)|`[^`]{0,200}\b(id|whoami|curl|wget|bash|sh|nc|ncat|cat|rm|chmod|env|uname|python\d?|perl|node)\b[^`]{0,200}`|(?:;|&&|\|\||\|)\s*(?:bash|sh|zsh|curl|wget|nc|ncat|rm|chmod|chown|cat|eval|exec|python\d?|perl|ruby|node|\/bin\/|\/usr\/bin\/)\b|\bnc\s+-e\b|bash\s+-i\b/i;
+  const PRIVUSER_NAME = /\b(?:run|execute|act|switch|impersonate|become|login|sudo|assume|set|change|update|grant|assign|exec)[_-]?(?:as|to|user|account|identity|role|sudo|privilege|current)\w*\b|\b(?:impersonate|become|sudo|login)\b/i;
+  const PRIVUSER_KV = /\b(?:as|as_user|user|username|account|identity|role|privileges?|permissions?|sudoer|current)\b\s*["']?[=:]\s*["'\[ ]*(?:super|cluster|db|net|domain|site)?-?(?:admin|administrator|root|superuser|sysadmin)(?![\w-])/i;
+  const WINPATH = /\b(?:path|file|filename|source|target|dest|destination|location|output|input|from|to)\b\s*["']?[=:]?\s*["']?(?:[a-z]:[\\\/])?(?:windows[\\\/]system32[\\\/]config(?:[\\\/]|$)|windows[\\\/]system32[\\\/]drivers[\\\/]etc[\\\/]hosts|inetpub[\\\/]wwwroot[\\\/]web\.config|users[\\\/][^\\\/'"\s]+[\\\/]\.(?:ssh|aws|kube|npmrc|docker)(?:[\\\/]|$)|(?:[^\\\/'"\s]+[\\\/])*\.env(?:[\\\/]|$)|(?:[^\\\/'"\s]+[\\\/])*\.ssh[\\\/]authorized_keys)/i;
 
   function check(name, args, inspect) {
     name = name || '';
@@ -51,6 +54,8 @@
     if (ENVSEC.test(name.replace(/_/g, ' ') + ' ' + kv)) add('secret-env-access', 22, 'flag');
     if (SSRF_INTERNAL.test(kv)) add('ssrf-internal-target', 22, 'flag');
     if (CMDINJ.test(kv)) add('command-injection-arg', 22, 'flag');
+    if (WINPATH.test(kv)) add('windows-sensitive-path', 22, 'flag');
+    if (PRIVUSER_NAME.test(name) && PRIVUSER_KV.test(kv)) add('privileged-identity-arg', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };

@@ -21,7 +21,7 @@ Live product: https://redcell.redcellv1.workers.dev · Game (the hook): https://
 >
 > The rest of the product is live and free to try on the same domain:
 > - `POST /firewall` — a runtime injection firewall (regex, 20 rules, 4 languages, 0 API, microseconds). Client-side JS + Python ports too.
-> - `POST /scan-config` — scores an agent's system prompt against the OWASP LLM Top 10 (18 detectors).
+> - `POST /scan-config` — scores an agent's system prompt against the OWASP LLM Top 10 (22 detectors).
 > - `POST /scan` — a live red-team engine: it fires an adversarial corpus at your agent and a *separate* judge model rates each response PASS/FAIL. It also runs an adaptive multi-turn attack that mutates based on the agent's own first reply.
 >
 > It all runs on one Cloudflare Worker (free tier). Honest about limits: the static scanner is heuristic, and the live engine currently uses a single model provider. Curious what breaks it — try to get past level 5 and tell me how.
@@ -39,7 +39,7 @@ I built REDCELL: a security layer for LLM agents. And a game to prove the point.
 
 3/ Under the hood it's a full product, live + free:
 🛡️ runtime firewall (blocks injection/jailbreak/exfil, 4 languages, 0 API, microseconds)
-🧪 static scanner (OWASP LLM Top 10, 18 detectors)
+🧪 static scanner (OWASP LLM Top 10, 22 detectors)
 🔬 live red-team engine (real attacks + a separate judge model)
 
 4/ The interesting part of the engine: an adaptive attack. It first asks your agent what it does, then an attacker model crafts a follow-up jailbreak from that exact answer, and delivers it in a real 2-turn conversation. Static test suites miss this.
@@ -74,7 +74,7 @@ I built REDCELL: a security layer for LLM agents. And a game to prove the point.
 > If you ship an LLM agent with tool access, it's an untrusted-input-to-privileged-action machine — one poisoned message or document can hijack it. I built REDCELL to test and defend that:
 >
 > - **Firewall**: inspects untrusted input for injection/jailbreak/exfil (20 rules, 4 languages, pure pattern-match, 0 API, microseconds). Python + JS + edge API.
-> - **Scanner**: scores a system prompt against the OWASP LLM Top 10 (18 detectors) with findings and a hardened-prompt kit.
+> - **Scanner**: scores a system prompt against the OWASP LLM Top 10 (22 detectors) with findings and a hardened-prompt kit.
 > - **Live engine**: fires an adversarial corpus at your agent and a separate judge model rates each response PASS/FAIL — including an adaptive attack that mutates from the agent's own first reply.
 > - **Breach**: a 5-level jailbreak game where each level is a real defense layer (try it, it's the fun part).
 >

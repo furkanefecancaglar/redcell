@@ -81,6 +81,8 @@ const REASON_LABELS = {
   'secret-env-access': 'reads or sets a secret environment variable',
   'ssrf-internal-target': 'a request to an internal / metadata / private-network address (SSRF)',
   'command-injection-arg': 'shell command-injection markers in an argument (\$(), backticks, or an operator + a shell command)',
+  'windows-sensitive-path': 'reads or writes a sensitive Windows path (System32 registry hive, hosts, web.config, per-user .ssh/.aws/.kube/.docker keys, .env)',
+  'privileged-identity-arg': 'an impersonation / role-assignment tool called with a privileged identity (user/account/role = admin, root, superuser, sysadmin)',
 };
 function reasonLabel(id) { return REASON_LABELS[id] || id; }
 function html(body, status = 200, extra) {
@@ -811,7 +813,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
     <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>34 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
-    <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection. 8 reason classes, 0 API.</p></div>
+    <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths. 10 reason classes, 0 API.</p></div>
   </div>
 </div>
 
@@ -1097,12 +1099,14 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <section><h2>Problem</h2>
 <p>An LLM agent with tool access is an <strong>untrusted-input-to-privileged-action</strong> machine. One poisoned document, email or message can hijack it into leaking data, issuing refunds, or deleting records. <strong>Prompt injection is OWASP's #1 LLM risk and it is unsolved.</strong> Traditional AppSec never sees the prompt layer, and the teams that do test their agents do it by hand, once.</p></section>
 
-<section><h2>Product — live at redcell.redcellv1.workers.dev</h2>
+<section><h2>Product — one security layer, five surfaces</h2>
+<p style="margin:0 0 12px">The same offensive-security core — test the prompt, gate the pipeline, attack the live agent, firewall untrusted input, and screen every tool call. All live at redcell.redcellv1.workers.dev; only the live engine calls a model, everything else is 0-API at the edge.</p>
 <div class=grid>
-<div class=card><span class=k>Test</span><h3>Static scanner</h3><p>22 detectors, OWASP LLM Top 10, findings + hardened-prompt kit.</p></div>
-<div class=card><span class=k>Prevent</span><h3>CI gate</h3><p>Fails the build when an agent's prompt regresses. SDKs (pip/npm), MCP tool.</p></div>
-<div class=card><span class=k>Attack</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
-<div class=card><span class=k>Defend</span><h3>Runtime firewall</h3><p>34 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
+<div class=card><span class=k>Test · /scan-config</span><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — resilience score, findings, exploit links, and a hardened-prompt kit. The CI gate fails the build when a prompt regresses; SDKs (pip/npm) + MCP tool.</p></div>
+<div class=card><span class=k>Attack · /scan</span><h3>Live red-team engine</h3><p>Fires a real adversarial corpus — including an <strong>adaptive multi-turn attack that mutates from the agent's own reply</strong> — and a separate judge model scores each response.</p></div>
+<div class=card><span class=k>Defend · /firewall</span><h3>Runtime input firewall</h3><p>34 detectors block injection/jailbreak/exfil in untrusted input — plus deobfuscation (base64, leetspeak, homoglyph, zero-width, unicode-tag). 4 languages, microsecond latency, at the edge.</p></div>
+<div class=card><span class=k>Guard · /toolcheck</span><h3>Tool-call firewall</h3><p>Screens a proposed {name, arguments} call before it runs — dangerous names, data exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths. 10 reason classes, 0 API.</p></div>
+<div class=card style="grid-column:1/-1"><span class=k>One call · /agentcheck</span><h3>Unified agent check</h3><p>Runs the scanner, input firewall and tool-call firewall in a single call and returns the <strong>worst verdict</strong> — block on danger, pause for human approval on flag. The single guard to wrap an agent loop.</p></div>
 </div>
 <p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) drove 15M+ messages / 300k+ users. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
 
@@ -1115,11 +1119,11 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <p style="margin-top:12px">Buyers — fintech, healthcare, support automation, internal copilots — are now asked <em>"how do you know your agent is safe?"</em> for procurement and compliance (EU AI Act, SOC 2 AI addenda).</p></section>
 
 <section><h2>Wedge & moat</h2>
-<p><strong>Free → paid.</strong> The scanner, firewall and CI gate are free and viral in dev channels (and an MCP tool other agents call). They convert to the paid live-engine + runtime firewall. <strong>Land-and-expand</strong> from testing into production defense — the same corpus that tests also defends, and it compounds with every scan and every Breach attempt.</p></section>
+<p><strong>Free → paid.</strong> The scanner, input firewall, tool-call firewall and CI gate are free and viral in dev channels (and an MCP tool other agents call). They convert to the paid live-engine + runtime firewall. <strong>Land-and-expand</strong> from testing into production defense — the same corpus that tests also defends, and it compounds with every scan and every Breach attempt.</p></section>
 
 <section><h2>Business model</h2>
 <div class=tiers>
-<div><span class=eyebrow>Free</span><div class=p>$0</div><p style="font-size:13px;margin:0;color:var(--ink3)">Scanner · firewall · CI · SDKs · MCP</p></div>
+<div><span class=eyebrow>Free</span><div class=p>$0</div><p style="font-size:13px;margin:0;color:var(--ink3)">Scanner · firewall · tool-call · CI · SDKs · MCP</p></div>
 <div><span class=eyebrow style="color:var(--red)">Team</span><div class=p>$499<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
 <div><span class=eyebrow>Enterprise</span><div class=p>Custom</div><p style="font-size:13px;margin:0;color:var(--ink3)">Unlimited · SSO · compliance · SLA</p></div>
 </div></section>
@@ -1883,8 +1887,8 @@ function renderMethodology() {
         + 'Severity weights sum to a score: <code>≥40 → block</code>, <code>≥12 → flag</code>, else <code>allow</code>. The Python and JavaScript engines are kept byte-for-byte identical and verified against a shared corpus. Every rule uses bounded quantifiers (no exponential backtracking), and inspection is capped to the first 16 KB of an input so worst-case CPU stays bounded — chunk larger blobs before inspecting. '
         + 'An <b>optional 0-API semantic layer</b> (opt in with <code>?semantic=1</code> or <code>{semantic:true}</code>) catches paraphrased attacks that share no keywords with the rules — it only escalates an <code>allow</code> to <code>flag</code>, never blocks on the semantic signal alone.')
     + _mCard('Tool-call firewall — screening the action, not just the text',
-        'Agents don’t only read; they <b>act</b>. This surface (<code>POST /toolcheck</code>) inspects a proposed <code>{name, arguments}</code> call <b>before it runs</b> and returns allow / flag / block. It first <b>bubbles up the input firewall</b> — running the same 34 detectors over the serialized argument values, so a shell/SSRF/exfil payload smuggled into an argument is caught — then adds seven tool-aware checks on the name and structured args. Eight reason classes in all: '
-        + '<code>dangerous-tool-name</code> and <code>tool-data-exfil</code> <b>block</b> (score 40); <code>unbounded-financial-action</code>, <code>local-file-access</code>, <code>secret-env-access</code>, <code>ssrf-internal-target</code>, and <code>command-injection-arg</code> <b>flag</b> (score 22, for human approval); plus the firewall bubble-up itself. '
+        'Agents don’t only read; they <b>act</b>. This surface (<code>POST /toolcheck</code>) inspects a proposed <code>{name, arguments}</code> call <b>before it runs</b> and returns allow / flag / block. It first <b>bubbles up the input firewall</b> — running the same 34 detectors over the serialized argument values, so a shell/SSRF/exfil payload smuggled into an argument is caught — then adds nine tool-aware checks on the name and structured args. Ten reason classes in all: '
+        + '<code>dangerous-tool-name</code> and <code>tool-data-exfil</code> <b>block</b> (score 40); <code>unbounded-financial-action</code>, <code>local-file-access</code>, <code>secret-env-access</code>, <code>ssrf-internal-target</code>, <code>command-injection-arg</code>, <code>windows-sensitive-path</code>, and <code>privileged-identity-arg</code> <b>flag</b> (score 22, for human approval); plus the firewall bubble-up itself. '
         + 'Live: <code>delete_all_users → block</code>, <code>transfer_funds{amount:all} → flag</code>, <code>read_file{/etc/passwd} → flag</code>, <code>read_env{AWS_SECRET_ACCESS_KEY} → flag</code>, <code>fetch{169.254.169.254} → flag</code>, <code>run{x$(whoami)} → flag</code> — while <code>get_balance</code>, <code>transfer{amount:25.00}</code> and <code>read_file{reports/q3.csv}</code> stay <code>allow</code>. '
         + 'Every detector ships under a <b>probe-first, 0-false-positive rule</b>: 15+ benign tool calls and 15+ attacks are run first, and a check is added only if it catches new attacks with <b>zero</b> benign false positives and byte-for-byte Python↔JS parity. Where a check couldn’t clear that bar it stays a <b>documented negative</b> — e.g. a per-call spend-limit or an accept-user-tools flag would false-positive on legitimate calls, so they’re deliberately not shipped rather than shipped noisy.')
     + _mCard('Unified check — /agentcheck',
@@ -2158,6 +2162,8 @@ function renderAgents() {
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>secret-env-access</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['secret-env-access']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>ssrf-internal-target</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['ssrf-internal-target']) + '</div></span></div>'
     + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>command-injection-arg</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['command-injection-arg']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>windows-sensitive-path</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['windows-sensitive-path']) + '</div></span></div>'
+    + '<div class=find><span class=bar style="background:#ff8a34"></span><span class=ttl><b>privileged-identity-arg</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['privileged-identity-arg']) + '</div></span></div>'
     + '<div class=id style="margin-top:8px">Plus anything the input firewall matches in the argument values (injected shell, encoded payloads).</div></div>'
     + '<h2>Coverage map — attack class → what catches it</h2>'
     + '<div class=id style="margin-bottom:6px">Real detector / reason ids, so you can see exactly where each class is handled. Deterministic layers; the paraphrase long-tail is the optional semantic layer + your model classifier.</div>'
@@ -2173,10 +2179,10 @@ function renderAgents() {
         ['Data exfiltration', 'firewall · toolcheck', 'exfil-url, data-exfil, link-spoofing, ssrf-exfil; tool: tool-data-exfil'],
         ['Destructive action', 'firewall · toolcheck', 'destructive-cmd, code-execution; tool: dangerous-tool-name'],
         ['Excessive agency / no confirmation', 'scanner · toolcheck', 'scan: excessive agency, unsupervised autonomy; tool: unbounded-financial-action'],
-        ['Privilege / authority spoof', 'firewall · scanner · toolcheck', 'authority-spoof, structured-override; scan: over-trust, identity binding; tool: dangerous-tool-name'],
+        ['Privilege / authority spoof', 'firewall · scanner · toolcheck', 'authority-spoof, structured-override; scan: over-trust, identity binding; tool: dangerous-tool-name, privileged-identity-arg'],
         ['SSRF / internal fetch', 'firewall · toolcheck', 'ssrf-exfil; tool: ssrf-internal-target'],
         ['Secret / credential access', 'scanner · toolcheck', 'scan: secret exposure; tool: secret-env-access'],
-        ['Sensitive filesystem / persistence', 'toolcheck', 'tool: local-file-access'],
+        ['Sensitive filesystem / persistence', 'toolcheck', 'tool: local-file-access (incl. file:// host forms), windows-sensitive-path'],
         ['Command injection in a tool arg', 'firewall · toolcheck', 'code-execution, tool-param-injection; tool: command-injection-arg'],
         ['Resource exhaustion', 'firewall · scanner', 'repeat-flood; scan: unbounded consumption'],
       ].map(function (r) {
@@ -2203,7 +2209,12 @@ function renderChangelog() {
     + '<title>REDCELL — changelog</title><style>' + REPORT_CSS + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · changelog</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">What has shipped</h1>'
-    + '<p style="color:#9aa4b6;margin:0 0 6px">A factual, dated record of the product. Every item is live on this URL, 0-API, and covered by the test suite (currently 154 tests incl. an automated Python↔JS parity gate). No metrics are claimed here that aren’t verifiable in the code.</p>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">A factual, dated record of the product. Every item is live on this URL, 0-API, and covered by the test suite (currently 158 tests incl. an automated Python↔JS parity gate). No metrics are claimed here that aren’t verifiable in the code.</p>'
+    + _clDay('2026-08-15 · Tool-call coverage gaps', [
+        'Tool-call firewall: two new reason classes — privileged-identity-arg (impersonation / role-assignment tools called with user/account/role = admin, root, superuser, sysadmin) and windows-sensitive-path (SAM / registry hives, hosts, web.config, per-user .ssh/.aws/.kube/.docker keys, .env). Probe-verified 0 FP on +39 benign tool calls, 0 FN on the new attacks, byte-for-byte Python↔JS parity.',
+        'local-file-access extended to file:// host/UNC forms (file://server/share) — the local triple-slash form was already flagged; a host form is the same file-read / SSRF class.',
+        'Deliberate documented negatives kept out: time-based/boolean SQLi tokens (SLEEP/WAITFOR/pg_sleep) and a bare privileged-value rule false-positive on benign sleep/schedule/search calls, so they stay unshipped rather than noisy.',
+      ])
     + _clDay('2026-08-11 · Agent-native platform', [
         'Tool-call firewall (POST /toolcheck): assesses a proposed {name, arguments} call — 8 risk classes incl. destructive names, data-exfil, unbounded financial, sensitive-file & secret-env access, SSRF-to-internal, and command injection in an argument. Probe-verified 0 false positives on a benign tool-call corpus.',
         'Unified check (POST /agentcheck): scanner + firewall + tool-call in one call → worst verdict. Also exposed as a 4th MCP tool (agent_check) and a one-file agent middleware in /quickstart.',
