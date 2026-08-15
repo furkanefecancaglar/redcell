@@ -25,6 +25,12 @@
   const PRIVUSER_NAME = /\b(?:run|execute|act|switch|impersonate|become|login|sudo|assume|set|change|update|grant|assign|exec)[_-]?(?:as|to|user|account|identity|role|sudo|privilege|current)\w*\b|\b(?:impersonate|become|sudo|login)\b/i;
   const PRIVUSER_KV = /\b(?:as|as_user|user|username|account|identity|role|privileges?|permissions?|sudoer|current)\b\s*["']?[=:]\s*["'\[ ]*(?:super|cluster|db|net|domain|site)?-?(?:admin|administrator|root|superuser|sysadmin)(?![\w-])/i;
   const WINPATH = /\b(?:path|file|filename|source|target|dest|destination|location|output|input|from|to)\b\s*["']?[=:]?\s*["']?(?:[a-z]:[\\\/])?(?:windows[\\\/]system32[\\\/]config(?:[\\\/]|$)|windows[\\\/]system32[\\\/]drivers[\\\/]etc[\\\/]hosts|inetpub[\\\/]wwwroot[\\\/]web\.config|users[\\\/][^\\\/'"\s]+[\\\/]\.(?:ssh|aws|kube|npmrc|docker)(?:[\\\/]|$)|(?:[^\\\/'"\s]+[\\\/])*\.env(?:[\\\/]|$)|(?:[^\\\/'"\s]+[\\\/])*\.ssh[\\\/]authorized_keys)/i;
+  // execution-surface tool NAMES whose argument may enter a container / pod / host namespace
+  // or escalate to a root shell (docker/kubectl exec, sudo->shell, nsenter, --privileged,
+  // chroot, systemctl restart/stop/kill docker). NAME-gated so a benign search/help query that
+  // merely MENTIONS the command stays allow (mirrors PRIVUSER_NAME gate; byte-for-byte parity).
+  const PRIVEXEC_NAME = /^(?:exec|execute|run|bash|sh|shell|zsh|fish|cmd|command|system|os|spawn|popen|terminal|console|script|subprocess|run_command|run_shell|exec_shell|shell_exec|os_command|os_system|command_line|cmd_exec)$/i;
+  const PRIVEXEC_ARG = /\b(?:docker|podman|nerdctl|crictl|ctr|kubectl|oc)\s+exec\b|\bsudo\s+(?:-[is]\b|su\b|bash\b|sh\b|zsh\b|fish\b)|\bnsenter\b|--privileged\b|\bchroot\b|\bsystemctl\s+(?:restart|stop|kill)\s+docker\b/i;
 
   function check(name, args, inspect) {
     name = name || '';
@@ -56,6 +62,7 @@
     if (CMDINJ.test(kv)) add('command-injection-arg', 22, 'flag');
     if (WINPATH.test(kv)) add('windows-sensitive-path', 22, 'flag');
     if (PRIVUSER_NAME.test(name) && PRIVUSER_KV.test(kv)) add('privileged-identity-arg', 22, 'flag');
+    if (PRIVEXEC_NAME.test(name) && PRIVEXEC_ARG.test(kv)) add('privileged-container-exec', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };

@@ -95,6 +95,28 @@ _WINPATH = re.compile(
     r"(?:[^\\/'\"\s]+[\\/])*\.env(?:[\\/]|$)|"
     r"(?:[^\\/'\"\s]+[\\/])*\.ssh[\\/]authorized_keys)",
     re.IGNORECASE)
+# Privileged container / host command-execution tool args: an execution-surface tool NAME
+# (bash, shell, run, cmd, …) whose argument enters a container, a pod, a host namespace, or
+# a root shell — docker/kubectl/podman exec, sudo→shell, nsenter, docker run --privileged,
+# chroot, systemctl restart/stop/kill docker. The NAME gate is essential: it keeps a benign
+# search/help query that merely MENTIONS "kubectl exec" or "docker run --privileged" from
+# flagging (present-kind trap, same design as privileged-identity-arg). exec/run_command/
+# execute already block by name; this catches the same payloads through benign-named exec
+# tools. Probe-verified: 0 FP on 18 benign container/ops commands via bash/run/shell/cmd,
+# 0 FN on 15 privileged-exec commands.
+_PRIVEXEC_NAME = re.compile(
+    r"^(?:exec|execute|run|bash|sh|shell|zsh|fish|cmd|command|system|os|spawn|popen|"
+    r"terminal|console|script|subprocess|run_command|run_shell|exec_shell|shell_exec|"
+    r"os_command|os_system|command_line|cmd_exec)$",
+    re.IGNORECASE)
+_PRIVEXEC_ARG = re.compile(
+    r"\b(?:docker|podman|nerdctl|crictl|ctr|kubectl|oc)\s+exec\b"
+    r"|\bsudo\s+(?:-[is]\b|su\b|bash\b|sh\b|zsh\b|fish\b)"
+    r"|\bnsenter\b"
+    r"|--privileged\b"
+    r"|\bchroot\b"
+    r"|\bsystemctl\s+(?:restart|stop|kill)\s+docker\b",
+    re.IGNORECASE)
 
 
 def check(name, arguments):
@@ -136,6 +158,8 @@ def check(name, arguments):
         add("windows-sensitive-path", 22, "flag")
     if _PRIVUSER_NAME.search(name) and _PRIVUSER_KV.search(kv):
         add("privileged-identity-arg", 22, "flag")
+    if _PRIVEXEC_NAME.search(name) and _PRIVEXEC_ARG.search(kv):
+        add("privileged-container-exec", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"
