@@ -1923,7 +1923,7 @@ function renderVs() {
     + '<li>you need <b>explainability</b>: every verdict names the exact rule and OWASP class it matched.</li>'
     + '<li>you want a <b>deterministic CI gate</b> — same input, same result, no model drift — to stop a PR that weakens a prompt or un-blocks a known injection.</li>'
     + '<li>you want to <b>harden the system prompt itself</b> (the 22-check scanner) — a static concern most runtime classifiers don’t cover.</li>'
-    + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF and command injection, and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
+    + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF, command injection, privileged identities, and Windows paths — 10 reason classes, 0 API — and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
     + '<li>you want it <b>free and 0-dependency</b>, vendored as one file, no key, no vendor lock-in.</li></ul></div>'
     + '<div class=card><div class=ey style="color:#ff8a34">Reach for a model layer when…</div><ul>'
     + '<li>the attack is <b>novel or semantic</b> — a paraphrase or social-engineering framing that shares no keywords or structure with known patterns.</li>'
@@ -1968,6 +1968,10 @@ function renderExample() {
   var rw = analyze(EX_WEAK), rh = analyze(EX_HARD), v = inspect(EX_OBF), v2 = inspect(EX_EXFIL);
   var tv = toolcheck.check('transfer_funds', { amount: 'all', to: 'attacker@evil.com' }, inspect);
   var tvc = tv.action === 'block' ? _RSEV.critical : tv.action === 'flag' ? _RSEV.high : _RSEV.pass;
+  var tvP = toolcheck.check('run_as', { user: 'root', command: 'whoami' }, inspect);
+  var tvPc = tvP.action === 'block' ? _RSEV.critical : tvP.action === 'flag' ? _RSEV.high : _RSEV.pass;
+  var tvW = toolcheck.check('read_file', { path: 'C:\\Windows\\System32\\config\\SAM' }, inspect);
+  var tvWc = tvW.action === 'block' ? _RSEV.critical : tvW.action === 'flag' ? _RSEV.high : _RSEV.pass;
   function _fwVc(x) { return x.action === 'block' ? _RSEV.critical : x.action === 'flag' ? _RSEV.high : _RSEV.pass; }
   function _fwMatches(x) {
     return (x.matches || []).map(function (m) {
@@ -2002,6 +2006,12 @@ function renderExample() {
     + '<div class=card><div class=ey>Proposed tool call (what an injected agent might try to run)</div><pre class=p>transfer_funds({ "amount": "all", "to": "attacker@evil.com" })</pre>'
     + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvc + '">' + esc(String(tv.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tv.risk) + ' · ' + esc((tv.reasons || []).map(reasonLabel).join('; ')) + '</span></div>'
     + '<div class=id style="margin-top:8px">REDCELL checks the tool name + argument values before the call runs, so an agent can block or require human approval for irreversible / exfiltrating actions. POST /toolcheck.</div></div>'
+    + '<div class=card style="margin-top:12px"><div class=ey>Proposed tool calls — the two newest reason classes (privilege impersonation, Windows sensitive paths)</div>'
+    + '<pre class=p>run_as({ "user": "root", "command": "whoami" })</pre>'
+    + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvPc + '">' + esc(String(tvP.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tvP.risk) + ' · ' + esc((tvP.reasons || []).map(reasonLabel).join('; ')) + '</span></div>'
+    + '<pre class=p style="margin-top:10px">read_file({ "path": "C:\\Windows\\System32\\config\\SAM" })</pre>'
+    + '<div style="margin-top:10px" class=verdict>verdict <span class=vb style="background:' + tvWc + '">' + esc(String(tvW.action).toUpperCase()) + '</span><span class=id>risk ' + esc(tvW.risk) + ' · ' + esc((tvW.reasons || []).map(reasonLabel).join('; ')) + '</span></div>'
+    + '<div class=id style="margin-top:8px">Newly added classes: <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">privileged-identity-arg</code> (an impersonation / role-assignment tool called with root/admin) and <code style="background:#0e1017;border:1px solid #232a3a;border-radius:4px;padding:1px 5px">windows-sensitive-path</code> (SAM hive, hosts, per-user .ssh/.aws keys). Both flag for human approval — POST /toolcheck.</div></div>'
     + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add this to your agent in 30s →</a></div>'
     + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a></div>'
     + '</div></body></html>';
@@ -2040,8 +2050,8 @@ function renderDocs() {
     + '<h2>API (0-API surfaces need no key)</h2>'
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
-    + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → risk of an agent tool call</span></div>'
-    + '<div><span style="color:#ff8a34">POST</span> /agentcheck <span style="color:#616b80">{ system_prompt?, input?, tool_call? } → unified verdict (all 3 surfaces)</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → allow / flag / block — 10 reason classes (dangerous names, data exfil, unbounded financial, sensitive files/env, SSRF, command-injection in an arg, Windows paths, privileged identities)</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /agentcheck <span style="color:#616b80">{ system_prompt?, input?, tool_call? } → unified verdict (scanner + input firewall + tool-call firewall)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /review <span style="color:#616b80">{ system_prompt } → a shareable /r/&lt;id&gt; report</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan <span style="color:#616b80">{ system_prompt } → live adversarial engine (uses model quota)</span></div>'
@@ -2087,15 +2097,15 @@ function openApiDoc() {
       '/toolcheck': {
         post: {
           summary: 'Assess a proposed agent tool/function call for risk (0 API).',
-          description: 'Given a {name, arguments} call, returns allow/flag/block by checking the tool name + argument values for destructive / exfil / privilege / SSRF / local-file / unbounded-financial patterns (reuses the firewall on arg values).',
+          description: 'Given a {name, arguments} call, returns allow/flag/block from 10 reason classes: the firewall bubble-up on the serialized argument values plus 9 tool-aware checks — dangerous-tool-name and tool-data-exfil block (score 40); unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path and privileged-identity-arg flag (score 22, for human approval).',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } },
-          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string' } } } } } } }, '400': { description: 'name required' } },
+          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string', enum: ['none', 'medium', 'high'] }, tool: { type: 'string' }, reasons: { type: 'array', items: { type: 'string', description: 'stable reason ids: dangerous-tool-name, tool-data-exfil, unbounded-financial-action, local-file-access, secret-env-access, ssrf-internal-target, command-injection-arg, windows-sensitive-path, privileged-identity-arg, plus firewall match ids bubbled up from the argument values' } } } } } } }, '400': { description: 'name required' } },
         },
       },
       '/agentcheck': {
         post: {
           summary: 'Unified check — run scanner + firewall(+semantic) + tool-call check in one call.',
-          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts. Reuses the same engines.',
+          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts ({scan, firewall, tool}). The tool surface carries the same 10 reason classes as /toolcheck (9 tool-aware + firewall bubble-up). Reuses the same engines.',
           requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { system_prompt: { type: 'string' }, input: { type: 'string' }, semantic: { type: 'boolean' }, tool_call: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } } } },
           responses: { '200': { description: 'unified verdict', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, verdict: { type: 'string', enum: ['allow', 'flag', 'block'] }, parts: { type: 'object' } } } } } }, '400': { description: 'provide at least one surface' } },
         },
