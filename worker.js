@@ -582,12 +582,13 @@ export default {
         const b = await request.json().catch(() => ({}));
         const lvl = LEVELS[(Number(b && b.level) || 1) - 1];
         if (!lvl) return json({ error: 'bad level' }, 400);
-        if (!b || !b.message) return json({ error: 'message required' }, 400);
+        const safeMsg = String((b && b.message) || '').slice(0, 2000);
+        if (!safeMsg.trim()) return json({ error: 'message required' }, 400);
         let keys; try { keys = JSON.parse(env.REDCELL_NIM_KEYS); } catch (e) { return json({ error: 'bad REDCELL_NIM_KEYS' }, 500); }
         try {
-          const t = await breachTurn(lvl, b.message, keys, env.REDCELL_TARGET_ENGINE || 'nemotron');
+          const t = await breachTurn(lvl, safeMsg, keys, env.REDCELL_TARGET_ENGINE || 'nemotron');
           if (env.BREACH_LOG && ctx) {
-            const rec = JSON.stringify({ ts: Date.now(), level: lvl.n, name: lvl.name, message: String(b.message).slice(0, 500), blocked: !!t.blocked, win: !!t.win });
+            const rec = JSON.stringify({ ts: Date.now(), level: lvl.n, name: lvl.name, message: safeMsg.slice(0, 500), blocked: !!t.blocked, win: !!t.win });
             ctx.waitUntil((async () => {
               try {
                 await env.BREACH_LOG.put('atk:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8), rec, { expirationTtl: 60 * 60 * 24 * 120 });
@@ -596,7 +597,7 @@ export default {
                 st.attempts++; if (t.win) st.wins++; if (t.blocked) st.blocked++;
                 await env.BREACH_LOG.put('stats', JSON.stringify(st));
                 // technique fingerprint: which firewall rules the attempt tripped — counts only, no message/PII
-                const fv = inspect(String(b.message));
+                const fv = inspect(safeMsg);
                 const ids = (fv.matches || []).map(function (m) { return m.id; }).filter(Boolean);
                 if (ids.length) {
                   const traw = await env.BREACH_LOG.get('techniques');
