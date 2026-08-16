@@ -450,16 +450,18 @@ export default {
     }
     // Agent tool-call firewall: assess a proposed {name, arguments} call → allow/flag/block.
     if (request.method === 'POST' && url.pathname === '/toolcheck') {
-      const b = await request.json().catch(() => ({}));
-      if (!b || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
+      let b;
+      try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
+      if (!b || typeof b !== 'object' || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
       bump(env, ctx, 'toolcheck');
       return json(toolcheck.check(String(b.name), b.arguments || {}, inspect));
     }
     // Unified agent check: run all three surfaces in one call and return the worst verdict.
     if (request.method === 'POST' && url.pathname === '/agentcheck') {
-      const b = await request.json().catch(() => ({}));
-      const hasTool = !!(b && b.tool_call && b.tool_call.name);
-      if (!b || (!b.system_prompt && !b.input && !hasTool)) {
+      let b;
+      try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
+      const hasTool = !!(b && typeof b === 'object' && b.tool_call && b.tool_call.name);
+      if (!b || typeof b !== 'object' || (!b.system_prompt && !b.input && !hasTool)) {
         return json({ error: 'provide at least one of: system_prompt, input, tool_call {name, arguments}' }, 400);
       }
       bump(env, ctx, 'agentcheck');

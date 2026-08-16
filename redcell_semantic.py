@@ -82,9 +82,12 @@ def _band_lex(s):
 
 
 def semantic_score_lexical(text):
+    text = text or ""
+    if len(text) > 2000:
+        text = text[:2000]
     best, near = 0.0, None
     for atk in ATTACKS:
-        s = _lex_sim(text or "", atk)
+        s = _lex_sim(text, atk)
         if s > best:
             best, near = s, atk
     return {"mode": "lexical", "score": round(best, 3), "nearest": near, "risk": _band_lex(best)}

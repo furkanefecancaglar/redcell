@@ -60,6 +60,8 @@
   function bandLex(s) { return s >= 0.34 ? 'high' : s >= 0.20 ? 'medium' : 'low'; }
 
   function semanticScoreLexical(text) {
+    let t = String(text || '');
+    if (t.length > 2000) t = t.slice(0, 2000);
     let best = 0.0, near = null;
     for (const atk of ATTACKS) {
       const s = lexSim(text || '', atk);
