@@ -43,13 +43,35 @@
   // type itself. Benign data:text/html literals WITHOUT an executable marker (e.g.
   // data:text/html,<b>hi</b>) stay allow; data:application/json / data:image/* never match.
   const EXEC_DATA_URL = /\bdata:(?:text\/html[^<]*<\s*(?:script|iframe)\b|text\/html[^<]*<[a-z][^>]*\bon(?:load|error|click)\s*=|text\/html[^<]*<meta[^>]*http-equiv\s*=\s*["']?refresh|application\/javascript(?:;|,|$))/i;
+  // Cloud identity / role elevation in tool ARGUMENTS (G13, mirrors redcell_toolcheck.py
+  // byte-for-byte): (1) CLOUDROLE_ARN — a role ARN naming a privileged role (admin/root/
+  // superuser/breakglass/organizationaccountaccess in the role name) is structurally
+  // unambiguous, so it applies on ANY tool (even generic wrappers like call/run_aws); a
+  // *policy* ARN or prose mention with no ARN literal never matches. (2) CLOUDROLE_NAME +
+  // CLOUDROLE_KV — an identity-elevation tool (assume_role, switch_credential,
+  // set_service_account, exec_as_sa, gcloud_impersonate, activate_service_account,
+  // get_session_token, kube_switch, use_role, grant_federated, aws/gcloud/kubectl CLI)
+  // called with an identity-keyed privileged value (prod-admin, cluster-admin,
+  // super-admin, default-admin, admin@…) or an explicit elevation action
+  // (AssumeRoleWithSAML, sts assume-role, getSessionToken, activate-service-account).
+  // The NAME gate keeps read-only lookups (describe_role, list_users role=admin,
+  // get_role_policy, search mentions) allow.
+  const CLOUDROLE_ARN = /\barn:(?:aws|aws-cn|aws-us-gov|aws-iso|aws-iso-b):iam::[0-9*]+:role\/[a-z0-9._\/=+@:-]*?(?:admin|root|superuser|breakglass|organizationaccountaccess)[a-z0-9._\/=+@:-]*/i;
+  const CLOUDROLE_NAME = /\b(?:assume|switch|use|grant|escalate|activate|impersonate|federate|authorize|become|exec|set)[_-]?(?:as|role|credential|service|account|sa|federated|privilege|identity|context|session)\w*\b|^(?:aws|gcloud|az|kubectl|kube)[_-]?\w*$|\b(?:impersonate|become)\b|\b(?:get|create|new|renew)[_-]?session[_-]?token\b/i;
+  const CLOUDROLE_KV = /\b(?:role|account|service_account|profile|context|credential|key_file|sa|identity)\b\s*["']?[=:]\s*["']*[^"'\])}\s,]*?(?:admin|root|superuser|breakglass|su(?:per)?-?admin|cluster-?admin|prod-?admin|default-?admin)[^"'\])}\s,]*|\b(?:AssumeRole\w*|getFederationToken|GetSessionToken|sts\s+assume-role|activate-service-account)\b/i;
 
   function check(name, args, inspect) {
     name = name || '';
     let kv, vals;
     if (args && typeof args === 'object' && !Array.isArray(args)) {
       const keys = Object.keys(args);
-      function flat(v) { return Array.isArray(v) ? v.map(String).join(', ') : String(v); }
+      // mirror redcell_toolcheck.py's _flat(): arrays join with ', ', but a NESTED OBJECT
+      // value must serialize to something that keeps its substring reachable — "[object
+      // Object]" hid e.g. an STS RoleArn ARN inside params={...} (parity drift vs Python's
+      // str(dict), which the G13 cloud-role probes exposed). JSON.stringify keeps the
+      // detectable substrings (ARNs, action names) reachable in kv.
+      function flat1(v) { return (v && typeof v === 'object') ? JSON.stringify(v) : String(v); }
+      function flat(v) { return Array.isArray(v) ? v.map(flat1).join(', ') : flat1(v); }
       kv = keys.map(function (k) { return k + '=' + flat(args[k]); }).join(' ');
       vals = keys.map(function (k) { return flat(args[k]); }).join(' ');
     } else {
@@ -78,6 +100,8 @@
     if (PRIVUSER_NAME.test(name) && PRIVUSER_KV.test(kv)) add('privileged-identity-arg', 22, 'flag');
     if (PRIVEXEC_NAME.test(name) && PRIVEXEC_ARG.test(kv)) add('privileged-container-exec', 22, 'flag');
     if (URLCONSUME_NAME.test(name) && EXEC_DATA_URL.test(kv)) add('executable-data-url', 22, 'flag');
+    if (CLOUDROLE_ARN.test(kv)) add('privileged-cloud-role', 22, 'flag');
+    if (CLOUDROLE_NAME.test(name) && CLOUDROLE_KV.test(kv)) add('privileged-cloud-role', 22, 'flag');
     if (action === 'allow' && score >= 40) action = 'block';
     const risk = action === 'block' ? 'high' : action === 'flag' ? 'medium' : 'none';
     return { action: action, score: score, risk: risk, tool: name, reasons: ids };

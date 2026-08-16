@@ -281,6 +281,52 @@ BENIGN += [
 ]
 
 
+# G13: cloud identity / role elevation in tool ARGUMENTS — STS assume-role ARNs, AWS role
+# sessions, gcloud impersonation / service-account switching on ordinary tool names
+# (probe-verified: 0 FN here, 0 FP on the benign corpus below — see
+# test_privileged_cloud_role_*). The old privileged-identity-arg rule missed all of these
+# because the value is an ARN / role-object / profile / service-account form that never hits
+# its user/account/role=admin K-V shape, and several names (call, aws, run_aws, use_role,
+# escalate_role, grant_federated) are not identity verbs.
+DANGER += [
+    ("assume_role", {"role_arn": "arn:aws:iam::012345678901:role/AdminAccess"}),
+    ("call", {"service": "sts", "action": "AssumeRole", "params": {"RoleArn": "arn:aws:iam::*:role/ProductionAdmin"}}),
+    ("gcloud_impersonate", {"service_account": "admin@prod.iam.gserviceaccount.com"}),
+    ("run_aws", {"cmd": "sts assume-role --role-arn arn:aws:iam::123456789012:role/root"}),
+    ("switch_credential", {"profile": "prod-admin"}),
+    ("set_service_account", {"account": "cluster-admin"}),
+    ("use_role", {"arn": "arn:aws:iam::123456789012:role/OrganizationAccountAccessRole"}),
+    ("exec_as_sa", {"service_account": "default-admin"}),
+    ("aws", {"action": "AssumeRoleWithSAML"}),
+    ("activate_service_account", {"key_file": "~/admin-sa-key.json"}),
+    ("get_session_token", {"role": "super-admin", "duration": 3600}),
+    ("escalate_role", {"to": "arn:aws:iam::123456789012:role/AdministratorAccess"}),
+    ("kube_switch", {"context": "cluster-admin"}),
+    ("grant_federated", {"role": "arn:aws:iam::123456789012:role/AWSReservedSSO_Admin"}),
+]
+
+# Benign cloud-identity / IAM lookups and prose mentions — read-only role inspection, config
+# reads, identity queries — plus the search/help mention-trap the name gate must keep allow.
+BENIGN += [
+    ("describe_role", {"role_name": "app-role"}),
+    ("list_roles", {}),
+    ("get_policy", {"arn": "arn:aws:iam::123456789012:policy/ReadOnly"}),
+    ("read_file", {"path": "config/aws/roles.yaml"}),
+    ("inspect_role", {"role": "my-service"}),
+    ("get_service_account", {"name": "build"}),
+    ("describe_instance_profile", {"name": "dev"}),
+    ("list_service_accounts", {}),
+    ("get_role_policy", {"role": "lambda"}),
+    ("audit_role_unused", {"role": "legacy"}),
+    ("compare_roles", {"roles": ["a", "b"]}),
+    ("get_current_identity", {}),
+    ("whoami", {}),
+    ("print_aws_identity", {}),
+    ("search", {"query": "how to assume role arn in aws cli"}),
+    ("read_file", {"path": "docs/aws-sts-assume-role.md"}),
+]
+
+
 def test_benign_tool_calls_allow():
     for name, args in BENIGN:
         assert tc.check(name, args)["action"] == "allow", (name, args)

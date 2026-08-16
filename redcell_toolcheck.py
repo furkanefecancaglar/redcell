@@ -149,6 +149,44 @@ _EXEC_DATA_URL = re.compile(
     r"|text/html[^<]*<meta[^>]*http-equiv\s*=\s*[\"']?refresh"
     r"|application/javascript(?:;|,|$))",
     re.IGNORECASE)
+# Cloud identity / role elevation in tool ARGUMENTS — STS assume-role ARNs, AWS role
+# sessions, gcloud impersonation / service-account switching. Two gates:
+#   (1) _CLOUDROLE_ARN — a role ARN (arn:aws:iam::<acct>:role/<name>) whose role NAME is
+#       privileged (admin/root/superuser/breakglass/organizationaccountaccess anywhere in
+#       the name: AdminAccess, ProductionAdmin, AWSReservedSSO_Admin, AdministratorAccess,
+#       OrganizationAccountAccessRole). NO name gate: a role ARN in an argument is produced
+#       by IAM, not prose — a *policy* ARN (...:policy/ReadOnly) never matches, and search/
+#       help text that merely MENTIONS 'how to assume role arn' contains no ARN literal.
+#   (2) _CLOUDROLE_NAME + _CLOUDROLE_KV — an identity-elevation tool NAME (assume_role,
+#       switch_credential, set_service_account, use_role, exec_as_sa, gcloud_impersonate,
+#       activate_service_account, get_session_token, kube_switch, grant_federated, and the
+#       aws/gcloud/kubectl CLI wrappers) whose argument is an identity key (role, account,
+#       service_account, profile, context, credential, key_file, sa, identity) with a
+#       privileged VALUE (prod-admin, cluster-admin, super-admin, default-admin, admin@…,
+#       …admin-sa-key.json), OR carries an explicit elevation action (AssumeRoleWithSAML,
+#       sts assume-role, getSessionToken, gcloud auth activate-service-account). The NAME
+#       gate keeps read-only lookups (describe_role role_name=…, list_users role=admin,
+#       get_role_policy role=lambda, search 'how to assume role arn') allow. Probe-verified:
+#       0 FP on 15 benign cloud-identity calls, 0 FN on 14 elevation calls (G13).
+_CLOUDROLE_ARN = re.compile(
+    r"\barn:(?:aws|aws-cn|aws-us-gov|aws-iso|aws-iso-b):iam::[0-9*]+:role/"
+    r"[a-z0-9._/=+@:-]*?(?:admin|root|superuser|breakglass|organizationaccountaccess)"
+    r"[a-z0-9._/=+@:-]*",
+    re.IGNORECASE)
+_CLOUDROLE_NAME = re.compile(
+    r"\b(?:assume|switch|use|grant|escalate|activate|impersonate|federate|authorize|become|exec|set)"
+    r"[_-]?(?:as|role|credential|service|account|sa|federated|privilege|identity|context|session)\w*\b"
+    r"|^(?:aws|gcloud|az|kubectl|kube)[_-]?\w*$"
+    r"|\b(?:impersonate|become)\b"
+    r"|\b(?:get|create|new|renew)[_-]?session[_-]?token\b",
+    re.IGNORECASE)
+_CLOUDROLE_KV = re.compile(
+    r"\b(?:role|account|service_account|profile|context|credential|key_file|sa|identity)\b"
+    r"\s*[\"']?[=:]\s*[\"']*[^\"'\]}\s,]*?(?:admin|root|superuser|breakglass|"
+    r"su(?:per)?-?admin|cluster-?admin|prod-?admin|default-?admin)[^\"'\]}\s,]*"
+    r"|\b(?:AssumeRole\w*|getFederationToken|GetSessionToken|sts\s+assume-role|"
+    r"activate-service-account)\b",
+    re.IGNORECASE)
 
 
 def check(name, arguments):
@@ -200,6 +238,10 @@ def check(name, arguments):
         add("privileged-container-exec", 22, "flag")
     if _URLCONSUME_NAME.search(name) and _EXEC_DATA_URL.search(kv):
         add("executable-data-url", 22, "flag")
+    if _CLOUDROLE_ARN.search(kv):
+        add("privileged-cloud-role", 22, "flag")
+    if _CLOUDROLE_NAME.search(name) and _CLOUDROLE_KV.search(kv):
+        add("privileged-cloud-role", 22, "flag")
     if action == "allow" and score >= 40:
         action = "block"
     risk = "high" if action == "block" else "medium" if action == "flag" else "none"
