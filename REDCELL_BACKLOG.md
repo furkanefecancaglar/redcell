@@ -744,3 +744,7 @@ Detector probing is now at strong diminishing returns (every clean gap through G
 ## ▶ round 11 — CORE ARCHITECTURE: LOGGING ISOLATION
 - [x] Centralize all `console.log` / `console.error` calls in `worker.js` (if any exist) into a dedicated logging utility function to prevent accidental leakage of sensitive PII or prompt data into Cloudflare's runtime logs.
 - [x] Scan for any lingering `console.log` calls in the codebase and remove or mask them. (Scanned: None found except in test scripts, keeping environment clean).
+
+## ▶ round 12 — COMPONENT & PERFORMANCE OPTIMIZATION
+- [x] Review the custom SVG assets in `worker.js` (FAVICON, OG_SVG) and ensure they are minified correctly to save on bundle size.
+- [x] Pre-warm the cache for dynamic content where applicable or check cache headers on static assets.

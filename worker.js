@@ -92,7 +92,7 @@ const REASON_LABELS = {
 };
 function reasonLabel(id) { return REASON_LABELS[id] || id; }
 function html(body, status = 200, extra) {
-  return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8' }, CORS, extra || {}) });
+  return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800' }, CORS, extra || {}) });
 }
 
 // Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
@@ -351,8 +351,8 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') { bump(env, ctx, 'landing'); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
-    if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
-    if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+    if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
+    if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
     if (url.pathname === '/ci') return html(renderCI());
     if (url.pathname === '/mcp') return html(renderMCP());
     if (url.pathname === '/quickstart') return html(renderQuickstart());
@@ -1331,27 +1331,7 @@ try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').va
 </script></div></body></html>`;
 
 /* ---------------- Open Graph share image (/og.svg) ---------------- */
-const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Archivo, Segoe UI, Arial, sans-serif">
-<rect width="1200" height="630" fill="#0b0d12"/>
-<defs><radialGradient id="g" cx="82%" cy="0%" r="60%"><stop offset="0" stop-color="#ff3b46" stop-opacity="0.18"/><stop offset="1" stop-color="#ff3b46" stop-opacity="0"/></radialGradient></defs>
-<rect width="1200" height="630" fill="url(#g)"/>
-<g transform="translate(90,86)">
-<rect x="0" y="0" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="0" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="0" width="15" height="15" rx="2" fill="#ff3b46"/>
-<rect x="0" y="20" width="15" height="15" rx="2" fill="#3a4152"/><rect x="20" y="20" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="40" y="20" width="15" height="15" rx="2" fill="#3a4152"/>
-<rect x="0" y="40" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="40" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="40" width="15" height="15" rx="2" fill="#ff3b46"/>
-<text x="76" y="46" font-size="40" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text>
-</g>
-<text x="90" y="300" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">The security layer</text>
-<text x="90" y="384" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">for <tspan fill="#ff3b46">AI agents.</tspan></text>
-<text x="92" y="452" font-size="27" fill="#9aa4b6">Test, red-team &amp; firewall your agents against prompt injection.</text>
-<g font-family="monospace" font-size="20" fill="#616b80">
-<text x="92" y="546">RUNTIME FIREWALL</text><text x="372" y="546" fill="#3a4152">·</text>
-<text x="392" y="546">LIVE RED-TEAM</text><text x="606" y="546" fill="#3a4152">·</text>
-<text x="626" y="546">OWASP LLM TOP 10</text>
-</g>
-<rect x="90" y="574" width="1020" height="2" fill="#232a3a"/>
-<text x="90" y="612" font-family="monospace" font-size="19" fill="#33d17f">● redcell.redcellv1.workers.dev</text>
-</svg>`;
+const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Archivo, Segoe UI, Arial, sans-serif"><rect width="1200" height="630" fill="#0b0d12"/><defs><radialGradient id="g" cx="82%" cy="0%" r="60%"><stop offset="0" stop-color="#ff3b46" stop-opacity="0.18"/><stop offset="1" stop-color="#ff3b46" stop-opacity="0"/></radialGradient></defs><rect width="1200" height="630" fill="url(#g)"/><g transform="translate(90,86)"><rect x="0" y="0" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="0" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="0" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="0" y="20" width="15" height="15" rx="2" fill="#3a4152"/><rect x="20" y="20" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="40" y="20" width="15" height="15" rx="2" fill="#3a4152"/><rect x="0" y="40" width="15" height="15" rx="2" fill="#ff3b46"/><rect x="20" y="40" width="15" height="15" rx="2" fill="#3a4152"/><rect x="40" y="40" width="15" height="15" rx="2" fill="#ff3b46"/><text x="76" y="46" font-size="40" font-weight="900" fill="#eaedf4" letter-spacing="-1">RED<tspan fill="#ff3b46">CELL</tspan></text></g><text x="90" y="300" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">The security layer</text><text x="90" y="384" font-size="76" font-weight="900" fill="#eaedf4" letter-spacing="-2.5">for <tspan fill="#ff3b46">AI agents.</tspan></text><text x="92" y="452" font-size="27" fill="#9aa4b6">Test, red-team &amp; firewall your agents against prompt injection.</text><g font-family="monospace" font-size="20" fill="#616b80"><text x="92" y="546">RUNTIME FIREWALL</text><text x="372" y="546" fill="#3a4152">·</text><text x="392" y="546">LIVE RED-TEAM</text><text x="606" y="546" fill="#3a4152">·</text><text x="626" y="546">OWASP LLM TOP 10</text></g><rect x="90" y="574" width="1020" height="2" fill="#232a3a"/><text x="90" y="612" font-family="monospace" font-size="19" fill="#33d17f">● redcell.redcellv1.workers.dev</text></svg>`;
 
 /* ---------------- SEO: robots + sitemap ---------------- */
 const ROBOTS_TXT = `User-agent: *
