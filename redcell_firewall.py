@@ -371,19 +371,46 @@ def inspect(text: str) -> Verdict:
     return Verdict(action, score, risk, matches)
 
 
-def _thread_text(turns):
-    """Join USER turns only (strings, or {'role','content'} dicts) into one span.
-    System/assistant turns are intentionally excluded — they are the trusted
-    context, not the untrusted surface."""
-    user_parts = []
+_RANK = {"allow": 0, "flag": 1, "block": 2}
+
+
+def _thread_user_parts(turns):
+    """The untrusted USER surface of a turn list. Strings are user turns (role-tag-less
+    payloads — corpus and wire format — are all user). Dicts contribute only when they
+    carry `role == "user"` or carry content/text with no non-user role tag. System /
+    assistant turns are the trusted context and are NEVER joined in."""
+    parts = []
     for t in turns or []:
         if isinstance(t, str):
-            user_parts.append(t)
-        elif isinstance(t, dict) and "content" in t:
-            user_parts.append(str(t["content"]))
-        elif isinstance(t, dict) and "text" in t:
-            user_parts.append(str(t["text"]))
-    return "\n".join(user_parts)
+            parts.append(t)
+        elif isinstance(t, dict):
+            role = t.get("role")
+            if role is not None and role != "user":
+                continue
+            body = t.get("content")
+            if body is None:
+                body = t.get("text", "")
+            parts.append(str(body))
+    return parts
+
+
+def _turn_text(t):
+    if isinstance(t, str):
+        return t
+    if isinstance(t, dict):
+        body = t.get("content")
+        if body is None:
+            body = t.get("text", "")
+        return str(body)
+    return ""
+
+
+def _worst_verdict(verdicts):
+    best = None
+    for v in verdicts:
+        if best is None or (_RANK[v.action], v.score) > (_RANK[best.action], best.score):
+            best = v
+    return best
 
 
 def inspect_thread(turns):
@@ -391,28 +418,61 @@ def inspect_thread(turns):
 
     Catches split-directive attacks — a directive planted across turns ("forget
     all" then "previous instructions") that a stateless per-message inspect()
-    lets through — by newline-joining the user turns and re-running the full
-    rule set on the combined span.
+    lets through — by joining the user turns (\\n first, " " fallback when the
+    newline join allows) and re-running the full rule set on the combined span.
 
-    The joined verdict never replaces the per-message results: it is returned
-    alongside them, and it is only stricter than stateless when the joined span
-    itself matches. It does NOT synthesize intent across turns (anaphora,
+    The joined verdict never blocks on its own: a joined 'block' only survives
+    when the original stateless per-message pass already flagged at least one
+    turn (this is what keeps the FP_STRESS boundary threads from hard-blocking —
+    a two-turn benign ops note like "we decided to disable" / "the safety
+    guidelines" reads like a directive once joined, so it caps at 'flag' for
+    review). It does NOT synthesize intent across turns (anaphora,
     step-references) — that class is a semantic/model-layer concern.
 
-    Returns dict: {action, score, risk, matches, per_message} where per_message
-    is the list of stateless verdicts (one per message)."""
-    joined = inspect(_thread_text(turns))
-    ids = {m.id for m in joined.matches}
+    Returns dict: {action, score, risk, matches, match_ids, per_message,
+    stateless, join_mode, note} where per_message holds the stateless verdict
+    of every turn and stateless is the worst of those."""
+    parts = _thread_user_parts(turns)
+    per_verdicts = []
     per_message = []
     for t in turns or []:
-        txt = t if isinstance(t, str) else (t.get("content") or t.get("text") or "")
-        v = inspect(txt)
+        v = inspect(_turn_text(t))
+        per_verdicts.append(v)
         per_message.append({"action": v.action, "score": v.score, "risk": v.risk,
                             "match_ids": [m.id for m in v.matches]})
-    return {"action": joined.action, "score": joined.score, "risk": joined.risk,
+
+    joined = inspect("\n".join(parts))
+    mode = "join-nl"
+    # join-sp fallback: only when the newline join allows, so spacing alone can
+    # never downgrade a join-nl block/flag; the stricter of the two spans wins.
+    if joined.action == "allow" and parts:
+        sp = inspect(" ".join(parts))
+        if _RANK[sp.action] > _RANK[joined.action]:
+            joined, mode = sp, "join-sp"
+
+    worst = _worst_verdict(per_verdicts)
+    if worst is None:
+        worst = inspect("")
+    # FP guard: the joined pass may flag on its own but never BREAKS a clean
+    # stateless pass into a hard block — that requires stateless to have fired.
+    eff_action = joined.action
+    if eff_action == "block" and worst.action == "allow":
+        eff_action = "flag"
+
+    if _RANK[eff_action] >= _RANK[worst.action]:
+        combined = joined
+        if eff_action != joined.action:
+            combined = Verdict(eff_action, joined.score, joined.risk, joined.matches)
+    else:
+        combined = worst
+    return {"action": combined.action, "score": combined.score, "risk": combined.risk,
             "matches": [{"id": m.id, "owasp": m.owasp, "severity": m.severity,
-                         "why": m.why, "snippet": m.snippet} for m in joined.matches],
-            "match_ids": sorted(ids), "per_message": per_message,
+                         "why": m.why, "snippet": m.snippet} for m in combined.matches],
+            "match_ids": sorted({m.id for m in combined.matches}),
+            "per_message": per_message,
+            "stateless": {"action": worst.action, "score": worst.score, "risk": worst.risk,
+                          "match_ids": [m.id for m in worst.matches]},
+            "join_mode": mode,
             "note": "joined-history pass; does not synthesize intent across turns"}
 
 

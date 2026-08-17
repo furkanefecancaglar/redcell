@@ -110,6 +110,26 @@ function bump(env, ctx, key) {
   })());
 }
 
+// Back pressure (system-design-primer): quota-spending / store-writing endpoints get a
+// fixed-window rate limit keyed by client IP. 429 + Retry-After tells the client to
+// back off instead of hammering the NIM quota or KV. Best-effort: on KV errors we fail
+// open (no limit) rather than break the endpoint. Bucket: N per windowMs per IP.
+async function rateLimit(env, ctx, key, limit, windowMs) {
+  if (!env || !env.LEADS || !ctx) return null;
+  const ip = (ctx.request ? ctx.request.headers.get('CF-Connecting-IP') : null) || 'anon';
+  const k = 'rl:' + key + ':' + ip;
+  try {
+    const raw = await env.LEADS.get(k);
+    const now = Date.now();
+    let rec = raw ? JSON.parse(raw) : { n: 0, w: now };
+    if (now - rec.w > windowMs) { rec = { n: 0, w: now }; }
+    rec.n += 1;
+    await env.LEADS.put(k, JSON.stringify(rec), { expirationTtl: Math.ceil(windowMs / 1000) + 60 });
+    if (rec.n > limit) return { retryAfter: Math.ceil((rec.w + windowMs - now) / 1000) || 1 };
+    return null;
+  } catch (e) { return null; } // fail open — the limit is protective, not critical
+}
+
 /* ---------------- live adversarial engine (mirrors redcell_engine.py) ---------------- */
 const SEVW = { critical: 34, high: 20, medium: 11, low: 5 };
 const CORPUS = [
@@ -574,6 +594,8 @@ export default {
     // persist it under an unguessable id, and hand back a shareable report URL. The email
     // (if given) is stored as a lead. The prompt lives in KV, never in a query string.
     if (request.method === 'POST' && url.pathname === '/review') {
+      const rl = await rateLimit(env, ctx, 'review', 10, 60_000); // 10 reports/min/IP (each writes KV)
+      if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
       const prompt = String((b && b.system_prompt) || '').slice(0, 8000);
       if (!prompt.trim()) return json({ error: 'a prompt is required' }, 400);
@@ -640,6 +662,8 @@ export default {
       if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'live engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
       if (env.REDCELL_SCAN_TOKEN && request.headers.get('X-REDCELL-Token') !== env.REDCELL_SCAN_TOKEN)
         return json({ error: 'unauthorized — /scan requires header X-REDCELL-Token' }, 401);
+      const rl = await rateLimit(env, ctx, 'scan', 5, 60_000); // 5 live scans/min/IP (each costs NIM quota)
+      if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
       bump(env, ctx, 'scan_live');
@@ -654,6 +678,8 @@ export default {
       if (request.method === 'GET') return new Response(BREACH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
       if (request.method === 'POST') {
         if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'game engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
+        const rl = await rateLimit(env, ctx, 'breach', 5, 60_000); // each attempt costs NIM quota
+        if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
         const b = await request.json().catch(() => ({}));
         const lvl = LEVELS[(Number(b && b.level) || 1) - 1];
         if (!lvl) return json({ error: 'bad level' }, 400);

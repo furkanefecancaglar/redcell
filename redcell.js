@@ -266,28 +266,85 @@
   }
 
   // Mirror of redcell_firewall.inspect_thread (byte-parity). Join USER turns
-  // only (newline-joined), re-run the full rule set on the joined span.
-  // Returns the joined verdict plus per-message stateless verdicts. Does NOT
-  // synthesize intent across turns (anaphora/step-references).
-  function inspectThread(turns) {
-    const userParts = [];
+  // only (\n first, ' ' fallback when the newline join allows), re-run the full
+  // rule set on the joined span. The joined verdict never blocks on its own:
+  // a joined 'block' only survives when the stateless per-message pass already
+  // flagged at least one turn (caps at 'flag' otherwise). Does NOT synthesize
+  // intent across turns (anaphora/step-references).
+  const RANK = { allow: 0, flag: 1, block: 2 };
+
+  function threadUserParts(turns) {
+    const parts = [];
     for (const t of (turns || [])) {
-      if (typeof t === 'string') userParts.push(t);
-      else if (t && typeof t.content === 'string') userParts.push(t.content);
-      else if (t && typeof t.text === 'string') userParts.push(t.text);
+      if (typeof t === 'string') parts.push(t);
+      else if (t && typeof t === 'object') {
+        const role = t.role;
+        if (role != null && role !== 'user') continue;
+        let body = t.content;
+        if (body == null) body = t.text;
+        if (body == null) body = '';
+        parts.push(String(body));
+      }
     }
-    const joined = inspect(userParts.join('\n'));
-    const matchIds = joined.matches.map((m) => m.id).filter((id, i, a) => a.indexOf(id) === i).sort();
+    return parts;
+  }
+
+  function turnText(t) {
+    if (typeof t === 'string') return t;
+    if (t && typeof t === 'object') {
+      let body = t.content;
+      if (body == null) body = t.text;
+      if (body == null) body = '';
+      return String(body);
+    }
+    return '';
+  }
+
+  function worstVerdict(verdicts) {
+    let best = null;
+    for (const v of verdicts) {
+      if (!best || RANK[v.action] > RANK[best.action]
+        || (RANK[v.action] === RANK[best.action] && v.score > best.score)) best = v;
+    }
+    return best;
+  }
+
+  function inspectThread(turns) {
+    const parts = threadUserParts(turns);
+    const perVerdicts = [];
     const perMessage = [];
     for (const t of (turns || [])) {
-      const txt = typeof t === 'string' ? t : (t && (t.content || t.text)) || '';
-      const v = inspect(String(txt));
+      const v = inspect(turnText(t));
+      perVerdicts.push(v);
       perMessage.push({ action: v.action, score: v.score, risk: v.risk, match_ids: v.matches.map((m) => m.id) });
     }
+    let joined = inspect(parts.join('\n'));
+    let mode = 'join-nl';
+    // join-sp fallback: only when the newline join allows, so spacing alone can
+    // never downgrade a join-nl block/flag; the stricter of the two spans wins.
+    if (joined.action === 'allow' && parts.length) {
+      const sp = inspect(parts.join(' '));
+      if (RANK[sp.action] > RANK[joined.action]) { joined = sp; mode = 'join-sp'; }
+    }
+    const worst = worstVerdict(perVerdicts) || inspect('');
+    // FP guard: the joined pass may flag on its own but never BREAKS a clean
+    // stateless pass into a hard block — that requires stateless to have fired.
+    let effAction = joined.action;
+    if (effAction === 'block' && worst.action === 'allow') effAction = 'flag';
+    let combined;
+    if (RANK[effAction] >= RANK[worst.action]) {
+      combined = effAction === joined.action ? joined
+        : { action: effAction, score: joined.score, risk: joined.risk, matches: joined.matches };
+    } else {
+      combined = worst;
+    }
     return {
-      action: joined.action, score: joined.score, risk: joined.risk,
-      matches: joined.matches.map((m) => ({ id: m.id, owasp: m.owasp, severity: m.severity, why: m.why, snippet: m.snippet })),
-      match_ids: matchIds, per_message: perMessage,
+      action: combined.action, score: combined.score, risk: combined.risk,
+      matches: combined.matches.map((m) => ({ id: m.id, owasp: m.owasp, severity: m.severity, why: m.why, snippet: m.snippet })),
+      match_ids: Array.from(new Set(combined.matches.map((m) => m.id))).sort(),
+      per_message: perMessage,
+      stateless: { action: worst.action, score: worst.score, risk: worst.risk, match_ids: worst.matches.map((m) => m.id) },
+      join_mode: mode,
       note: 'joined-history pass; does not synthesize intent across turns',
     };
   }
