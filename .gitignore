@@ -11,3 +11,6 @@ dist/
 .eggs/
 .scan_token
 .wrangler/
+
+.venv/
+*.db
