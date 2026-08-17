@@ -10,3 +10,4 @@ build/
 dist/
 .eggs/
 .scan_token
+.wrangler/
