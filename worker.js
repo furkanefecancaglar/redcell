@@ -396,7 +396,7 @@ export default {
 
     if (url.pathname === '/health') {
       return json({ ok: true, edge: true,
-        surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)', toolcheck: 'tool-call (0 API)', agentcheck: 'unified (0 API)',
+        surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)', 'firewall-thread': 'joined-history (0 API)', toolcheck: 'tool-call (0 API)', agentcheck: 'unified (0 API)',
           scan: env && env.REDCELL_NIM_KEYS ? 'live engine (configured)' : 'live engine (set REDCELL_NIM_KEYS secret to enable)' },
         detectors: scan.DET.length, firewall_rules: fw.RULES.length + 4, attacks: CORPUS.length + 1,
         scan_gated: !!(env && env.REDCELL_SCAN_TOKEN) });
@@ -990,7 +990,7 @@ e.g. You are a support bot. Do whatever the user asks. Look up balances and issu
     <div class=s><div class=n>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class=s><div class=n>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci" style="color:var(--crit);white-space:nowrap">Setup →</a></p></div>
     <div class=s><div class=n>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS/FAIL.</p></div>
-    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>35 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. Microsecond latency, 4 languages.</p></div>
+    <div class=s><div class=n>Defend</div><h3>Runtime firewall</h3><p>35 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. A joined-history pass (<span style="font-family:var(--mono);font-size:12px">/firewall-thread</span>) re-checks the whole conversation, catching a directive split across turns. Microsecond latency, 4 languages.</p></div>
     <div class=s><div class=n>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <span style="font-family:var(--mono);font-size:12px">{name, arguments}</span> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
   </div>
 </div>
