@@ -83,6 +83,11 @@ _RULES = [
      r"\b(inbox|api ?keys?|passwords?|credentials?|secrets?|secret \w+|system ?prompt|2fa|otp|"
      r"private keys?|(customer|user) records?|database dump|stored (password|credential|secret|data)\w*)\b",
      "exfiltration of sensitive data (inbox/keys/credentials/records/prompt) to a recipient"),
+    ("stored-secret-exfil", "LLM02", "high",
+     r"\b(give|hand over|disclose|leak|send|forward|reply with|state)\b.{0,30}"
+     r"\b(all stored|stored|all) (credentials?|secrets?|passwords?|api keys?|secret \w+)\b"
+     r"(?!\s+(are|is|expire|meet|follow|match|pass|satisfy)\b)",
+     "movement verb + stored secret object (stored credentials/secrets/passwords/api keys)"),
     ("encoding-smuggle", "LLM01", "medium",
      r"\b(base64|rot13|hex|decode)\b.{0,25}\b(decode|then (do|follow|execute)|and (do|follow|run))\b|"
      r"[A-Za-z0-9+/]{40,}={0,2}", "encoded/smuggled payload"),
