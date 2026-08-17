@@ -300,6 +300,15 @@
     return '';
   }
 
+  function isUserSurface(t) {
+    if (typeof t === 'string') return true;
+    if (t && typeof t === 'object') {
+      const role = t.role;
+      return role == null || role === 'user';
+    }
+    return false;
+  }
+
   function worstVerdict(verdicts) {
     let best = null;
     for (const v of verdicts) {
@@ -311,11 +320,11 @@
 
   function inspectThread(turns) {
     const parts = threadUserParts(turns);
-    const perVerdicts = [];
+    const userVerdicts = [];
     const perMessage = [];
     for (const t of (turns || [])) {
       const v = inspect(turnText(t));
-      perVerdicts.push(v);
+      if (isUserSurface(t)) userVerdicts.push(v);
       perMessage.push({ action: v.action, score: v.score, risk: v.risk, match_ids: v.matches.map((m) => m.id) });
     }
     let joined = inspect(parts.join('\n'));
@@ -326,7 +335,7 @@
       const sp = inspect(parts.join(' '));
       if (RANK[sp.action] > RANK[joined.action]) { joined = sp; mode = 'join-sp'; }
     }
-    const worst = worstVerdict(perVerdicts) || inspect('');
+    const worst = worstVerdict(userVerdicts) || inspect('');
     // FP guard: the joined pass may flag on its own but never BREAKS a clean
     // stateless pass into a hard block — that requires stateless to have fired.
     let effAction = joined.action;

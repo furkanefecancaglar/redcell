@@ -405,6 +405,19 @@ def _turn_text(t):
     return ""
 
 
+def _is_user_surface(t):
+    """True when a turn belongs to the untrusted USER surface (joins + drives the
+    thread verdict). Strings are always user; dicts are user unless they carry a
+    non-user role tag. System/assistant turns stay in per_message for visibility
+    but never drive the combined verdict or the FP guard."""
+    if isinstance(t, str):
+        return True
+    if isinstance(t, dict):
+        role = t.get("role")
+        return role is None or role == "user"
+    return False
+
+
 def _worst_verdict(verdicts):
     best = None
     for v in verdicts:
@@ -431,13 +444,14 @@ def inspect_thread(turns):
 
     Returns dict: {action, score, risk, matches, match_ids, per_message,
     stateless, join_mode, note} where per_message holds the stateless verdict
-    of every turn and stateless is the worst of those."""
+    of every turn and stateless is the worst of the USER turns."""
     parts = _thread_user_parts(turns)
-    per_verdicts = []
+    user_verdicts = []
     per_message = []
     for t in turns or []:
         v = inspect(_turn_text(t))
-        per_verdicts.append(v)
+        if _is_user_surface(t):
+            user_verdicts.append(v)
         per_message.append({"action": v.action, "score": v.score, "risk": v.risk,
                             "match_ids": [m.id for m in v.matches]})
 
@@ -450,7 +464,7 @@ def inspect_thread(turns):
         if _RANK[sp.action] > _RANK[joined.action]:
             joined, mode = sp, "join-sp"
 
-    worst = _worst_verdict(per_verdicts)
+    worst = _worst_verdict(user_verdicts)
     if worst is None:
         worst = inspect("")
     # FP guard: the joined pass may flag on its own but never BREAKS a clean
