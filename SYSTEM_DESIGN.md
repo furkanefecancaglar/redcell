@@ -173,10 +173,22 @@ Lesson: encrypt in transit, sanitize all inputs, least privilege.
 
 ## 10. Numbers we can defend (primer §Back-of-the-envelope)
 
+Measured 2026-08-17 on this machine (same engine as the edge, local — network-
+free): the firewalled 35-rule + deobfuscation set runs at **198 µs** on an
+attack input, **240 µs** on a benign one, **22.5 ms** on a 16 KB pathological
+input (the bounded worst case), scanner `analyze()` **235 µs**, and
+`inspect_thread` over a 2-turn thread **288 µs**. A live warm edge fetch from a
+distant sandbox measured ~1.3–2 s per request — i.e. **the system is
+network-bound, not CPU-bound**; server CPU per verdict is sub-millisecond in the
+normal case. That ratio is the whole product story: cheap deterministic checks
+at the edge, no model call, no quota.
+
 | Bound | Value | Basis |
 |---|---|---|
-| Firewall verdict CPU | ≤ ~44 ms worst (1 MB), sub-ms typical | fuzz suite, 16 KB cap |
-| Scalar scan (system prompt) | ~2 ms for 16 KB | benchmark run |
+| Firewall verdict CPU | 198–240 µs typical, ~22.5 ms worst (16 KB) | local benchmark, 500–5000 runs |
+| Scalar scan (system prompt) | ~235 µs | local benchmark |
+| Thread check (2 turns) | ~288 µs | local benchmark |
+| Observed edge round-trip (warm) | ~1.3–2 s from a distant client | live curl from sandbox |
 | Free-tier request ceiling | whatever the CF free plan gives; KV 100k reads/day is the tightest coupling | dashboard/selfcheck monitor it honestly |
 
 ## Always-on safeguards (continuous, not one-off)
