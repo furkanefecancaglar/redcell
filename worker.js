@@ -1877,7 +1877,7 @@ function renderMCP() {
     + '</style></head><body><div class=wrap>'
     + '<div class=ey>' + _mk() + 'REDCELL · MCP server</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Give your agent a firewall it can call.</h1>'
-    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets four tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
+    + '<p style="color:#9aa4b6;margin:0 0 6px">REDCELL runs as a zero-dependency <b>MCP</b> server over stdio (protocol 2024-11-05). Any MCP client — Claude Desktop, Cursor, or your own — gets five tools it can call to defend or test another agent. All are 0 API: pure static analysis and regex, no keys, no quota.</p>'
     + '<div class=card><div class=ey>Tools exposed</div><div style="margin-top:6px">' + tools + '</div></div>'
     + '<div class=card><div class=ey>tool_check · 13 reason classes</div>'
     + '<div class=id style="margin:2px 0 8px">Thirteen tool-aware checks + the input firewall bubbled up over the serialized argument values (any firewall match id that fires on an argument&apos;s content is also returned among the reasons):</div>'
@@ -2289,7 +2289,7 @@ function renderDocs() {
     + '<h2>Integrate</h2>'
     + _docRow('/quickstart', 'Quickstart — guard your agent in 30s', 'Copy-paste JS / Python / curl for the runtime firewall and the prompt scanner. 0 dependencies, no key.')
     + _docRow('/ci', 'CI gates', 'Fail the build when a prompt regresses (resilience score) or when a known injection stops being caught (firewall regression).')
-    + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check, scan_prompt, tool_check + agent_check.')
+    + _docRow('/mcp', 'MCP server', 'Add REDCELL as a tool any agent (Claude Desktop, Cursor) can call: firewall_check, thread_check, scan_prompt, tool_check + agent_check.')
     + _docRow('/src/redcell_firewall.py', 'Vendorable source (/src)', 'The real 0-dependency files to curl and vendor: redcell_firewall.py, redcell_static.py, redcell_toolcheck.py, redcell_ci.py, redcell_mcp.py, redcell_fw_check.py.')
     + '<h2>Understand</h2>'
     + _docRow('/agents', 'Agent threat model', 'The attack chain — untrusted input → prompt injection → tool abuse → exfil/privilege — mapped to REDCELL\'s input firewall, tool-call firewall, and unified /agentcheck.')
