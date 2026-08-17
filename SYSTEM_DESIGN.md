@@ -136,8 +136,15 @@ Lesson: pick the store by access pattern. REDCELL has no relational joins — it
 has key-shaped data (report by id, stat by name, lead by id, breach record by
 timestamp, bucket by ip). KV is the correct shape; TTLs do the expiry work
 (reports 30 days, breach 120 days, rate buckets window+60s). No sharding needed
-at this scale; the free KV limits (100k reads/day) are the next ceiling — the
-rate limiter and caches exist partly to protect that.
+at this scale.
+
+**KV read budget (back-of-envelope, after the cache-aside change):** the free
+KV tier bills ~100k reads/day. Every `/stats` hit used to cost 8 KV reads
+(8 counters) plus a breach read; with `public, max-age=60` edge caching that
+collapses to ~1 read/min/edge-PoP. A landing page doing 60s counter refreshes
+now costs ~24 reads/day instead of ~11,520. Same for `/breach/stats` and
+`/breach/techniques`. The counter writes themselves are in `ctx.waitUntil`
+(fire-and-forget), so the request path never waits on KV.
 
 Pastebin-style design (primer solution): REDCELL's `/r/<id>` is exactly the
 pastebin pattern — unguessable random id, write-once, TTL expiry, read-mostly
