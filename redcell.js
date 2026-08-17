@@ -265,5 +265,32 @@
     return { action, score, risk, matches };
   }
 
-  return { inspect, RULES, BLOCK_SCORE, FLAG_SCORE };
+  // Mirror of redcell_firewall.inspect_thread (byte-parity). Join USER turns
+  // only (newline-joined), re-run the full rule set on the joined span.
+  // Returns the joined verdict plus per-message stateless verdicts. Does NOT
+  // synthesize intent across turns (anaphora/step-references).
+  function inspectThread(turns) {
+    const userParts = [];
+    for (const t of (turns || [])) {
+      if (typeof t === 'string') userParts.push(t);
+      else if (t && typeof t.content === 'string') userParts.push(t.content);
+      else if (t && typeof t.text === 'string') userParts.push(t.text);
+    }
+    const joined = inspect(userParts.join('\n'));
+    const matchIds = joined.matches.map((m) => m.id).filter((id, i, a) => a.indexOf(id) === i).sort();
+    const perMessage = [];
+    for (const t of (turns || [])) {
+      const txt = typeof t === 'string' ? t : (t && (t.content || t.text)) || '';
+      const v = inspect(String(txt));
+      perMessage.push({ action: v.action, score: v.score, risk: v.risk, match_ids: v.matches.map((m) => m.id) });
+    }
+    return {
+      action: joined.action, score: joined.score, risk: joined.risk,
+      matches: joined.matches.map((m) => ({ id: m.id, owasp: m.owasp, severity: m.severity, why: m.why, snippet: m.snippet })),
+      match_ids: matchIds, per_message: perMessage,
+      note: 'joined-history pass; does not synthesize intent across turns',
+    };
+  }
+
+  return { inspect, inspectThread, RULES, BLOCK_SCORE, FLAG_SCORE };
 });

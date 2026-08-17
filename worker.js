@@ -505,6 +505,15 @@ export default {
       bump(env, ctx, 'firewall');
       return json(withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic)));
     }
+    // Joined-history pass over a conversation: joins USER turns and re-runs the rule set.
+    if (request.method === 'POST' && url.pathname === '/firewall-thread') {
+      const b = await request.json().catch(() => ({}));
+      if (!b || !Array.isArray(b.turns) || b.turns.length === 0) return json({ error: 'turns required (POST JSON { turns: [...] })' }, 400);
+      if (b.turns.length > 50) return json({ error: 'turns capped at 50' }, 400);
+      bump(env, ctx, 'firewall-thread');
+      const turns = b.turns.map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
+      return json(fw.inspectThread(turns));
+    }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
@@ -2065,6 +2074,7 @@ function renderMethodology() {
     + '<h2 style="color:#ff8a34">What REDCELL does NOT do</h2>'
     + _mCard('Honest limits',
         '<b>It is not a model.</b> The scanner and firewall are deterministic pattern matchers. That makes them fast, private, and explainable — but a novel attack with no lexical or structural signal, or a defense phrased in a way the patterns don’t recognize, can be missed. '
+        + '<b>It does not reason over conversation intent.</b> A joined-history pass joins your user turns and re-runs the same 35 detectors over the combined span — it does not synthesize meaning across turns (anaphora, “do step 2” after a planted story). '
         + '<b>A high score is not a safety guarantee.</b> It means known weaknesses weren’t found by these checks, not that your agent is safe. '
         + '<b>It does not watch your traffic</b> unless you explicitly call the firewall on it, and it does not replace human security review, red-teaming, or defense-in-depth. Use it as one fast, deterministic layer — not the only one.')
     + '<div class=id style="margin-top:20px">REDCELL · <a href="/">home</a> · <a href="/vs">how it compares</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a> · <a href="/mcp">MCP</a></div>'
@@ -2089,15 +2099,17 @@ function renderVs() {
     + '<li>you want a <b>deterministic CI gate</b> — same input, same result, no model drift — to stop a PR that weakens a prompt or un-blocks a known injection.</li>'
     + '<li>you want to <b>harden the system prompt itself</b> (the 22-check scanner) — a static concern most runtime classifiers don’t cover.</li>'
     + '<li>you need to <b>screen the action, not just the text</b> — the tool-call firewall checks a proposed tool call (name + arguments) <i>before it runs</i> for destructive names, data-exfil, unbounded transfers, local-file / secret-env reads, SSRF, command injection, privileged identities, Windows paths, and privileged container exec, and executable data URLs — 13 reason classes, 0 API — and <b>/agentcheck</b> folds prompt + input + tool call into one verdict. Most guardrails judge text; this gates what the agent is about to <i>do</i>.</li>'
+    + '<li>you want <b>multi-turn coverage with 0 API</b> — a joined-history pass joins your user turns into one span and re-runs the same 35 detectors, catching a directive split across turns (forget / ignore planted early, the payload later).</li>'
     + '<li>you want it <b>free and 0-dependency</b>, vendored as one file, no key, no vendor lock-in.</li></ul></div>'
     + '<div class=card><div class=ey style="color:#ff8a34">Reach for a model layer when…</div><ul>'
     + '<li>the attack is <b>novel or semantic</b> — a paraphrase or social-engineering framing that shares no keywords or structure with known patterns.</li>'
     + '<li>you need <b>intent understanding</b> across languages and phrasings a finite rule set won’t enumerate.</li>'
     + '<li>you can accept model latency, cost, and the occasional false call in exchange for that generalization.</li>'
+    + '<li>you need <b>intent across turns</b> — anaphora and step-references (“do step 2” after a planted story) that even a joined-history pass won’t synthesize.</li>'
     + '<li>you want a second, independent opinion — <b>defense-in-depth</b> beats any single layer.</li></ul></div>'
     + '</div>'
     + '<div class=card style="border-color:#3a2030;background:rgba(255,59,70,.05)"><b>The honest answer: use both.</b>'
-    + '<div class=id style="margin:6px 0 0">Put REDCELL first as a fast, private, deterministic filter and CI gate — it removes the obvious and the obfuscated (base64/leetspeak/homoglyph/unicode-tag) cheaply and blocks regressions. Add a model-based classifier for the semantic long tail. REDCELL does not replace human red-teaming or a trained classifier; it is the fast layer that makes the expensive layers rarer.</div></div>'
+    + '<div class=id style="margin:6px 0 0">Put REDCELL first as a fast, private, deterministic filter and CI gate — it removes the obvious and the obfuscated (base64/leetspeak/homoglyph/unicode-tag) cheaply and blocks regressions. Add a model-based classifier for the semantic long tail. REDCELL does not replace human red-teaming or a trained classifier; it is the fast layer that makes the expensive layers rarer. In multi-turn chats the same fit holds: joined-history catches split directives, while intent and anaphora across turns is where a model layer earns its keep.</div></div>'
     + '<div style="margin:16px 0"><a class=cta href="/quickstart">Add the firewall in 30s →</a></div>'
     + '<div class=id style="margin-top:14px">REDCELL · <a href="/">home</a> · <a href="/methodology">methodology</a> · <a href="/quickstart">quickstart</a> · <a href="/ci">CI gate</a></div>'
     + '</div></body></html>';
@@ -2224,6 +2236,7 @@ function renderDocs() {
     + '<h2>API (0-API surfaces need no key)</h2>'
     + '<div class=card style="font-family:ui-monospace,monospace;font-size:13px;color:#9aa4b6;line-height:1.9">'
     + '<div><span style="color:#ff8a34">POST</span> /firewall <span style="color:#616b80">{ input } → allow / flag / block</span></div>'
+    + '<div><span style="color:#ff8a34">POST</span> /firewall-thread <span style="color:#ff8a34;font-weight:700">NEW</span> <span style="color:#616b80">{ turns: [...] } → allow / flag / block — joined-history verdict: joins your user turns into one span and re-runs the same 35 firewall detectors (catches split-directive attacks across turns)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /toolcheck <span style="color:#616b80">{ name, arguments } → allow / flag / block — 13 reason classes (dangerous names, data exfil, unbounded financial, sensitive files/env, SSRF, command-injection in an arg, Windows paths, privileged identities, privileged container exec, executable data URLs)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /agentcheck <span style="color:#616b80">{ system_prompt?, input?, tool_call? } → unified verdict (scanner + input firewall + tool-call firewall)</span></div>'
     + '<div><span style="color:#ff8a34">POST</span> /scan-config <span style="color:#616b80">{ system_prompt } → 0–100 resilience score + findings</span></div>'
@@ -2259,6 +2272,14 @@ function openApiDoc() {
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
         },
         get: { summary: 'Convenience: inspect ?input= (POST is canonical; do not put production data in URLs).', parameters: [{ name: 'input', in: 'query', required: true, schema: { type: 'string', maxLength: 4096 } }], responses: { '200': { description: 'verdict' } } },
+      },
+      '/firewall-thread': {
+        post: {
+          summary: 'Joined-history pass over a conversation (0 API) — catches split-directive attacks across turns.',
+          description: 'Joins the USER turns into one span (newline-joined) and re-runs the same ' + (fw.RULES.length + 4) + ' detectors + deobfuscation. Catches "forget all" / "previous instructions" split over two turns that a stateless per-message check lets through. Does NOT synthesize intent across turns (anaphora/step-references). Returns the joined verdict plus per-message stateless verdicts.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['turns'], properties: { turns: { type: 'array', maxItems: 50, items: { oneOf: [{ type: 'string' }, { type: 'object', properties: { content: { type: 'string' } } }] }, description: 'conversation messages; strings or {content} dicts. System/assistant turns are excluded from the join.' } } } } } },
+          responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match }, match_ids: { type: 'array', items: { type: 'string' } }, per_message: { type: 'array' }, note: { type: 'string' } } } } } }, '400': { description: 'turns required (array)' } },
+        },
       },
       '/scan-config': {
         post: {
@@ -2340,6 +2361,9 @@ function renderAgents() {
     + _stage('3', 'Tool abuse', 'The hijacked agent now calls a tool with attacker intent: transfer funds, delete records, email secrets out, fetch an internal metadata URL, grant itself admin. This is where damage happens.', 'gate the tool call (POST /toolcheck) — block/flag destructive names, exfil, privilege escalation, SSRF, unbounded transfers before they run')
     + '<div class=arrow>↓</div>'
     + _stage('4', 'Impact: exfiltration · privilege · destruction', 'Data leaves, permissions escalate, or state is destroyed — often silently. By this stage it is too late; the earlier layers are where it is stopped.', 'defense-in-depth: any one surface may miss a novel attack, but stacking prompt + input + tool-call coverage removes the cheap and the obfuscated, and requires human approval for the irreversible')
+    + '<h2>Multi-turn / joined-history</h2>'
+    + _stage('2b', 'Split-directive injection across turns', 'One attack split over several user turns: turn 1 plants “forget your instructions” (or ignore / disregard / prior instructions), turn 2 — often after a human-looking filler turn — delivers the payload. Each message inspected alone looks benign; the joined sequence matches the same detectors.', 'POST /firewall-thread (new) — joins your user turns into one span and re-runs the same 35 firewall detectors + deobfuscation over it')
+    + '<div class=id style="margin-top:6px">Honest limit: a joined-history pass re-runs the <b>same pattern detectors</b> over the joined span — it does not synthesize meaning across turns. Anaphora and step-reference attacks (turn 1 “tell a story”, turn 2 “do step 2”) stay a model-layer problem. See <a href="/vs">how it compares</a>.</div>'
     + '<h2>What the tool-call firewall flags</h2>'
     + '<div class=card><div class=id style="margin-bottom:6px">POST /toolcheck returns a stable reason id per hit — allow / flag / block:</div>'
     + '<div class=find><span class=bar style="background:#ff3b46"></span><span class=ttl><b>dangerous-tool-name</b><div class=id style="color:#9aa4b6">' + esc(REASON_LABELS['dangerous-tool-name']) + '</div></span></div>'

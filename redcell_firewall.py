@@ -371,6 +371,51 @@ def inspect(text: str) -> Verdict:
     return Verdict(action, score, risk, matches)
 
 
+def _thread_text(turns):
+    """Join USER turns only (strings, or {'role','content'} dicts) into one span.
+    System/assistant turns are intentionally excluded — they are the trusted
+    context, not the untrusted surface."""
+    user_parts = []
+    for t in turns or []:
+        if isinstance(t, str):
+            user_parts.append(t)
+        elif isinstance(t, dict) and "content" in t:
+            user_parts.append(str(t["content"]))
+        elif isinstance(t, dict) and "text" in t:
+            user_parts.append(str(t["text"]))
+    return "\n".join(user_parts)
+
+
+def inspect_thread(turns):
+    """Joined-history pass over a conversation's USER turns.
+
+    Catches split-directive attacks — a directive planted across turns ("forget
+    all" then "previous instructions") that a stateless per-message inspect()
+    lets through — by newline-joining the user turns and re-running the full
+    rule set on the combined span.
+
+    The joined verdict never replaces the per-message results: it is returned
+    alongside them, and it is only stricter than stateless when the joined span
+    itself matches. It does NOT synthesize intent across turns (anaphora,
+    step-references) — that class is a semantic/model-layer concern.
+
+    Returns dict: {action, score, risk, matches, per_message} where per_message
+    is the list of stateless verdicts (one per message)."""
+    joined = inspect(_thread_text(turns))
+    ids = {m.id for m in joined.matches}
+    per_message = []
+    for t in turns or []:
+        txt = t if isinstance(t, str) else (t.get("content") or t.get("text") or "")
+        v = inspect(txt)
+        per_message.append({"action": v.action, "score": v.score, "risk": v.risk,
+                            "match_ids": [m.id for m in v.matches]})
+    return {"action": joined.action, "score": joined.score, "risk": joined.risk,
+            "matches": [{"id": m.id, "owasp": m.owasp, "severity": m.severity,
+                         "why": m.why, "snippet": m.snippet} for m in joined.matches],
+            "match_ids": sorted(ids), "per_message": per_message,
+            "note": "joined-history pass; does not synthesize intent across turns"}
+
+
 def hybrid_inspect(text, semantic=None):
     """Regex inspect() PLUS an optional semantic escalation for paraphrased attacks the
     patterns miss. inspect() itself stays 0-API and unchanged; the semantic layer only
