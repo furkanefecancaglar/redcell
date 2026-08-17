@@ -553,15 +553,22 @@ export default {
       let b;
       try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
       const hasTool = !!(b && typeof b === 'object' && b.tool_call && b.tool_call.name);
-      if (!b || typeof b !== 'object' || (!b.system_prompt && !b.input && !hasTool)) {
-        return json({ error: 'provide at least one of: system_prompt, input, tool_call {name, arguments}' }, 400);
+      const hasTurns = !!(b && Array.isArray(b.turns) && b.turns.length);
+      if (!b || typeof b !== 'object' || (!b.system_prompt && !b.input && !hasTool && !hasTurns)) {
+        return json({ error: 'provide at least one of: system_prompt, input, turns, tool_call {name, arguments}' }, 400);
       }
       bump(env, ctx, 'agentcheck');
       const rank = { allow: 0, flag: 1, block: 2 };
       const parts = {};
       let verdict = 'allow';
       if (b.system_prompt) parts.scan = analyze(String(b.system_prompt));
-      if (b.input) {
+      if (b.turns) {
+        // joined-history: turns takes precedence over a plain input for the firewall surface
+        const turns = b.turns.slice(0, 50).map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
+        const tv = fw.inspectThread(turns);
+        parts.firewall = tv;
+        if (rank[tv.action] > rank[verdict]) verdict = tv.action;
+      } else if (b.input) {
         const fwv = withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic));
         parts.firewall = fwv;
         if (rank[fwv.action] > rank[verdict]) verdict = fwv.action;
@@ -2366,9 +2373,9 @@ function openApiDoc() {
       },
       '/agentcheck': {
         post: {
-          summary: 'Unified check — run scanner + firewall(+semantic) + tool-call check in one call.',
-          description: 'Provide any of system_prompt / input / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts ({scan, firewall, tool}). The tool surface carries the same 13 reason classes as /toolcheck (the input firewall bubbles up over argument values first, then the 13 tool-aware checks). Reuses the same engines.',
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { system_prompt: { type: 'string' }, input: { type: 'string' }, semantic: { type: 'boolean' }, tool_call: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } } } },
+          summary: 'Unified check — run scanner + firewall(+semantic, or joined-history turns) + tool-call check in one call.',
+          description: 'Provide any of system_prompt / input / turns / tool_call {name, arguments}; returns the worst verdict (allow/flag/block) plus each surface\'s result under parts ({scan, firewall, tool}). turns (array of strings or {content}) runs the joined-history pass over the conversation instead of a single-input check. The tool surface carries the same 13 reason classes as /toolcheck (the input firewall bubbles up over argument values first, then the 13 tool-aware checks). Reuses the same engines.',
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { system_prompt: { type: 'string' }, input: { type: 'string' }, turns: { type: 'array', items: { type: 'string' }, description: 'conversation user turns — runs joined-history over them (max 50)' }, semantic: { type: 'boolean' }, tool_call: { type: 'object', properties: { name: { type: 'string' }, arguments: { type: 'object' } } } } } } } },
           responses: { '200': { description: 'unified verdict', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, verdict: { type: 'string', enum: ['allow', 'flag', 'block'] }, parts: { type: 'object' } } } } } }, '400': { description: 'provide at least one surface' } },
         },
         get: { summary: 'Convenience: unified check via ?system_prompt=&input=&semantic= (POST is canonical and also covers tool_call; do not put production prompts in URLs). Response sets Cache-Control: no-store.', parameters: [{ name: 'system_prompt', in: 'query', required: false, schema: { type: 'string', maxLength: 8000 } }, { name: 'input', in: 'query', required: false, schema: { type: 'string', maxLength: 4096 } }, { name: 'semantic', in: 'query', required: false, schema: { type: 'string', enum: ['1', 'true'] } }], responses: { '200': { description: 'unified verdict' }, '404': { description: 'system_prompt or input required' } } },
