@@ -23,6 +23,9 @@ Live product: https://redcell.redcellv1.workers.dev · Game (the hook): https://
 > - `POST /firewall` — a runtime injection firewall (regex, 35 detectors, 4 languages, 0 API, microseconds). Client-side JS + Python ports too.
 > - `POST /scan-config` — scores an agent's system prompt against the OWASP LLM Top 10 (22 detectors).
 > - `POST /scan` — a live red-team engine: it fires an adversarial corpus at your agent and a *separate* judge model rates each response PASS/FAIL. It also runs an adaptive multi-turn attack that mutates based on the agent's own first reply.
+> - `POST /toolcheck` — screens a proposed {name, arguments} tool call → allow/flag/block across 13 tool-aware reason classes (dangerous names, exfil, unbounded transfers, SSRF, privileged container exec). Quick browser test: `GET /toolcheck?name=…&args=…`.
+> - `POST /agentcheck` — one call runs scanner + input firewall + tool-call firewall and returns the worst verdict. `GET /agentcheck?system_prompt=…&input=…` works in a browser too.
+> - `/benchmark` — public leaderboard: static resilience scores for 16 archetype system prompts.
 >
 > It all runs on one Cloudflare Worker (free tier). Honest about limits: the static scanner is heuristic, and the live engine currently uses a single model provider. Curious what breaks it — try to get past level 5 and tell me how.
 
@@ -40,11 +43,13 @@ I built REDCELL: a security layer for LLM agents. And a game to prove the point.
 3/ Under the hood it's a full product, live + free:
 🛡️ runtime firewall (blocks injection/jailbreak/exfil, 4 languages, 0 API, microseconds)
 🧪 static scanner (OWASP LLM Top 10, 22 detectors)
+🛠️ tool-call firewall (screens {name, arguments} → allow/flag/block across 13 tool-aware reason classes)
 🔬 live red-team engine (real attacks + a separate judge model)
+📊 16-archetype benchmark leaderboard (/benchmark)
 
 4/ The interesting part of the engine: an adaptive attack. It first asks your agent what it does, then an attacker model crafts a follow-up jailbreak from that exact answer, and delivers it in a real 2-turn conversation. Static test suites miss this.
 
-5/ Everything's callable: `curl -X POST .../firewall -d '{"input":"ignore all previous instructions"}'` → `{"action":"block"}`. Plus `pip install redcell`, `npm i redcell-firewall`, and an MCP tool so your other agents can call it.
+5/ Everything's callable: `curl -X POST .../firewall -d '{"input":"ignore all previous instructions"}'` → `{"action":"block"}`. Plus `pip install redcell`, `npm i redcell-firewall`, and a 4-tool MCP server (firewall_check, scan_prompt, tool_check, agent_check) so your other agents can call it.
 
 6/ Prompt injection is OWASP's #1 LLM risk and it's unsolved. Peers (Lakera, HiddenLayer) raised nine figures; the category's real, the winner isn't decided. REDCELL is my shot at it.
 
@@ -58,7 +63,7 @@ I built REDCELL: a security layer for LLM agents. And a game to prove the point.
 **Tagline (60 char max):** `Test, red-team & firewall your AI agents against prompt injection`
 
 **Description:**
-> REDCELL is the security layer for AI agents. Score an agent's prompt against the OWASP LLM Top 10, block prompt-injection/jailbreak/exfiltration in real time with an edge firewall, and run a live red-team engine that attacks your agent (including an adaptive multi-turn attack) and judges each response with a separate model. Free scanner, firewall, CI gate, SDKs (pip/npm) and MCP tool — plus REDCELL Breach, a 5-level jailbreak game where the levels are the actual defense layers.
+> REDCELL is the security layer for AI agents. Score an agent's prompt against the OWASP LLM Top 10, block prompt-injection/jailbreak/exfiltration in real time with an edge firewall, screen every proposed tool call across 13 tool-aware reason classes, and run a live red-team engine that attacks your agent (including an adaptive multi-turn attack) and judges each response with a separate model. Free scanner, firewall, tool-call firewall, CI gate, SDKs (pip/npm), a 4-tool MCP server and a 16-archetype /benchmark — plus REDCELL Breach, a 5-level jailbreak game where the levels are the actual defense layers.
 
 **First comment:**
 > Maker here. The wedge is: testing your agent should be as easy as running a linter, and defending it should be a firewall you drop in front. Start with Breach (it's genuinely fun and shows the layers), then run the firewall/scanner on your own agent. It's live, free, and honest about what's heuristic vs. live. Feedback very welcome — especially adversarial feedback.
@@ -74,8 +79,10 @@ I built REDCELL: a security layer for LLM agents. And a game to prove the point.
 > If you ship an LLM agent with tool access, it's an untrusted-input-to-privileged-action machine — one poisoned message or document can hijack it. I built REDCELL to test and defend that:
 >
 > - **Firewall**: inspects untrusted input for injection/jailbreak/exfil (35 detectors, 4 languages, pure pattern-match, 0 API, microseconds). Python + JS + edge API.
+> - **Tool-call firewall**: screens a proposed {name, arguments} call before it runs → allow/flag/block across 13 tool-aware reason classes (dangerous names, data exfil, unbounded transfers, SSRF, privileged container exec). `GET /toolcheck?name=…&args=…` for a browser test.
 > - **Scanner**: scores a system prompt against the OWASP LLM Top 10 (22 detectors) with findings and a hardened-prompt kit.
 > - **Live engine**: fires an adversarial corpus at your agent and a separate judge model rates each response PASS/FAIL — including an adaptive attack that mutates from the agent's own first reply.
+> - **Benchmark**: /benchmark publishes static resilience scores for 16 archetype prompts.
 > - **Breach**: a 5-level jailbreak game where each level is a real defense layer (try it, it's the fun part).
 >
 > Honest limits: the scanner is heuristic (fast first read, not a full audit); the live engine uses one model provider today. Free to try, would love to know what gets past it.

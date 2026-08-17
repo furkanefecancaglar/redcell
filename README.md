@@ -35,16 +35,22 @@ cd ~/redcell
 python3 server.py            # → http://127.0.0.1:8770
 ```
 
-## Three surfaces (one server)
-`server.py` exposes the whole product on `127.0.0.1`:
+## Request-time surfaces
+Local `server.py` on `127.0.0.1`:
 - `POST /scan-config` `{system_prompt}` → static resilience score (22 detectors, **0 API**). Shared core: `redcell_static.py`.
 - `POST /firewall` `{input}` → runtime injection verdict allow/flag/block (35 detectors, **0 API**). Core: `redcell_firewall.py`. Beyond keyword rules it **deobfuscates** each input — base64 (standard/url-safe/nested), leetspeak, Cyrillic/Greek homoglyphs, zero-width splits, **bidi control characters** (U+202A-202E, U+2066-2069), and invisible **Unicode-tag ASCII smuggling** (U+E0000–E007F) — then re-runs the rule set, so an injection hidden as `1gn0re…` or an invisible tag string is still caught.
 - `POST /scan` `{system_prompt}` → live adversarial engine (real attacks + judge, **uses model quota**).
-- `GET /health` → advertises all three.
+- `GET /health` → advertises the request-time surfaces.
+
+The live public worker (https://redcell.redcellv1.workers.dev) adds the agent-native surfaces:
+- `POST /toolcheck` `{name, arguments}` → screens a proposed tool call before it runs → allow/flag/block across **13 tool-aware reason classes**. Core: `redcell_toolcheck.py`. Quick browser/curl test: `GET /toolcheck?name=…&args=…`.
+- `POST /agentcheck` `{system_prompt?, input?, tool_call?}` → one call runs scanner + input firewall + tool-call firewall and returns the worst verdict. `GET /agentcheck?system_prompt=…&input=…` also works.
+- `GET /benchmark` → public leaderboard: static resilience scores for **16 archetype** system prompts.
+- Shared security reports: `GET /r/<id>` (JSON / Markdown) and `GET /r/<id>.sarif` (SARIF 2.1.0, GitHub code-scanning ready).
 
 CI gate (0 API): `python3 redcell_ci.py prompts/*.txt --min-score 60` (exit 1 on fail; an unmatched glob is a clean pass). Action: `.github/workflows/redcell.yml`. Copy-paste setup + YAML: <https://redcell.redcellv1.workers.dev/ci>.
 
-MCP server (0 API): `python3 redcell_mcp.py` exposes `firewall_check` + `scan_prompt` as tools any MCP client
+MCP server (0 API): `python3 redcell_mcp.py` exposes four tools — `firewall_check`, `scan_prompt`, `tool_check`, `agent_check` — any MCP client
 (Claude Desktop, Cursor, …) can call. Config: `{ "redcell": { "command": "python3", "args": ["/abs/path/redcell_mcp.py"] } }`.
 
 ## Deploy

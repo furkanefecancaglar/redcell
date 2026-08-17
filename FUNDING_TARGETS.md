@@ -39,7 +39,7 @@ and Prompt Security was acquired by SentinelOne (Aug 2025). REDCELL fits this th
 - **IncubatorList** security accelerators/VCs with open deadlines: incubatorlist.com/best-cybersecurity-startup-accelerators-incubators-and-vcs.
 
 ## What they'll want (so we prep it)
-1. **A working product** ✅ live at https://redcell.redcellv1.workers.dev (scanner, firewall, live red-team, Breach).
+1. **A working product** ✅ live at https://redcell.redcellv1.workers.dev (scanner, firewall, tool-call firewall, live red-team, benchmark, Breach).
 2. **A wedge + moat** ✅ free scanner/CI → paid engine/firewall; compounding attack dataset (Breach KV logs).
 3. **Early traction** → the waitlist (/leads). Ship the launch drafts (Show HN / X / PH) to fill it before pitching.
 4. **A deck** → building the /pitch page next. Team, ask, use-of-funds are Furkan's to fill.
