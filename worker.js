@@ -718,12 +718,16 @@ export default {
       const raw = await env.BREACH_LOG.get('techniques');
       const tc = raw ? JSON.parse(raw) : {};
       const arr = Object.keys(tc).map(function (k) { return { id: k, count: tc[k] }; }).sort(function (a, b) { return b.count - a.count; });
-      return json({ techniques: arr, total: arr.reduce(function (s, x) { return s + x.count; }, 0) });
+      const r = json({ techniques: arr, total: arr.reduce(function (s, x) { return s + x.count; }, 0) });
+      r.headers.set('Cache-Control', 'public, max-age=60');
+      return r;
     }
     if (url.pathname === '/breach/stats') {
       if (!env || !env.BREACH_LOG) return json({ attempts: 0, wins: 0, blocked: 0 });
       const raw = await env.BREACH_LOG.get('stats');
-      return json(raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 });
+      const r = json(raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 });
+      r.headers.set('Cache-Control', 'public, max-age=60'); // cache-aside: counters refresh at most 1/min
+      return r;
     }
     // Aggregate funnel counters — non-PII, no token needed. Real numbers or 0.
     if (url.pathname === '/stats') {
@@ -736,7 +740,9 @@ export default {
         const raw = await env.BREACH_LOG.get('stats');
         if (raw) { try { const s = JSON.parse(raw); breach = { attempts: s.attempts || 0, wins: s.wins || 0 }; } catch (e) { } }
       }
-      return json({ ok: true, counts, breach });
+      const r = json({ ok: true, counts, breach });
+      r.headers.set('Cache-Control', 'public, max-age=60'); // cache-aside: 8 KV reads collapse to 1/min/edge
+      return r;
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
 
