@@ -766,3 +766,13 @@ Detector probing is now at strong diminishing returns (every clean gap through G
 - [x] Fix latent tz bug: on SQLite the expires_at comparison used a naive stored datetime vs aware
       now() → would TypeError on expiring keys. Added _as_utc() normalizer (covers expires_at + last_used_at).
       +2 tests (last_used stamped, revoke→401). Verify: pytest 212 (210→212); backend suite 9 (7→9). Backend-only, no deploy.
+
+## ▶ round 15 — BACKEND DEPLOY PACKAGING (services/api, 2026-08-20)
+- [x] Add services/api/Dockerfile (repo-root build context so shared core modules resolve;
+      python:3.12-slim, non-root uid 10001, HEALTHCHECK on /api/v1/health), .env.example (all
+      settings documented), README.md (surfaces table, curl quickstart, docker + local run).
+- [x] BUG the Docker build caught: requirements.txt was missing email-validator (needed by
+      pydantic EmailStr in UserCreate). It was present in the dev venv so tests passed, but a clean
+      install crashed at import ("email-validator is not installed"). Added email-validator>=2.1.
+      VERIFIED: docker build OK; container boots → /health healthy (4 core modules); register→JWT→
+      API key→static scan returns score 63 Exposed / 5 findings / completed. Backend is now one-command deployable.
