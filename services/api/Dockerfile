@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # /app/services/api/app and the core .py files directly under /app.
 COPY redcell_static.py redcell_firewall.py redcell_toolcheck.py redcell_engine.py nim_client.py ./
 COPY services/api/app ./services/api/app
+# Alembic migrations (run `alembic upgrade head` before boot on Postgres).
+COPY services/api/alembic.ini ./services/api/alembic.ini
+COPY services/api/migrations ./services/api/migrations
 
 # Non-root runtime user.
 RUN useradd --create-home --uid 10001 redcell && chown -R redcell:redcell /app

@@ -31,7 +31,14 @@ uvicorn app.main:app --reload   # http://127.0.0.1:8000/api/v1/docs
 ```
 
 SQLite tables are auto-created on startup in dev. Production uses Postgres +
-Alembic (set `DATABASE_URL`).
+Alembic — the app does **not** auto-create tables on Postgres, so run migrations first:
+
+```bash
+cd services/api
+DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/redcell alembic upgrade head
+```
+
+Generate a new migration after a model change: `alembic revision --autogenerate -m "…"`.
 
 ## Docker
 
