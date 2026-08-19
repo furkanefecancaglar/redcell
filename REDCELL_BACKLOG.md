@@ -785,3 +785,12 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       NOT auto-create tables — lifespan create_all is sqlite-only, so a fresh Postgres deploy needs
       `alembic upgrade head` first; this was a silent deploy-blocker). VERIFIED: upgrade head creates all
       7 tables; downgrade base cleans to empty (round-trip); in-container `alembic upgrade head` works. pytest 212 green.
+
+## ▶ round 17 — CI CORRECTNESS (2026-08-20)
+- [x] tests.yml was installing only root requirements → the backend suite (tests/test_backend_api.py,
+      imports the FastAPI app) errored at collection in CI. It only passed locally because the dev venv
+      happened to have the deps. Now installs services/api/requirements.txt too; bumped py 3.11→3.12 (matches Docker/dev).
+- [x] requirements-dev.txt was missing pytest-asyncio (pyproject sets asyncio_mode="auto") and httpx →
+      async fixtures errored in any clean install. Added both. VERIFIED by a from-scratch throwaway venv:
+      `pip install -r requirements.txt -r requirements-dev.txt -r services/api/requirements.txt && pytest`
+      → 212 passed (previously 203 passed / 9 errors in a clean venv). CI was silently red for the whole backend; now green.
