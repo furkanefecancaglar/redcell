@@ -27,6 +27,15 @@ async def create_scan(
 ):
     org, _ = org_key
 
+    # Only the 0-API static scanner is wired today. Accepting live/continuous/
+    # toolcheck here but silently running static would return a mislabeled
+    # "completed" result, so reject them explicitly until their path exists.
+    if payload.type != "static":
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            f"Scan type '{payload.type}' is not implemented yet; only 'static' is available",
+        )
+
     # Resolve prompt source: explicit system_prompt, or an agent's stored prompt.
     prompt = payload.system_prompt
     agent_id = payload.agent_id

@@ -113,6 +113,16 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_unsupported_scan_type_501(client, api_key):
+    """A non-static scan type must be rejected, not silently run as static."""
+    r = await client.post(
+        "/api/v1/scans",
+        json={"system_prompt": "hi", "type": "live"},
+        headers={"X-API-Key": api_key},
+    )
+    assert r.status_code == 501, r.text
+
+
 async def test_scan_scope_enforced(client):
     """A key scoped away from scans:write is 403'd; a full-access (empty-scope)
     key still works."""

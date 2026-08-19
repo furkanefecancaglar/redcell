@@ -801,3 +801,9 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       Backward-compatible: empty scopes = full-access root key (existing keys/tests unaffected); non-empty
       must contain the scope or "*". README documents the model. +1 test (ro key→403, root key→202).
       Verify: pytest 213 (212→213); backend suite 10. Establishes the scope pattern for future per-endpoint locks.
+
+## ▶ round 19 — HONEST SCAN-TYPE GUARD (services/api, 2026-08-20)
+- [x] POST /scans ignored payload.type and always ran the static scanner, so a type="live"/
+      "continuous"/"toolcheck" request silently returned a static result mislabeled "completed".
+      Now returns 501 Not Implemented for any non-static type until its path exists. +1 test.
+      Verify: pytest 214 (213→214); JS parity clean. (Live/toolcheck scan paths = future rounds, need engine/infra.)
