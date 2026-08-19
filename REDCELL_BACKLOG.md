@@ -748,3 +748,12 @@ Detector probing is now at strong diminishing returns (every clean gap through G
 ## ▶ round 12 — COMPONENT & PERFORMANCE OPTIMIZATION
 - [x] Review the custom SVG assets in `worker.js` (FAVICON, OG_SVG) and ensure they are minified correctly to save on bundle size.
 - [x] Pre-warm the cache for dynamic content where applicable or check cache headers on static assets.
+
+## ▶ round 13 — BACKEND HARDENING (services/api, 2026-08-20)
+- [x] Wire the rate_limit dependency into the v1 router (auth/agents/scans/edge; /health left
+      exempt for load balancers). It was defined in deps.py but never applied → rate limiting was
+      completely inert. +1 test (429 after budget spent, /health stays 200).
+- [x] Cap AgentCreate/AgentUpdate.system_prompt at MAX_AGENT_PROMPT_CHARS. It was uncapped, so a
+      stored agent prompt (resolved by a scan via agent_id) bypassed ScanCreate's own length cap →
+      unbounded input / DoS+cost vector. Shared _check_prompt_len helper (DRY with ScanCreate). +1 test (422).
+      Verify: pytest 210 passed (208→210); backend suite 7 passed (5→7). Backend-only, worker.js untouched (no deploy).

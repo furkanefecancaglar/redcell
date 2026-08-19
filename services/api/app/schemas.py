@@ -67,11 +67,27 @@ class ApiKeyCreated(ApiKeyOut):
 
 
 # ---- Agents ----
+def _check_prompt_len(v: Optional[str]) -> Optional[str]:
+    """Shared cap so a stored agent prompt can't exceed the scan-time limit
+    (a scan can resolve its prompt via agent_id, which would otherwise bypass
+    ScanCreate's own length validator)."""
+    from app.core.config import settings
+
+    if v and len(v) > settings.MAX_AGENT_PROMPT_CHARS:
+        raise ValueError(f"system_prompt exceeds {settings.MAX_AGENT_PROMPT_CHARS} chars")
+    return v
+
+
 class AgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     system_prompt: str = Field(min_length=1)
     description: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("system_prompt")
+    @classmethod
+    def prompt_length(cls, v: str) -> str:
+        return _check_prompt_len(v)
 
 
 class AgentUpdate(BaseModel):
@@ -79,6 +95,11 @@ class AgentUpdate(BaseModel):
     system_prompt: Optional[str] = None
     description: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
+
+    @field_validator("system_prompt")
+    @classmethod
+    def prompt_length(cls, v: Optional[str]) -> Optional[str]:
+        return _check_prompt_len(v)
 
 
 class AgentOut(BaseModel):
@@ -104,11 +125,7 @@ class ScanCreate(BaseModel):
     @field_validator("system_prompt")
     @classmethod
     def prompt_length(cls, v: Optional[str]) -> Optional[str]:
-        from app.core.config import settings
-
-        if v and len(v) > settings.MAX_AGENT_PROMPT_CHARS:
-            raise ValueError(f"system_prompt exceeds {settings.MAX_AGENT_PROMPT_CHARS} chars")
-        return v
+        return _check_prompt_len(v)
 
 
 class FindingOut(BaseModel):

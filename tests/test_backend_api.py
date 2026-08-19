@@ -111,3 +111,36 @@ async def test_scan_sarif(client, api_key):
     r = await client.get(f"/api/v1/scans/{scan_id}.sarif", headers=h)
     assert r.status_code == 200
     assert r.json()["version"] == "2.1.0"
+
+
+async def test_agent_prompt_length_capped(client, api_key):
+    """AgentCreate must reject an over-long system_prompt so a stored prompt
+    can't bypass the scan-time cap via agent_id."""
+    from app.core.config import settings
+
+    h = {"X-API-Key": api_key}
+    huge = "A" * (settings.MAX_AGENT_PROMPT_CHARS + 1)
+    r = await client.post(
+        "/api/v1/agents", json={"name": "Big", "system_prompt": huge}, headers=h
+    )
+    assert r.status_code == 422, r.text
+
+
+async def test_rate_limit_enforced(client, api_key, monkeypatch):
+    """rate_limit dependency must actually 429 once the window budget is spent."""
+    from app.core import deps
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", True)
+    monkeypatch.setattr(settings, "RATE_LIMIT_REQUESTS", 3)
+    monkeypatch.setattr(settings, "RATE_LIMIT_WINDOW_SECONDS", 60)
+    deps._windows.clear()
+
+    h = {"X-API-Key": api_key}
+    codes = [(await client.get("/api/v1/agents", headers=h)).status_code for _ in range(4)]
+    assert codes[:3] == [200, 200, 200], codes
+    assert codes[3] == 429, codes
+
+    # /health stays exempt from rate limiting even after the window is spent.
+    assert (await client.get("/api/v1/health")).status_code == 200
+    deps._windows.clear()
