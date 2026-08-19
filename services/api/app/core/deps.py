@@ -89,6 +89,29 @@ async def get_current_org_from_api_key(
     return org, matched
 
 
+def require_scope(scope: str):
+    """Dependency factory enforcing an API-key scope.
+
+    Backward-compatible model: a key with an EMPTY scopes list is a full-access
+    (root) key and passes every check — so existing keys keep working. A key with
+    a non-empty scopes list must contain the required scope or the "*" wildcard.
+    """
+
+    async def _dep(
+        org_key: tuple = Depends(get_current_org_from_api_key),
+    ) -> tuple:
+        _, key = org_key
+        scopes = key.scopes or []
+        if scopes and scope not in scopes and "*" not in scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"API key missing required scope: {scope}",
+            )
+        return org_key
+
+    return _dep
+
+
 # ---- Rate limiting (in-process fixed window; Redis-backed in production) ----
 _windows: dict[str, tuple[int, float]] = {}  # key -> (count, window_start)
 _window_lock = asyncio.Lock()

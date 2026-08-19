@@ -21,6 +21,11 @@ Auth model: users authenticate with a JWT (`Authorization: Bearer …`); machine
 clients authenticate org-scoped endpoints with an API key (`X-API-Key: rk_live_…`).
 Bootstrap the first key from a JWT via `POST /auth/me/api-keys`.
 
+**API-key scopes:** a key created with an empty `scopes` list is full-access (root)
+and passes every check. A key with a non-empty `scopes` list must include the
+endpoint's required scope (or `"*"`). Enforced today: `POST /scans` needs
+`scans:write`. Create a scoped key: `{"name":"ci","scopes":["scans:write"]}`.
+
 ## Run locally
 
 ```bash

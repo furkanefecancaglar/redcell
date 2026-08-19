@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app import models, schemas
 from app.core.db import get_db
-from app.core.deps import get_current_org_from_api_key
+from app.core.deps import get_current_org_from_api_key, require_scope
 from app.services.scan_service import run_static_scan
 
 router = APIRouter(tags=["scans"])
@@ -22,7 +22,7 @@ async def _get_org_scan(org_id: str, scan_id: str, db: AsyncSession) -> models.S
 @router.post("", response_model=schemas.ScanOut, status_code=status.HTTP_202_ACCEPTED)
 async def create_scan(
     payload: schemas.ScanCreate,
-    org_key: tuple = Depends(get_current_org_from_api_key),
+    org_key: tuple = Depends(require_scope("scans:write")),
     db: AsyncSession = Depends(get_db),
 ):
     org, _ = org_key

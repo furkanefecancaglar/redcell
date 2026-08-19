@@ -113,6 +113,43 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_scan_scope_enforced(client):
+    """A key scoped away from scans:write is 403'd; a full-access (empty-scope)
+    key still works."""
+    r = await client.post(
+        "/api/v1/auth/register",
+        json={"email": f"scope-{os.urandom(4).hex()}@x.co", "password": "password123"},
+    )
+    token = r.json()["access_token"]
+    jwt_h = {"Authorization": f"Bearer {token}"}
+
+    # restricted key: only read scope -> cannot create scans
+    r = await client.post(
+        "/api/v1/auth/me/api-keys",
+        json={"name": "ro", "scopes": ["scans:read"]},
+        headers=jwt_h,
+    )
+    ro_key = r.json()["key"]
+    r = await client.post(
+        "/api/v1/scans",
+        json={"system_prompt": "hi"},
+        headers={"X-API-Key": ro_key},
+    )
+    assert r.status_code == 403, r.text
+
+    # full-access key (default empty scopes) -> allowed
+    r = await client.post(
+        "/api/v1/auth/me/api-keys", json={"name": "root"}, headers=jwt_h
+    )
+    root_key = r.json()["key"]
+    r = await client.post(
+        "/api/v1/scans",
+        json={"system_prompt": "hi"},
+        headers={"X-API-Key": root_key},
+    )
+    assert r.status_code == 202, r.text
+
+
 async def test_api_key_last_used_stamped(client, api_key):
     """Using an API key stamps last_used_at (was always null before)."""
     h = {"X-API-Key": api_key}

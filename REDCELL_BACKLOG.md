@@ -794,3 +794,10 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       async fixtures errored in any clean install. Added both. VERIFIED by a from-scratch throwaway venv:
       `pip install -r requirements.txt -r requirements-dev.txt -r services/api/requirements.txt && pytest`
       → 212 passed (previously 203 passed / 9 errors in a clean venv). CI was silently red for the whole backend; now green.
+
+## ▶ round 18 — API KEY SCOPE ENFORCEMENT (services/api, 2026-08-20)
+- [x] Add require_scope(scope) dependency factory + enforce scans:write on POST /scans. API keys
+      stored a scopes[] column that was NEVER checked (like rate_limit before r13 — declared but inert).
+      Backward-compatible: empty scopes = full-access root key (existing keys/tests unaffected); non-empty
+      must contain the scope or "*". README documents the model. +1 test (ro key→403, root key→202).
+      Verify: pytest 213 (212→213); backend suite 10. Establishes the scope pattern for future per-endpoint locks.
