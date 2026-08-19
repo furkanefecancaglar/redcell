@@ -113,6 +113,34 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_api_key_last_used_stamped(client, api_key):
+    """Using an API key stamps last_used_at (was always null before)."""
+    h = {"X-API-Key": api_key}
+    r = await client.get("/api/v1/auth/api-keys", headers=h)
+    assert r.status_code == 200, r.text
+    keys = r.json()
+    assert keys, "expected at least one key"
+    assert keys[0]["last_used_at"] is not None
+
+
+async def test_api_key_revoke(client, api_key):
+    """A revoked API key must stop authenticating (401)."""
+    h = {"X-API-Key": api_key}
+    r = await client.get("/api/v1/auth/api-keys", headers=h)
+    key_id = r.json()[0]["id"]
+
+    r = await client.delete(f"/api/v1/auth/api-keys/{key_id}", headers=h)
+    assert r.status_code == 204, r.text
+
+    # revoking a non-existent / already-revoked key -> 404
+    r = await client.delete(f"/api/v1/auth/api-keys/{key_id}", headers=h)
+    assert r.status_code == 401  # key itself no longer authenticates
+
+    # the revoked key can no longer be used at all
+    r = await client.get("/api/v1/agents", headers=h)
+    assert r.status_code == 401
+
+
 async def test_agent_prompt_length_capped(client, api_key):
     """AgentCreate must reject an over-long system_prompt so a stored prompt
     can't bypass the scan-time cap via agent_id."""

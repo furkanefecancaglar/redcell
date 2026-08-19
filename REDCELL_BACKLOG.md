@@ -757,3 +757,12 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       stored agent prompt (resolved by a scan via agent_id) bypassed ScanCreate's own length cap →
       unbounded input / DoS+cost vector. Shared _check_prompt_len helper (DRY with ScanCreate). +1 test (422).
       Verify: pytest 210 passed (208→210); backend suite 7 passed (5→7). Backend-only, worker.js untouched (no deploy).
+
+## ▶ round 14 — API KEY LIFECYCLE (services/api, 2026-08-20)
+- [x] Stamp api_keys.last_used_at on authentication (throttled ≤1 write/60s). The column existed
+      in the model + ApiKeyOut schema but was NEVER written → always null. Now usable for key audit.
+- [x] Add DELETE /api/v1/auth/api-keys/{key_id} to revoke a key (org-scoped, may revoke self). There
+      was no revoke path at all — keys could be created + listed but never invalidated (security gap).
+- [x] Fix latent tz bug: on SQLite the expires_at comparison used a naive stored datetime vs aware
+      now() → would TypeError on expiring keys. Added _as_utc() normalizer (covers expires_at + last_used_at).
+      +2 tests (last_used stamped, revoke→401). Verify: pytest 212 (210→212); backend suite 9 (7→9). Backend-only, no deploy.

@@ -139,6 +139,22 @@ async def list_api_keys(
     return result.scalars().all()
 
 
+@router.delete("/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_api_key(
+    key_id: str,
+    org_key: tuple = Depends(get_current_org_from_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke (permanently delete) an org API key. A key may revoke itself."""
+    org, _ = org_key
+    key = await db.get(models.ApiKey, key_id)
+    if not key or key.org_id != org.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "API key not found")
+    await db.delete(key)
+    await db.commit()
+    return None
+
+
 @router.get("/me", response_model=schemas.UserOut)
 async def me(user: models.User = Depends(get_current_user)):
     return user

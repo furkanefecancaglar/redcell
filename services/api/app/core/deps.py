@@ -15,6 +15,15 @@ from app.core.security import decode_access_token
 from app import models
 
 
+def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Normalize a stored datetime to tz-aware UTC. SQLite (dev) returns naive
+    datetimes even for timezone=True columns, so comparing them against an aware
+    now() would raise TypeError — treat naive values as UTC."""
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class AuthError(HTTPException):
     def __init__(self, detail: str, headers: Optional[dict] = None):
         super().__init__(
@@ -64,13 +73,19 @@ async def get_current_org_from_api_key(
             break
     if not matched:
         raise AuthError("Invalid API key", headers={"WWW-Authenticate": "ApiKey"})
-    if matched.expires_at:
-        if matched.expires_at < datetime.now(timezone.utc):
-            raise AuthError("Expired API key", headers={"WWW-Authenticate": "ApiKey"})
+    now = datetime.now(timezone.utc)
+    if matched.expires_at and _as_utc(matched.expires_at) < now:
+        raise AuthError("Expired API key", headers={"WWW-Authenticate": "ApiKey"})
 
     org = await db.get(models.Organization, matched.org_id)
     if not org:
         raise AuthError("Unknown organization", headers={"WWW-Authenticate": "ApiKey"})
+
+    # Stamp last-used, throttled to at most once/60s to avoid a DB write per request.
+    last = _as_utc(matched.last_used_at)
+    if last is None or (now - last).total_seconds() > 60:
+        matched.last_used_at = now
+        await db.commit()
     return org, matched
 
 
