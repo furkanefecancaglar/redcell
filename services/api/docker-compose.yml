@@ -1,0 +1,36 @@
+# RedCell API + Postgres — one-command local/prod-shaped stack.
+#   cd services/api && SECRET_KEY=$(python -c 'import secrets;print(secrets.token_urlsafe(48))') docker compose up --build
+# The api service runs Alembic migrations before booting (Postgres has no auto-create).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: redcell
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-redcell}
+      POSTGRES_DB: redcell
+    volumes:
+      - redcell_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redcell -d redcell"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../..
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://redcell:${POSTGRES_PASSWORD:-redcell}@db:5432/redcell
+      SECRET_KEY: ${SECRET_KEY:-dev-only-change-me}
+      DEBUG: ${DEBUG:-false}
+      CLOUDFLARE_WORKER_URL: ${CLOUDFLARE_WORKER_URL:-https://redcell.redcellv1.workers.dev}
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  redcell_pgdata:

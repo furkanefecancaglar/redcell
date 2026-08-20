@@ -54,6 +54,17 @@ docker build -f services/api/Dockerfile -t redcell-api .
 docker run -p 8000:8000 -e SECRET_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(48))')" redcell-api
 ```
 
+### Full stack (API + Postgres)
+
+```bash
+cd services/api
+SECRET_KEY=$(python -c 'import secrets;print(secrets.token_urlsafe(48))') docker compose up --build
+```
+
+The `api` service runs `alembic upgrade head` before booting (Postgres has no
+auto-create) and waits for the `db` healthcheck. API on `:8000`, data persisted
+in the `redcell_pgdata` volume.
+
 ## Quickstart (curl)
 
 ```bash

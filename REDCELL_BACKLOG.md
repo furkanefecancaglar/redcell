@@ -827,3 +827,11 @@ Detector probing is now at strong diminishing returns (every clean gap through G
 - [x] Add GET /scans/stats (org-scoped dashboard aggregate: total, critical_count, avg_score,
       by_type/by_status/by_grade counts; pure SQL over a subquery). Declared before /{scan_id} so the
       literal path isn't captured by the path param. +1 test. Verify: pytest 217 (216->217).
+
+## ▶ round 23 — DOCKER-COMPOSE + POSTGRES VERIFIED (services/api, 2026-08-20)
+- [x] Add services/api/docker-compose.yml (Postgres 16 + api; api runs `alembic upgrade head`
+      then uvicorn, waits on db healthcheck; host port via ${API_PORT:-8000}; named pgdata volume).
+      README documents the full-stack command. This is the first time the Postgres/asyncpg path is
+      exercised (tests use sqlite). VERIFIED live: compose up -> /health healthy -> register→key→
+      static scan on POSTGRES = 63 Exposed completed -> /scans/stats aggregate correct -> clean down -v.
+      (Note: host :8000 is occupied by another process, so verification used API_PORT=8899 — port is now configurable.)
