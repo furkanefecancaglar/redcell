@@ -2,15 +2,19 @@
 
 Run from services/api/:  uvicorn app.main:app --reload
 """
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.db import Base, engine
 from app.core.logging import setup_logging
+
+_DASHBOARD = os.path.join(os.path.dirname(__file__), "static", "dashboard.html")
 
 
 @asynccontextmanager
@@ -42,3 +46,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+@app.get("/", include_in_schema=False)
+async def dashboard():
+    """Serve the single-file dashboard SPA (talks to the same-origin /api/v1)."""
+    return FileResponse(_DASHBOARD, media_type="text/html")

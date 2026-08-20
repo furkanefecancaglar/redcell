@@ -835,3 +835,12 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       exercised (tests use sqlite). VERIFIED live: compose up -> /health healthy -> register→key→
       static scan on POSTGRES = 63 Exposed completed -> /scans/stats aggregate correct -> clean down -v.
       (Note: host :8000 is occupied by another process, so verification used API_PORT=8899 — port is now configurable.)
+
+## ▶ round 24 — DASHBOARD SPA (services/api, 2026-08-20)
+- [x] Add a self-contained single-file dashboard (app/static/dashboard.html) served at GET / by the
+      API (same-origin /api/v1, no build/deps, theme-aware). Register/login → auto-mint key → run
+      static scan or gate a tool call → score + findings + SARIF link + live stats row. The product's
+      real face on top of the backend. +1 test (GET / -> 200 text/html). VERIFIED LIVE in-browser:
+      register created org+key, static scan rendered 63 Exposed with 5 findings (LLM07/LLM01/LLM09),
+      toolcheck rendered, stats row updated live (2 scans, avg 81.5, 1 static + 1 toolcheck).
+      Verify: pytest 218 (217->218); JS parity clean.

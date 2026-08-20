@@ -47,6 +47,13 @@ async def api_key(client):
     return r.json()["key"]
 
 
+async def test_dashboard_served(client):
+    r = await client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "RED" in r.text and "/api/v1" in r.text
+
+
 async def test_health(client):
     r = await client.get("/api/v1/health")
     assert r.status_code == 200
