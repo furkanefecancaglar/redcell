@@ -1,5 +1,5 @@
 """Agent CRUD endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,10 +41,16 @@ async def create_agent(
 async def list_agents(
     org_key: tuple = Depends(get_current_org_from_api_key),
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     org, _ = org_key
     result = await db.execute(
-        select(models.Agent).where(models.Agent.org_id == org.id)
+        select(models.Agent)
+        .where(models.Agent.org_id == org.id)
+        .order_by(models.Agent.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return result.scalars().all()
 

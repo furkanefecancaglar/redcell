@@ -1,5 +1,7 @@
 """Scan endpoints: create/trigger scans and fetch results + findings."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -65,14 +67,19 @@ async def create_scan(
 async def list_scans(
     org_key: tuple = Depends(get_current_org_from_api_key),
     db: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    type: Optional[str] = Query(None, pattern="^(static|live|continuous|toolcheck)$"),
+    status_: Optional[str] = Query(None, alias="status"),
 ):
     org, _ = org_key
-    result = await db.execute(
-        select(models.Scan)
-        .where(models.Scan.org_id == org.id)
-        .order_by(models.Scan.created_at.desc())
-        .limit(100)
-    )
+    stmt = select(models.Scan).where(models.Scan.org_id == org.id)
+    if type:
+        stmt = stmt.where(models.Scan.type == type)
+    if status_:
+        stmt = stmt.where(models.Scan.status == status_)
+    stmt = stmt.order_by(models.Scan.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
     return result.scalars().all()
 
 

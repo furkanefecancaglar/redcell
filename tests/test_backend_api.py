@@ -113,6 +113,33 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_scan_list_pagination_and_filter(client, api_key):
+    """List endpoints honor limit/offset and scans filter by type."""
+    h = {"X-API-Key": api_key}
+    # create 2 static + 1 toolcheck
+    for _ in range(2):
+        await client.post("/api/v1/scans", json={"system_prompt": "hi there"}, headers=h)
+    await client.post(
+        "/api/v1/scans",
+        json={"type": "toolcheck", "tool_call": {"name": "get_weather", "arguments": {"c": "x"}}},
+        headers=h,
+    )
+
+    r = await client.get("/api/v1/scans?limit=1", headers=h)
+    assert r.status_code == 200 and len(r.json()) == 1
+
+    r = await client.get("/api/v1/scans?type=toolcheck", headers=h)
+    assert r.status_code == 200
+    assert r.json() and all(s["type"] == "toolcheck" for s in r.json())
+
+    r = await client.get("/api/v1/scans?type=static", headers=h)
+    assert all(s["type"] == "static" for s in r.json())
+
+    # out-of-range limit rejected
+    r = await client.get("/api/v1/scans?limit=9999", headers=h)
+    assert r.status_code == 422
+
+
 async def test_toolcheck_scan(client, api_key):
     """type=toolcheck gates a proposed tool call: a dangerous one blocks with
     findings; a benign one is clean."""

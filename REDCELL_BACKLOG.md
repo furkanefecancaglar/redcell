@@ -816,3 +816,9 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       tool_call.name -> 422. Second live scan surface behind the API (static + toolcheck now real).
       +1 test (delete_all_users->block w/ findings; benign->clean; missing tool_call->422).
       Verify: pytest 215 (214->215); JS parity clean. (Pre-existing Starlette 422 deprecation warning is framework-level, benign.)
+
+## ▶ round 21 — LIST PAGINATION + FILTERING (services/api, 2026-08-20)
+- [x] GET /scans had a silent .limit(100) and no filters; GET /agents was unbounded. Added bounded
+      limit (1..200, default 50) + offset to both, plus type/status filters on scans (order by
+      created_at desc). Out-of-range limit -> 422. +1 test (limit=1, type filter, 422 on limit=9999).
+      Verify: pytest 216 (215->216).
