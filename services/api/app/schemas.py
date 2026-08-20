@@ -120,6 +120,9 @@ class ScanCreate(BaseModel):
     type: str = Field(default="static", pattern="^(static|live|continuous|toolcheck)$")
     agent_id: Optional[str] = None
     system_prompt: Optional[str] = None
+    # For type="toolcheck": the proposed tool/function call to gate,
+    # e.g. {"name": "transfer_funds", "arguments": {"amount": "all", "to": "x@evil.com"}}
+    tool_call: Optional[dict[str, Any]] = None
     config: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("system_prompt")

@@ -807,3 +807,12 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       "continuous"/"toolcheck" request silently returned a static result mislabeled "completed".
       Now returns 501 Not Implemented for any non-static type until its path exists. +1 test.
       Verify: pytest 214 (213→214); JS parity clean. (Live/toolcheck scan paths = future rounds, need engine/infra.)
+
+## ▶ round 20 — TOOLCHECK SCAN PATH (services/api, 2026-08-20)
+- [x] Wire type="toolcheck" into POST /scans (0-API, no keys/infra). New run_toolcheck_scan()
+      wraps redcell_toolcheck.check(name, arguments), persists a Scan+Findings mirroring static:
+      normalizes the tool-firewall RISK score to a 0-100 SAFETY score, grade Blocked/Flagged/Clean,
+      has_critical on block, one Finding per reason. ScanCreate gains a tool_call field; missing
+      tool_call.name -> 422. Second live scan surface behind the API (static + toolcheck now real).
+      +1 test (delete_all_users->block w/ findings; benign->clean; missing tool_call->422).
+      Verify: pytest 215 (214->215); JS parity clean. (Pre-existing Starlette 422 deprecation warning is framework-level, benign.)

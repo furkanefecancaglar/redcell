@@ -7,7 +7,7 @@ from sqlalchemy.orm import selectinload
 from app import models, schemas
 from app.core.db import get_db
 from app.core.deps import get_current_org_from_api_key, require_scope
-from app.services.scan_service import run_static_scan
+from app.services.scan_service import run_static_scan, run_toolcheck_scan
 
 router = APIRouter(tags=["scans"])
 
@@ -27,13 +27,23 @@ async def create_scan(
 ):
     org, _ = org_key
 
-    # Only the 0-API static scanner is wired today. Accepting live/continuous/
-    # toolcheck here but silently running static would return a mislabeled
-    # "completed" result, so reject them explicitly until their path exists.
+    # toolcheck: gate a proposed tool/function call (0-API tool firewall).
+    if payload.type == "toolcheck":
+        if not payload.tool_call or not payload.tool_call.get("name"):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "tool_call with a 'name' is required for a toolcheck scan",
+            )
+        return await run_toolcheck_scan(
+            db, org.id, payload.agent_id, payload.tool_call, payload.config
+        )
+
+    # live/continuous need the engine/infra and aren't wired yet — reject
+    # explicitly rather than silently running static and mislabeling the result.
     if payload.type != "static":
         raise HTTPException(
             status.HTTP_501_NOT_IMPLEMENTED,
-            f"Scan type '{payload.type}' is not implemented yet; only 'static' is available",
+            f"Scan type '{payload.type}' is not implemented yet; use 'static' or 'toolcheck'",
         )
 
     # Resolve prompt source: explicit system_prompt, or an agent's stored prompt.

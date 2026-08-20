@@ -30,6 +30,11 @@ def _import_static():
     return redcell_static
 
 
+def _import_toolcheck():
+    import redcell_toolcheck
+    return redcell_toolcheck
+
+
 async def run_static_scan(
     db: AsyncSession,
     org_id: str,
@@ -73,6 +78,65 @@ async def run_static_scan(
                     title=f.title,
                     description=f.cat,
                     evidence=(f.evidence or "")[:2000],
+                )
+            )
+    except Exception as exc:  # pragma: no cover - defensive
+        scan.status = "failed"
+        scan.error = str(exc)[:2000]
+    finally:
+        scan.finished_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(scan)
+    return scan
+
+
+async def run_toolcheck_scan(
+    db: AsyncSession,
+    org_id: str,
+    agent_id: Optional[str],
+    tool_call: dict,
+    config: dict,
+) -> models.Scan:
+    """Gate a proposed agent tool/function call via the 0-API tool firewall."""
+    name = str(tool_call.get("name", ""))
+    arguments = tool_call.get("arguments", {})
+
+    scan = models.Scan(
+        org_id=org_id,
+        agent_id=agent_id,
+        type="toolcheck",
+        status="running",
+        input_snapshot={"tool_call": tool_call, "config": config},
+        started_at=datetime.now(timezone.utc),
+    )
+    db.add(scan)
+    await db.commit()
+    await db.refresh(scan)
+
+    try:
+        toolcheck = _import_toolcheck()
+        verdict = await asyncio.to_thread(toolcheck.check, name, arguments)
+        action = verdict.get("action", "allow")
+        # Normalize the tool-firewall RISK score (higher = worse) to a 0-100
+        # SAFETY score (higher = safer) so it reads like the static resilience score.
+        safety = max(0, 100 - int(verdict.get("score", 0)))
+        scan.score = safety
+        scan.grade = {"block": "Blocked", "flag": "Flagged", "allow": "Clean"}.get(action, action)
+        scan.has_critical = action == "block"
+        scan.result = verdict
+        scan.status = "completed"
+        severity = "high" if action == "block" else "medium" if action == "flag" else "low"
+        evidence = (name + " " + str(arguments))[:2000]
+        for i, reason in enumerate(verdict.get("reasons", [])):
+            db.add(
+                models.Finding(
+                    scan_id=scan.id,
+                    detector_id=f"toolcheck-{reason}-{i:02d}",
+                    owasp=reason,
+                    severity=severity,
+                    title=reason,
+                    description=f"tool-call risk: {verdict.get('risk', 'none')}",
+                    evidence=evidence,
                 )
             )
     except Exception as exc:  # pragma: no cover - defensive

@@ -113,6 +113,45 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_toolcheck_scan(client, api_key):
+    """type=toolcheck gates a proposed tool call: a dangerous one blocks with
+    findings; a benign one is clean."""
+    h = {"X-API-Key": api_key}
+
+    # unambiguously dangerous call -> block
+    r = await client.post(
+        "/api/v1/scans",
+        json={
+            "type": "toolcheck",
+            "tool_call": {"name": "delete_all_users", "arguments": {"confirm": True}},
+        },
+        headers=h,
+    )
+    assert r.status_code == 202, r.text
+    scan = r.json()
+    assert scan["type"] == "toolcheck" and scan["status"] == "completed"
+    assert scan["has_critical"] is True
+    assert scan["result"]["action"] == "block"
+
+    r = await client.get(f"/api/v1/scans/{scan['id']}", headers=h)
+    assert r.json()["findings"], "expected toolcheck findings"
+
+    # missing tool_call -> 422
+    r = await client.post(
+        "/api/v1/scans", json={"type": "toolcheck"}, headers=h
+    )
+    assert r.status_code == 422, r.text
+
+    # benign call -> clean, no critical
+    r = await client.post(
+        "/api/v1/scans",
+        json={"type": "toolcheck", "tool_call": {"name": "get_weather", "arguments": {"city": "Istanbul"}}},
+        headers=h,
+    )
+    assert r.status_code == 202
+    assert r.json()["has_critical"] is False
+
+
 async def test_unsupported_scan_type_501(client, api_key):
     """A non-static scan type must be rejected, not silently run as static."""
     r = await client.post(
