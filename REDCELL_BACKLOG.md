@@ -844,3 +844,36 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       register created org+key, static scan rendered 63 Exposed with 5 findings (LLM07/LLM01/LLM09),
       toolcheck rendered, stats row updated live (2 scans, avg 81.5, 1 static + 1 toolcheck).
       Verify: pytest 218 (217->218); JS parity clean.
+
+## ▶ round 25 — LANDING REDESIGN v2: light premium SaaS (2026-08-21)
+Furkan brief: drop the dark/red/cyber/terminal look entirely; light bg, very clean modern
+premium-SaaS feel (Linear/Stripe/Vercel), live scroll+hover micro-interactions, spacious hero,
+clean feature grid, simple pricing — same content and functions, single-file HTML for the Worker.
+- [x] New design direction: "annotated document" instead of terminal — the product's real job is
+      text inspection, so the console is a paper card and the signature device is a drawn
+      annotation underline (hero "attacker" + reused visual language in results).
+      Palette: paper #FCFCFD / ink #12141A / cobalt #175CFF accent / black primary CTA.
+      Red is GONE from the brand — it survives only as a low-saturation semantic chip for a
+      block verdict (a security tool cannot render "blocked" colorless). Type: Manrope 800 display
+      + JetBrains Mono for data only. Motion: staggered load sequence, IntersectionObserver
+      scroll-reveal, hover lifts, SVG stroke draw — all behind prefers-reduced-motion.
+- [x] UX upgrade: the three separate buttons became a segmented control (System prompt /
+      Untrusted input / Tool call) driving one primary action, with per-mode placeholder + examples.
+      All content/functions preserved: scanner, firewall, toolcheck, 5 surfaces, Breach band,
+      pricing 3 tiers, waitlist, share, review-report, API examples, endpoints, live counter, auto-demo.
+- [x] Shared FAVICON de-redded (dark square + white R) — works on both the new light landing and
+      the still-dark subpages.
+- [x] TWO REAL BUGS caught by verifying instead of assuming:
+      (1) `.hero{padding:78px 0 26px}` / `.section{padding:104px 0 0}` shorthands silently killed
+          `.wrap`'s horizontal gutters -> content flush to the viewport edge. Fixed with longhand.
+      (2) The page is embedded in a JS template literal, so the JS string escapes (backslash-n in
+          the placeholders) and the curl line-continuation backslash were consumed BEFORE the browser
+          saw them -> the whole page script died on the Worker (it worked on a plain static server,
+          which is why a naive check passed). Fixed by moving mode copy into HTML data-* attributes
+          with real newlines and using &#92; for the curl backslash. Source now has ZERO backslashes,
+          backticks and ${...} (asserted at splice time).
+      VERIFIED: byte-identical script served by the Worker; all 3 modes exercised against the REAL API
+      via wrangler dev (static scan 12/100 Critical 8 findings; firewall FLAG on obfuscated injection;
+      toolcheck BLOCK with attacker-destination + tool-data-exfil); auto-demo toggle; 12/12 routes 200;
+      desktop + mobile screenshots. DEPLOYED live (version a7648490) and re-verified on the public URL.
+      pytest 218 green. Standalone single-file deliverable also saved at ~/redcell/landing_v2.html.
