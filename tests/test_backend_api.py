@@ -113,6 +113,25 @@ async def test_scan_sarif(client, api_key):
     assert r.json()["version"] == "2.1.0"
 
 
+async def test_scan_stats(client, api_key):
+    """/scans/stats aggregates the org's scans (counts + avg)."""
+    h = {"X-API-Key": api_key}
+    await client.post("/api/v1/scans", json={"system_prompt": "hello world assistant"}, headers=h)
+    await client.post(
+        "/api/v1/scans",
+        json={"type": "toolcheck", "tool_call": {"name": "delete_all_users", "arguments": {}}},
+        headers=h,
+    )
+    r = await client.get("/api/v1/scans/stats", headers=h)
+    assert r.status_code == 200, r.text
+    s = r.json()
+    assert s["total"] >= 2
+    assert s["by_type"].get("static", 0) >= 1
+    assert s["by_type"].get("toolcheck", 0) >= 1
+    assert s["critical_count"] >= 1  # the delete_all_users toolcheck blocks
+    assert "avg_score" in s
+
+
 async def test_scan_list_pagination_and_filter(client, api_key):
     """List endpoints honor limit/offset and scans filter by type."""
     h = {"X-API-Key": api_key}

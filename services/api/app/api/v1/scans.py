@@ -2,7 +2,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -81,6 +81,43 @@ async def list_scans(
     stmt = stmt.order_by(models.Scan.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(stmt)
     return result.scalars().all()
+
+
+@router.get("/stats")
+async def scan_stats(
+    org_key: tuple = Depends(get_current_org_from_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate scan stats for the org's dashboard (org-scoped, pure SQL)."""
+    org, _ = org_key
+    base = select(models.Scan).where(models.Scan.org_id == org.id).subquery()
+
+    async def _group(col):
+        rows = await db.execute(
+            select(col, func.count()).select_from(base).group_by(col)
+        )
+        return {(k if k is not None else "unknown"): n for k, n in rows.all()}
+
+    total = (
+        await db.execute(select(func.count()).select_from(base))
+    ).scalar_one()
+    avg_score = (
+        await db.execute(select(func.avg(base.c.score)).select_from(base))
+    ).scalar()
+    critical = (
+        await db.execute(
+            select(func.count()).select_from(base).where(base.c.has_critical.is_(True))
+        )
+    ).scalar_one()
+
+    return {
+        "total": total,
+        "critical_count": critical,
+        "avg_score": round(float(avg_score), 1) if avg_score is not None else None,
+        "by_type": await _group(base.c.type),
+        "by_status": await _group(base.c.status),
+        "by_grade": await _group(base.c.grade),
+    }
 
 
 @router.get("/{scan_id}.sarif")

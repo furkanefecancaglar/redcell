@@ -822,3 +822,8 @@ Detector probing is now at strong diminishing returns (every clean gap through G
       limit (1..200, default 50) + offset to both, plus type/status filters on scans (order by
       created_at desc). Out-of-range limit -> 422. +1 test (limit=1, type filter, 422 on limit=9999).
       Verify: pytest 216 (215->216).
+
+## ▶ round 22 — SCAN STATS AGGREGATE (services/api, 2026-08-20)
+- [x] Add GET /scans/stats (org-scoped dashboard aggregate: total, critical_count, avg_score,
+      by_type/by_status/by_grade counts; pure SQL over a subquery). Declared before /{scan_id} so the
+      literal path isn't captured by the path param. +1 test. Verify: pytest 217 (216->217).
