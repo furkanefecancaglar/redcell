@@ -900,3 +900,27 @@ Furkan: the footer was too plain, and /docs + every linked page were still on th
       VERIFIED live: 11/11 pages 200, shared footer on all, light bg on all, ZERO legacy tokens on all;
       no horizontal overflow; nav 4 links / footer 12 links; og.svg serves only new-brand colours.
       pytest 218 green. Deployed (version f6b373cb).
+
+## ▶ round 27 — TRANSPARENCY BUG + THE 3 PAGES THAT NEVER CHANGED (2026-08-21)
+Furkan checked the live site in real Chrome and reported two things I had missed by verifying with
+measurements instead of eyes: everything looked "saydam" (see-through) and some pages were unchanged.
+Both were real; connecting to his Chrome and screenshotting each page showed them immediately.
+- [x] BLEED-THROUGH: every sticky bar used background:rgba(...,.82-.88) + backdrop-filter. That Chrome
+      does not render backdrop-filter, so the rgba fallback alone let page text scroll visibly THROUGH
+      the nav. Fixed by making all sticky bars fully opaque. First attempt kept a translucent
+      @supports(backdrop-filter) branch as an enhancement — dropped that too, because a browser can
+      report support and still not composite it, which is exactly the failure being fixed.
+- [x] UNCHANGED PAGES: /breach, /pitch and /dashboard were never in the round-26 sweep (they are
+      standalone template-literal pages, not REPORT_CSS consumers) and were still fully dark + red.
+      Rethemed all three: they already used the same CSS variable names, so the :root palette swap did
+      most of it (3 palettes, 20 lines of legacy hex). OG_SVG sits right after them and was explicitly
+      excluded from the range — it is standalone SVG where CSS variables do not resolve.
+- [x] Their own sticky headers used DARK rgba backgrounds — rgba, so the hex map never saw them; on a
+      light page that renders as a dark bar. Found by auditing every rgba() in the rethemed range.
+      Fixed both; also gave /breach + /pitch the shared footer (/dashboard is the internal tool, left alone).
+- [x] Fonts on those pages switched Archivo/IBM Plex -> Manrope/JetBrains Mono to match the rest.
+      VERIFIED live, all 14 pages: 200, zero backdrop-filter, zero translucent sticky bars, zero dark
+      rgba used as a background (the only dark rgba left are box-shadows, correctly), light system
+      everywhere, shared footer on 13/14. pytest 218 green. Deployed (add47fd0).
+LESSON: computed-style + curl audits proved the tokens were right but could not show a compositing
+failure. For visual work, look at the rendered page in a real browser before calling it done.

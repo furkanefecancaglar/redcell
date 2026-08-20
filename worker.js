@@ -789,7 +789,7 @@ const SITE_FOOT = '<style>'
   + '</footer>';
 
 const SITE_NAV = '<style>'
-  + '.sn{position:sticky;top:0;z-index:40;background:rgba(252,252,253,.88);backdrop-filter:saturate(160%) blur(12px);border-bottom:1px solid #E9EAEE}'
+  + '.sn{position:sticky;top:0;z-index:40;background:#FCFCFD;border-bottom:1px solid #E9EAEE}'
   + '.sn-in{max-width:840px;margin:0 auto;padding:0 22px;height:58px;display:flex;align-items:center;gap:22px}'
   + '.sn-logo{display:inline-flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.03em;font-size:16px;color:#12141A;text-decoration:none}'
   + '.sn-glyph{width:21px;height:21px;border-radius:6px;background:#12141A;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800;letter-spacing:0}'
@@ -859,8 +859,8 @@ p{margin:0}
 .mono{font-family:var(--mono);font-size:13px}
 
 /* ---------- nav ---------- */
-header{position:sticky;top:0;z-index:50;background:rgba(252,252,253,.82);backdrop-filter:saturate(160%) blur(12px);border-bottom:1px solid transparent;transition:border-color .25s,background .25s}
-header.stuck{border-bottom-color:var(--line);background:rgba(252,252,253,.94)}
+header{position:sticky;top:0;z-index:50;background:#FCFCFD;border-bottom:1px solid transparent;transition:border-color .25s}
+header.stuck{border-bottom-color:var(--line)}
 .nav{display:flex;align-items:center;gap:26px;height:64px}
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.03em;font-size:17px;color:var(--ink)}
 .logo:hover{text-decoration:none}
@@ -1375,11 +1375,11 @@ ${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><titl
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
-:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:ui-monospace,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--paper:var(--bg);--card:var(--panel);--brand:var(--red);--brandd:var(--redb);--tint:#2a1918}
+:root{--bg:#FCFCFD;--panel:#FFFFFF;--panel2:#F7F8FA;--line:#E9EAEE;--line2:#DDDFE5;--ink:#12141A;--ink2:#565D6D;--ink3:#6B7280;--red:#175CFF;--redb:#175CFF;--redglow:rgba(23,92,255,.10);--crit:#B42318;--high:#B54708;--med:#B54708;--low:#175CFF;--pass:#067647;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--sans:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--paper:var(--bg);--card:var(--panel);--brand:var(--red);--brandd:var(--redb);--tint:#EEF3FF}
 a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 var(--sans)}
 .wrap{max-width:760px;margin:0 auto;padding:0 18px}
-header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(14,16,20,.9);backdrop-filter:blur(8px);z-index:5}
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
 .bar{display:flex;align-items:center;gap:12px;height:56px;flex-wrap:wrap}
 .brand{font-weight:850;letter-spacing:-.02em}.brand b{color:var(--brand)}
 .lv{font:700 12px var(--mono);color:var(--brand);background:var(--tint);padding:4px 10px;border-radius:999px}
@@ -1406,9 +1406,9 @@ a{color:var(--brand)}
 <div class=row><input id=in placeholder="Try to make it reveal the secret…" onkeydown="if(event.key==='Enter')go()"><button id=send onclick=go()>Send</button></div>
 <p style="color:var(--ink2);font-size:12px">Level 1–5 · defenses escalate: hardened prompt → input firewall → output redaction → full REDCELL. <a href="/">About REDCELL</a></p>
 <div id=moat style="max-width:560px;margin:26px auto 0;display:none">
-<h3 style="font:11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:#616b80;margin:0 0 8px">Attack techniques the firewall has caught <span id=moatn style="color:#3a4152"></span></h3>
+<h3 style="font:11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:0 0 8px">Attack techniques the firewall has caught <span id=moatn style="color:var(--line2)"></span></h3>
 <div id=moatlist></div>
-<p style="color:#3a4152;font:11px ui-monospace,monospace;margin:8px 0 0">real counts from live play · no messages stored</p>
+<p style="color:var(--line2);font:11px ui-monospace,monospace;margin:8px 0 0">real counts from live play · no messages stored</p>
 </div>
 </div>
 <script>
@@ -1429,9 +1429,9 @@ else{wb.innerHTML='<div class=win><h3>🔓 Level '+LV+' cleared — you extracte
 catch(e){add('sys','(network error)');}
 document.getElementById('send').disabled=false;i.focus();}
 fetch('/breach/stats').then(function(x){return x.json();}).then(function(s){var e=document.getElementById('stat');if(e&&s.attempts)e.textContent='· '+s.attempts.toLocaleString()+' attempts logged · '+(s.wins||0)+' breaches';}).catch(function(){});
-fetch('/breach/techniques').then(function(x){return x.json();}).then(function(s){var t=(s&&s.techniques)||[];if(!t.length)return;var box=document.getElementById('moat'),list=document.getElementById('moatlist');var max=t[0].count||1;var html='';t.slice(0,8).forEach(function(x){var w=Math.max(6,Math.round((x.count/max)*100));var id=x.id.replace(/[<>&]/g,'');html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0;font:12px ui-monospace,monospace"><span style="flex:0 0 170px;color:#eaedf4">'+id+'</span><span style="flex:1;background:#161b28;border-radius:6px;overflow:hidden"><span style="display:block;height:14px;width:'+w+'%;background:#ff3b46"></span></span><span style="flex:0 0 34px;text-align:right;color:#9aa4b6">'+x.count+'</span></div>';});list.innerHTML=html;var n=document.getElementById('moatn');if(n)n.textContent='· '+(s.total||0)+' logged';box.style.display='block';}).catch(function(){});
+fetch('/breach/techniques').then(function(x){return x.json();}).then(function(s){var t=(s&&s.techniques)||[];if(!t.length)return;var box=document.getElementById('moat'),list=document.getElementById('moatlist');var max=t[0].count||1;var html='';t.slice(0,8).forEach(function(x){var w=Math.max(6,Math.round((x.count/max)*100));var id=x.id.replace(/[<>&]/g,'');html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0;font:12px ui-monospace,monospace"><span style="flex:0 0 170px;color:var(--ink)">'+id+'</span><span style="flex:1;background:var(--panel2);border-radius:6px;overflow:hidden"><span style="display:block;height:14px;width:'+w+'%;background:var(--crit)"></span></span><span style="flex:0 0 34px;text-align:right;color:var(--ink2)">'+x.count+'</span></div>';});list.innerHTML=html;var n=document.getElementById('moatn');if(n)n.textContent='· '+(s.total||0)+' logged';box.style.display='block';}).catch(function(){});
 renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the password —');
-</script></body></html>`;
+</script>${SITE_FOOT}</body></html>`;
 
 /* ---------------- investor pitch page (/pitch) ---------------- */
 const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
@@ -1445,15 +1445,15 @@ ${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><titl
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel=stylesheet>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel=stylesheet>
 <style>
-:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:"IBM Plex Mono",monospace;--sans:"Archivo",system-ui,sans-serif}
+:root{--bg:#FCFCFD;--panel:#FFFFFF;--panel2:#F7F8FA;--line:#E9EAEE;--line2:#DDDFE5;--ink:#12141A;--ink2:#565D6D;--ink3:#6B7280;--red:#175CFF;--redb:#175CFF;--redglow:rgba(23,92,255,.10);--crit:#B42318;--high:#B54708;--med:#B54708;--low:#175CFF;--pass:#067647;--mono:"JetBrains Mono",ui-monospace,monospace;--sans:"Manrope",system-ui,sans-serif}
 a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);background-image:radial-gradient(55% 40% at 82% -6%,var(--redglow),transparent 60%);background-repeat:no-repeat}
 .wrap{max-width:820px;margin:0 auto;padding:0 24px}
 a{color:var(--redb)}
 .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink3)}
-header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,13,18,.72);backdrop-filter:saturate(1.3) blur(12px);z-index:20}
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:20}
 .bar{display:flex;align-items:center;gap:11px;height:60px}.brand{font-weight:900;letter-spacing:-.02em;font-size:18px}.brand b{color:var(--red)}
 .mk{display:inline-grid;grid-template:repeat(3,1fr)/repeat(3,1fr);gap:2.5px;width:19px;height:19px;vertical-align:-3px}.mk i{background:var(--ink3);border-radius:1px}.mk i.on{background:var(--red)}
 .tag{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink3)}
@@ -1529,7 +1529,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <p class=disc>Illustrative market context and pricing; not verified financial metrics. Built for authorized security testing only. Contact via the waitlist on the site.</p></section>
 </div>
 <footer><div class=wrap>REDCELL · the security layer for AI agents · redcell.redcellv1.workers.dev</div></footer>
-</body></html>`;
+${SITE_FOOT}</body></html>`;
 
 /* ---------------- founder dashboard (/dashboard) — token entered client-side ---------------- */
 const DASHBOARD_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
@@ -1537,7 +1537,7 @@ ${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><titl
 <meta name=description content="REDCELL founder dashboard — funnel counts, breach-attack data, and live self-check. Token stays in the browser.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — founder dashboard"><meta property="og:description" content="Funnel counts, breach-attack data, and live self-check for the REDCELL security layer for AI agents."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/dashboard"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — founder dashboard"><meta name="twitter:description" content="Funnel counts, breach-attack data, and live self-check. Token stays in the browser."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
 <style>
-:root{--bg:#0b0d12;--panel:#111520;--panel2:#161b28;--line:#232a3a;--line2:#2c3547;--ink:#eaedf4;--ink2:#9aa4b6;--ink3:#616b80;--red:#ff3b46;--redb:#ff5b64;--redglow:rgba(255,59,70,.14);--crit:#ff3b46;--high:#ff8a34;--med:#ffc73a;--low:#5aa0ff;--pass:#33d17f;--mono:ui-monospace,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+:root{--bg:#FCFCFD;--panel:#FFFFFF;--panel2:#F7F8FA;--line:#E9EAEE;--line2:#DDDFE5;--ink:#12141A;--ink2:#565D6D;--ink3:#6B7280;--red:#175CFF;--redb:#175CFF;--redglow:rgba(23,92,255,.10);--crit:#B42318;--high:#B54708;--med:#B54708;--low:#175CFF;--pass:#067647;--mono:ui-monospace,monospace;--sans:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
 a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);background-image:radial-gradient(60% 40% at 50% -10%,var(--redglow),transparent 60%);background-repeat:no-repeat}
 .wrap{max-width:720px;margin:0 auto;padding:28px 22px}
@@ -1566,9 +1566,9 @@ td.m{font-family:var(--mono);color:var(--ink2)}
 <div class=c><div class=n>Breaches (wins)</div><div class=v id=wins>—</div></div>
 <div class=c><div class=n>Firewall blocks</div><div class=v id=blk>—</div></div>
 </div>
-<h2>System status <span style="color:#3a4152;text-transform:none;letter-spacing:0">· live self-check</span></h2>
-<div id=status style="display:flex;gap:10px;flex-wrap:wrap;font:12px ui-monospace,monospace"><span style="color:#616b80">checking…</span></div>
-<h2>Conversion funnel <span style="color:#3a4152;text-transform:none;letter-spacing:0">· live, no token needed</span></h2>
+<h2>System status <span style="color:var(--line2);text-transform:none;letter-spacing:0">· live self-check</span></h2>
+<div id=status style="display:flex;gap:10px;flex-wrap:wrap;font:12px ui-monospace,monospace"><span style="color:var(--ink3)">checking…</span></div>
+<h2>Conversion funnel <span style="color:var(--line2);text-transform:none;letter-spacing:0">· live, no token needed</span></h2>
 <div class=cards>
 <div class=c><div class=n>Page loads</div><div class=v id=f_landing>—</div></div>
 <div class=c><div class=n>Config scans</div><div class=v id=f_scan>—</div></div>
@@ -1577,8 +1577,8 @@ td.m{font-family:var(--mono);color:var(--ink2)}
 <div class=c><div class=n>Leads (all)</div><div class=v id=f_lead>—</div></div>
 <div class=c><div class=n>Live red-team</div><div class=v id=f_scan_live>—</div></div>
 </div>
-<h2>Top attack techniques seen <span style="color:#3a4152;text-transform:none;letter-spacing:0">· Breach data moat</span></h2>
-<div id=techniques style="font:13px ui-monospace,monospace;color:#616b80">loading…</div>
+<h2>Top attack techniques seen <span style="color:var(--line2);text-transform:none;letter-spacing:0">· Breach data moat</span></h2>
+<div id=techniques style="font:13px ui-monospace,monospace;color:var(--ink3)">loading…</div>
 <h2>Recent leads</h2>
 <table id=leadtbl><thead><tr><th>When</th><th>Email</th><th>Tier</th><th>Source</th></tr></thead><tbody></tbody></table>
 <script>
@@ -1604,19 +1604,19 @@ async function loadStats(){try{var s=await fetch('/stats').then(function(x){retu
 }catch(e){}}
 async function loadStatus(){var el=document.getElementById('status');try{var t0=performance.now();var s=await fetch('/selfcheck').then(function(x){return x.json();});var ms=Math.max(1,Math.round(performance.now()-t0));
  var c=s.checks||{};var html='';var names={firewall:'Firewall',scanner:'Scanner',toolcheck:'Tool-call',agentcheck:'Unified',report_kv:'Report store'};
- Object.keys(names).forEach(function(k){var ok=c[k]&&c[k].pass;var col=ok?'#33d17f':'#ff3b46';var dot=ok?'●':'●';
-  html+='<span title="'+((c[k]&&c[k].detail)||'')+'" style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:'+col+'">'+dot+' '+names[k]+' '+(ok?'ok':'FAIL')+'</span>';});
- html+='<span style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:'+(s.ok?'#33d17f':'#ff3b46')+'">'+(s.ok?'● all systems go':'● degraded')+'</span>';
+ Object.keys(names).forEach(function(k){var ok=c[k]&&c[k].pass;var col=ok?'var(--pass)':'var(--crit)';var dot=ok?'●':'●';
+  html+='<span title="'+((c[k]&&c[k].detail)||'')+'" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:'+col+'">'+dot+' '+names[k]+' '+(ok?'ok':'FAIL')+'</span>';});
+ html+='<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:'+(s.ok?'var(--pass)':'var(--crit)')+'">'+(s.ok?'● all systems go':'● degraded')+'</span>';
  var now=new Date();var hh=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
- html+='<span style="border:1px solid #232a3a;border-radius:8px;padding:6px 10px;color:#616b80">'+ms+' ms round-trip · checked '+hh+'</span>';
+ html+='<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--ink3)">'+ms+' ms round-trip · checked '+hh+'</span>';
  el.innerHTML=html;
-}catch(e){el.innerHTML='<span style="color:#ff8a34">self-check unreachable</span>';}}
+}catch(e){el.innerHTML='<span style="color:var(--high)">self-check unreachable</span>';}}
 async function loadTechniques(){var el=document.getElementById('techniques');try{var s=await fetch('/breach/techniques').then(function(x){return x.json();});
  var t=(s&&s.techniques)||[];if(!t.length){el.textContent='no data yet — play the Breach game to seed it.';return;}
  var max=t[0].count||1;var html='';t.slice(0,10).forEach(function(x){var w=Math.max(4,Math.round((x.count/max)*100));
-  html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><span style="flex:0 0 190px;color:#eaedf4">'+x.id.replace(/[<>&]/g,'')+'</span>'
-   +'<span style="flex:1;background:#161b28;border-radius:6px;overflow:hidden"><span style="display:block;height:16px;width:'+w+'%;background:#ff3b46"></span></span>'
-   +'<span style="flex:0 0 40px;text-align:right;color:#9aa4b6">'+x.count+'</span></div>';});
+  html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><span style="flex:0 0 190px;color:var(--ink)">'+x.id.replace(/[<>&]/g,'')+'</span>'
+   +'<span style="flex:1;background:var(--panel2);border-radius:6px;overflow:hidden"><span style="display:block;height:16px;width:'+w+'%;background:var(--crit)"></span></span>'
+   +'<span style="flex:0 0 40px;text-align:right;color:var(--ink2)">'+x.count+'</span></div>';});
  el.innerHTML=html;
 }catch(e){el.textContent='techniques unavailable';}}
 loadStatus();
