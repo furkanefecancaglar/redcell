@@ -877,3 +877,26 @@ clean feature grid, simple pricing — same content and functions, single-file H
       toolcheck BLOCK with attacker-destination + tool-data-exfil); auto-demo toggle; 12/12 routes 200;
       desktop + mobile screenshots. DEPLOYED live (version a7648490) and re-verified on the public URL.
       pytest 218 green. Standalone single-file deliverable also saved at ~/redcell/landing_v2.html.
+
+## ▶ round 26 — SITE-WIDE REDESIGN: footer + all subpages (2026-08-21)
+Furkan: the footer was too plain, and /docs + every linked page were still on the old dark/red theme.
+- [x] Real footer, shared by the WHOLE site (SITE_FOOT const, single source of truth): brand block
+      (glyph + tagline + live-on-the-edge status) + 3 grouped link columns (Product / Developers /
+      Research, 12 links) + bottom legal bar. Replaces the old two-span strip on the landing.
+- [x] Shared sticky top nav (SITE_NAV) on every subpage — previously they had no nav at all, so a
+      visitor landing on /docs had no way back into the product.
+- [x] Retheme of ALL 10 REPORT_CSS pages (docs, agents, ci, mcp, quickstart, example, vs,
+      methodology, changelog, benchmark) + the shareable /r/ report: rewrote REPORT_CSS to the light
+      system (same class + var names so nothing downstream breaks), @import of Manrope/JetBrains Mono
+      (subpages loaded no webfont at all before), and mapped 105 lines of hardcoded legacy hexes to
+      the new tokens. _mk() marker de-redded. _RSEV severity map remapped (it sits BEFORE REPORT_CSS
+      so the range-scoped pass missed it — it would have rendered unreadable yellow on white).
+- [x] OG social image (OG_SVG) rebuilt on the new brand — it was still the dark/red card, i.e. the
+      most-shared asset was off-brand.
+- [x] A11Y: contrast-audited the rendered pages; --ink3 #8A909E failed WCAG AA on small labels
+      (.sv/.ey at 3.01:1). Darkened to #6B7280 site-wide -> worst ratio now 4.55:1, ZERO text below AA.
+      EXCLUDED ON PURPOSE: OG_SVG + renderReportOG are standalone SVG (CSS vars do not resolve there),
+      and BREACH/PITCH/DASHBOARD keep their own dark stylesheets — still to do.
+      VERIFIED live: 11/11 pages 200, shared footer on all, light bg on all, ZERO legacy tokens on all;
+      no horizontal overflow; nav 4 links / footer 12 links; og.svg serves only new-brand colours.
+      pytest 218 green. Deployed (version f6b373cb).
