@@ -670,8 +670,23 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/scan') {
       if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'live engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
-      if (env.REDCELL_SCAN_TOKEN && request.headers.get('X-REDCELL-Token') !== env.REDCELL_SCAN_TOKEN)
-        return json({ error: 'unauthorized — /scan requires header X-REDCELL-Token' }, 401);
+      // ops token keeps working for our own tooling
+      const opsTok = env.REDCELL_SCAN_TOKEN;
+      const isOps = !!opsTok && request.headers.get('X-REDCELL-Token') === opsTok;
+      if (!isOps) {
+        const caller = await authedUser(env, request);
+        if (!caller) {
+          return json({ error: 'unauthorized — sign in, or send your API key as X-API-Key (create one at /account)' }, 401);
+        }
+        if (!isPaid(caller)) {
+          return json({
+            error: 'The live red-team engine is a Pro feature.',
+            plan: (caller.sub && caller.sub.plan) || 'free',
+            upgrade: 'https://redcell.redcellv1.workers.dev/account',
+            free_alternatives: ['/scan-config', '/firewall', '/toolcheck', '/agentcheck'],
+          }, 402);
+        }
+      }
       const rl = await rateLimit(env, ctx, 'scan', 5, 60_000); // 5 live scans/min/IP (each costs NIM quota)
       if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
@@ -831,8 +846,24 @@ export default {
       });
     }
     if (url.pathname === '/billing/portal') {
-      const link = (env && env.PADDLE_PORTAL_URL) || 'https://paddle.com';
-      return Response.redirect(link, 302);
+      // Dumping the user on paddle.com was worse than useless: no context, no way to
+      // manage anything. Paddle emails a customer-portal link on every receipt, so
+      // point people there and tell them how to cancel, rather than fake a portal.
+      const u = await currentUser(env, request);
+      if (!u) return Response.redirect(url.origin + '/login', 302);
+      const link = env && env.PADDLE_PORTAL_URL;
+      if (link) return Response.redirect(link, 302);
+      return html(authShell('Manage your subscription',
+        'How to update payment details or cancel your REDCELL subscription.',
+        '<div class=auth><h1>Manage your subscription</h1>'
+        + '<p class=sub>Billing is handled by Paddle, our merchant of record.</p>'
+        + '<div class=card><div class=ey>Update card or cancel</div>'
+        + '<p style="color:var(--ink2);font-size:14.5px;margin:8px 0 0">Every Paddle receipt sent to <b>'
+        + esc(u.email) + '</b> contains a secure link to your customer portal, where you can update '
+        + 'your payment method, download invoices, or cancel. Open the most recent receipt email to get there.</p>'
+        + '<p style="color:var(--ink2);font-size:14.5px;margin:12px 0 0">Prefer we do it? Email <b>'
+        + LEGAL_SUPPORT + '</b> from this address and we will cancel for you, same day.</p></div>'
+        + '<a class=btn href="/account">Back to your account</a></div>', 'void 0;'), 200, NOSTORE);
     }
     if (url.pathname === '/billing/webhook/paddle' && request.method === 'POST') {
       const raw = await request.text();
@@ -924,8 +955,9 @@ const SITE_NAV = '<style>'
   + '<a class=sn-logo href="/"><span class=sn-glyph>R</span>REDCELL</a>'
   + '<nav class=sn-links>'
   + '<a class=sn-h href="/docs">Docs</a><a class=sn-h href="/agents">Threat model</a><a class=sn-h href="/quickstart">Quickstart</a>'
-  + '<a class=sn-h href="/login">Sign in</a><a class=sn-cta href="/signup">Get started</a>'
-  + '</nav></div></header>';
+  + '<a class=sn-h data-signin href="/login">Sign in</a><a class=sn-cta data-getstarted href="/signup">Get started</a>'
+  + '</nav></div></header>'
+  + '<script>(function(){fetch(\'/auth/me\',{credentials:\'same-origin\'}).then(function(r){return r.ok?r.json():null;}).then(function(u){if(!u)return;var i=document.querySelectorAll(\'[data-signin]\'),g=document.querySelectorAll(\'[data-getstarted]\');Array.prototype.forEach.call(i,function(a){a.textContent=\'Sign out\';a.href=\'#\';a.onclick=function(e){e.preventDefault();fetch(\'/auth/logout\',{method:\'POST\'}).then(function(){location.href=\'/\';});};});Array.prototype.forEach.call(g,function(a){a.textContent=\'Account\';a.href=\'/account\';});}).catch(function(){});})();</script>';
 
 const LANDING = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
@@ -1184,10 +1216,11 @@ footer{margin-top:104px;border-top:1px solid var(--line);padding-top:30px;paddin
     <a class="q hide" href="#developers">Developers</a>
     <a class="q hide" href="/docs">Docs</a>
     <a class="q hide" href="/breach">Breach</a>
-    <a class="q" href="/login">Sign in</a>
-    <a class=btn-dark href="/signup">Get started</a>
+    <a class="q" data-signin href="/login">Sign in</a>
+    <a class=btn-dark data-getstarted href="/signup">Get started</a>
   </div>
 </div></header>
+<script>(function(){fetch('/auth/me',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(u){if(!u)return;var i=document.querySelectorAll('[data-signin]'),g=document.querySelectorAll('[data-getstarted]');Array.prototype.forEach.call(i,function(a){a.textContent='Sign out';a.href='#';a.onclick=function(e){e.preventDefault();fetch('/auth/logout',{method:'POST'}).then(function(){location.href='/';});};});Array.prototype.forEach.call(g,function(a){a.textContent='Account';a.href='/account';});}).catch(function(){});})();</script>
 
 <div class="wrap hero">
   <div class="eyebrow load d1">Runtime firewall · live red-team · OWASP LLM Top 10</div>
@@ -2992,6 +3025,19 @@ async function currentUser(env, request) {
   u.sub = await getSub(env, u.id);
   return u;
 }
+// Resolve the caller from either a session cookie or the X-API-Key we issue on
+// /account. Without this the minted keys authenticated nothing, which made the
+// instruction printed on the account page false.
+async function authedUser(env, request) {
+  const k = request.headers.get('X-API-Key');
+  if (k) return await userForApiKey(env, k);
+  return await currentUser(env, request);
+}
+// Paid entitlement: an active, non-free subscription.
+function isPaid(user) {
+  return !!(user && user.sub && user.sub.plan && user.sub.plan !== 'free' && user.sub.status === 'active');
+}
+
 function isAdmin(env, user) {
   const list = String((env && env.ADMIN_EMAILS) || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
   return !!user && list.indexOf(user.email) >= 0;
@@ -3115,14 +3161,19 @@ const AUTH_CSS = '.auth{max-width:420px;margin:56px auto 0}'
   + '.mcell .n{font-size:26px;font-weight:800;letter-spacing:-.03em}'
   + '.mcell .l{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-top:3px}';
 
-function authShell(title, desc, bodyHtml, script) {
+function authShell(title, desc, bodyHtml, script, externalSrc) {
+  // externalSrc is emitted as its own tag BEFORE the inline block. Never fold a
+  // <script src=...></script> into `script`: its closing tag would terminate the
+  // inline block early and dump the rest of the code onto the page as text.
   return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
     + '<meta name=robots content="noindex">'
     + '<meta name=description content="' + esc(desc) + '">'
     + '<title>' + esc(title) + '</title><style>' + REPORT_CSS + AUTH_CSS
     + '</style></head><body>' + SITE_NAV + '<div class=wrap>' + bodyHtml + '</div>'
-    + SITE_FOOT + '<script>' + script + '</script></body></html>';
+    + SITE_FOOT
+    + (externalSrc ? '<script src="' + externalSrc + '"></script>' : '')
+    + '<script>' + script + '</script></body></html>';
 }
 
 const AUTH_JS =
@@ -3194,8 +3245,7 @@ function renderAccount(user, billingReady) {
     + '<div class=kv><span>Member since</span><b>' + esc(String(user.createdAt || '').slice(0, 10)) + '</b></div>'
     + '<div style="margin-top:16px"><button class=btn id=out style="cursor:pointer">Sign out</button></div></div>'
     + '</div>',
-    '<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>'
-    + AUTH_JS
+    AUTH_JS
     + 'var BUY=q("buy");'
     + 'if(BUY){(async function(){'
     + ' var c=await fetch("/billing/config").then(function(r){return r.json()}).catch(function(){return{}});'
@@ -3215,7 +3265,8 @@ function renderAccount(user, billingReady) {
     + 'var r=await post("/auth/api-key",{});'
     + 'if(r.ok&&r.d.key){q("keyout").innerHTML="<div class=keybox>"+r.d.key+"</div><p style=\\"color:var(--high);font-size:13px;margin-top:8px\\">Copy it now — this is the only time it is shown.</p>";b.textContent="Create a new key";b.disabled=false;}'
     + 'else{b.textContent="Try again";b.disabled=false;}};'
-    + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};');
+    + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};',
+    'https://cdn.paddle.com/paddle/v2/paddle.js');
 }
 
 function renderAdmin(data) {

@@ -997,3 +997,32 @@ failure. For visual work, look at the rendered page in a real browser before cal
 - [x] Test accounts created during verification were deleted from KV afterwards.
 BLOCKING (not mine): Paddle account verification + payout/bank details, and the domain approval
 result. Checkout will not open for real buyers until the domain is approved.
+
+## ▶ round 31 — FINISH THE HALF-DONE WORK (2026-08-21)
+Furkan sent a screenshot of /account with the page's raw JavaScript printed as body text,
+and said too much is left hanging. Both were fair. What was actually broken:
+- [x] SHIPPED BUG (mine, from round 30): renderAccount passed an external
+      <script src=paddle.js></script> INSIDE the string that authShell wraps in <script>…</script>.
+      The inner closing tag ended the inline block early, so the whole account script was dead
+      (sign out, API key, checkout) and the remaining code rendered as visible text. node --check
+      and pytest both passed — neither looks at assembled HTML. Fixed by giving authShell an
+      explicit external-script slot.
+- [x] PREVENTION, not just a fix: tools/page_audit.mjs fetches all 18 pages and asserts the served
+      HTML is sound — no nested <script> inside an inline block, no raw JS visible as page text,
+      no unrendered ${...}, balanced script/style/header/footer tags, shared footer + legal links
+      present, and zero legacy dark/red tokens. This exact bug class can no longer ship silently.
+- [x] Nav showed "Sign in / Get started" to signed-in users. The nav is baked into edge-cached
+      pages, so auth state cannot be server-rendered; added a small client-side swap to
+      "Sign out / Account" driven by /auth/me.
+- [x] THE REAL GAP: we were about to sell a $39 plan that delivered nothing. `userForApiKey` was
+      dead code (nothing accepted X-API-Key, so every key we issued authenticated nothing, making
+      the instruction on /account false), and no endpoint checked the plan. Added authedUser()
+      (session cookie OR X-API-Key) + isPaid(), and gated /scan — the live red-team engine the
+      pricing page sells as paid — behind an active paid plan. Free callers get 402 naming the
+      free alternatives; the ops token still works for our own tooling.
+- [x] /billing/portal redirected to a bare paddle.com with no context. Replaced with a real page
+      that tells the user where their Paddle customer-portal link actually is (their receipt email)
+      and offers a same-day manual cancellation.
+      Verified live: anon /scan -> 401, free account (cookie AND API key) -> 402 with upgrade path,
+      bogus key -> 401, and after a signed webhook upgrade the same key passes the gate and runs the
+      real engine. page_audit PASS on 18 pages; pytest 218 green.
