@@ -51,7 +51,7 @@ sağlayıcı-bağımsız yazıldı, ikinci sağlayıcı eklemek küçük iş.
 - ⚠️ Paddle onay sürecinde canlı, çalışan bir ürün sayfası ister — **bizde var**, bu iyi.
 
 **Adım 2 — Ürünü tanımla**
-- Product: `REDCELL Team` · Price: `$499 / month` (sayfadaki fiyatla aynı)
+- Product: `REDCELL Pro` · Price: `$39 / month` (sayfadaki fiyatla aynı)
 - Checkout linkini kopyala.
 
 **Adım 3 — 3 anahtarı bana ver, ben Worker'a basayım** (ya da kendin bas):

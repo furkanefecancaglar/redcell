@@ -973,3 +973,27 @@ failure. For visual work, look at the rendered page in a real browser before cal
       Verified live: 3 pages 200, footer links present on landing/docs/breach/account. pytest 218 green.
       OPEN: the pages currently print legal@redcell.dev / support@redcell.dev — that domain is NOT
       ours, so those addresses bounce. Must be swapped for a reachable address before Paddle review.
+
+## ▶ round 30 — PADDLE LIVE SETUP + REPRICE $499 -> $39 (2026-08-21)
+- [x] Repriced the paid tier $499/mo -> $39/mo and renamed Team -> Pro. $499 with zero customers
+      kills conversion; $39 is a price a developer expenses without approval. MRR in /admin now
+      derives from PLAN_PRICE_USD instead of a hardcoded 499, and the pitch page price was aligned
+      (it still said $499 — an inconsistent price on the investor page is worse than a high one).
+- [x] Legal contact was legal@redcell.dev / support@redcell.dev on a domain we DO NOT own, so those
+      would have bounced during Paddle review. Swapped for a reachable address.
+- [x] Configured Furkan's live Paddle account via Chrome (he asked me to drive it): product
+      "REDCELL Pro" (pro_01m0hwt7y4d5md24mjvtp5c02n), price $39/mo recurring
+      (pri_01m0hwzwnn5zqf22mg8a7e69jq), webhook -> /billing/webhook/paddle with all 9 subscription
+      events, client-side token, and submitted redcell.redcellv1.workers.dev for domain approval
+      (now Pending). Secrets set on the Worker: PADDLE_WEBHOOK_SECRET, PADDLE_CLIENT_TOKEN,
+      PADDLE_PRICE_PRO, PADDLE_ENV, ADMIN_EMAILS.
+- [x] ARCHITECTURE CHANGE forced by a real finding: Paddle hosted-checkout links are gated for this
+      account ("only for app-to-web funnels; contact support"), so the redirect-to-a-URL design could
+      not work. Rewrote checkout as the Paddle.js overlay on /account (price id + client token +
+      custom_data.user_id so the webhook can match the payment), added GET /billing/config, and kept
+      the payment-link redirect as a fallback if one is ever granted.
+      Verified live: /billing/config -> ready:true; /account loads paddle.js, renders
+      "Upgrade to Pro - $39/mo" and calls Paddle.Checkout.open. pytest 218 green. Deployed (6ed019e7).
+- [x] Test accounts created during verification were deleted from KV afterwards.
+BLOCKING (not mine): Paddle account verification + payout/bank details, and the domain approval
+result. Checkout will not open for real buyers until the domain is approved.

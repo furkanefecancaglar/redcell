@@ -806,18 +806,29 @@ export default {
     if (url.pathname === '/account') {
       const u = await currentUser(env, request);
       if (!u) return Response.redirect(url.origin + '/login', 302);
-      return html(renderAccount(u, !!(env && env.PADDLE_CHECKOUT_TEAM)), 200, NOSTORE);
+      return html(renderAccount(u, !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO)), 200, NOSTORE);
     }
 
     if (url.pathname === '/billing/checkout') {
       const u = await currentUser(env, request);
       if (!u) return Response.redirect(url.origin + '/login', 302);
+      // A payment-link URL is supported if one is ever configured; otherwise the
+      // overlay on /account is the checkout, so send the user there.
       const link = env && env.PADDLE_CHECKOUT_TEAM;
-      if (!link) return json({ error: 'Billing is not configured yet.' }, 503);
-      // pass the account id through so the webhook can match the payment to a user
-      const sep = link.indexOf('?') >= 0 ? '&' : '?';
-      return Response.redirect(link + sep + 'custom_data[user_id]=' + encodeURIComponent(u.id)
-        + '&custom_data[plan]=team&customer_email=' + encodeURIComponent(u.email), 302);
+      if (link) {
+        const sep = link.indexOf('?') >= 0 ? '&' : '?';
+        return Response.redirect(link + sep + 'custom_data[user_id]=' + encodeURIComponent(u.id)
+          + '&custom_data[plan]=pro&customer_email=' + encodeURIComponent(u.email), 302);
+      }
+      return Response.redirect(url.origin + '/account?checkout=1', 302);
+    }
+    if (url.pathname === '/billing/config') {
+      return json({
+        ready: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO),
+        token: (env && env.PADDLE_CLIENT_TOKEN) || null,
+        price: (env && env.PADDLE_PRICE_PRO) || null,
+        environment: (env && env.PADDLE_ENV) || 'production',
+      });
     }
     if (url.pathname === '/billing/portal') {
       const link = (env && env.PADDLE_PORTAL_URL) || 'https://paddle.com';
@@ -852,12 +863,12 @@ export default {
         try { recentLeads.push(JSON.parse(v)); } catch (e) { }
       }
       return html(renderAdmin({
-        users: ulist.keys.length, paid, mrr: paid * 499,
+        users: ulist.keys.length, paid, mrr: paid * PLAN_PRICE_USD,
         leads: parseInt((await env.LEADS.get('count')) || '0', 10) || 0,
         counts, breach, recent: recent.slice(0, 25), recentLeads,
-        billingReady: !!(env && env.PADDLE_CHECKOUT_TEAM && env.PADDLE_WEBHOOK_SECRET),
+        billingReady: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO && env.PADDLE_WEBHOOK_SECRET),
         hasWebhookSecret: !!(env && env.PADDLE_WEBHOOK_SECRET),
-        hasCheckout: !!(env && env.PADDLE_CHECKOUT_TEAM),
+        hasCheckout: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO),
         hasNim: !!(env && env.REDCELL_NIM_KEYS),
       }), 200, NOSTORE);
     }
@@ -1264,8 +1275,8 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
       <ul><li>Static scanner + firewall API</li><li>CI gate, SDKs, MCP tool</li><li>Breach challenge</li></ul>
     </div>
     <div class="pc feat up">
-      <div class=tier>Team <span class=tag>POPULAR</span></div>
-      <div class=amt>$499<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Team</a>
+      <div class=tier>Pro <span class=tag>POPULAR</span></div>
+      <div class=amt>$39<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Pro</a>
       <ul><li>Live red-team on your agents</li><li>Adaptive attacks + judge model</li><li>Runtime firewall + dashboards</li></ul>
     </div>
     <div class="pc up">
@@ -1626,7 +1637,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <section><h2>Business model</h2>
 <div class=tiers>
 <div><span class=eyebrow>Free</span><div class=p>$0</div><p style="font-size:13px;margin:0;color:var(--ink3)">Scanner · firewall · tool-call · CI · SDKs · MCP</p></div>
-<div><span class=eyebrow style="color:var(--red)">Team</span><div class=p>$499<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
+<div><span class=eyebrow style="color:var(--red)">Pro</span><div class=p>$39<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
 <div><span class=eyebrow>Enterprise</span><div class=p>Custom</div><p style="font-size:13px;margin:0;color:var(--ink3)">Unlimited · SSO · compliance · SLA</p></div>
 </div></section>
 
@@ -2919,7 +2930,8 @@ function renderBenchmark() {
 const PBKDF2_MAX = 100000;
 const PBKDF2_ITERS = PBKDF2_MAX;
 const SESSION_TTL = 60 * 60 * 24 * 30;   // 30 days
-const PLANS = { free: 'Free', team: 'Team', enterprise: 'Enterprise' };
+const PLANS = { free: 'Free', team: 'Pro', pro: 'Pro', enterprise: 'Enterprise' };
+const PLAN_PRICE_USD = 39;   // keep in sync with the pricing section and the Paddle price
 
 function rndHex(n) {
   const a = new Uint8Array(n); crypto.getRandomValues(a);
@@ -3159,8 +3171,9 @@ function renderAccount(user, billingReady) {
   const planName = PLANS[sub.plan] || sub.plan;
   const upgrade = sub.plan === 'free'
     ? (billingReady
-      ? '<a class=cta href="/billing/checkout?plan=team">Upgrade to Team</a>'
-      : '<span class=btn style="opacity:.6">Upgrade — billing not configured yet</span>')
+      ? '<button class=cta id=buy style="border:0;cursor:pointer">Upgrade to Pro &mdash; $39/mo</button>'
+        + '<div id=buymsg class=mono style="display:none;margin-top:10px"></div>'
+      : '<span class=btn style="opacity:.6">Upgrade &mdash; billing not configured yet</span>')
     : '<a class=btn href="/billing/portal">Manage subscription</a>';
   return authShell('Your REDCELL account', 'Your REDCELL plan, API key and account settings.',
     '<div style="max-width:640px;margin:34px auto 0">'
@@ -3181,7 +3194,23 @@ function renderAccount(user, billingReady) {
     + '<div class=kv><span>Member since</span><b>' + esc(String(user.createdAt || '').slice(0, 10)) + '</b></div>'
     + '<div style="margin-top:16px"><button class=btn id=out style="cursor:pointer">Sign out</button></div></div>'
     + '</div>',
-    AUTH_JS
+    '<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>'
+    + AUTH_JS
+    + 'var BUY=q("buy");'
+    + 'if(BUY){(async function(){'
+    + ' var c=await fetch("/billing/config").then(function(r){return r.json()}).catch(function(){return{}});'
+    + ' if(!c.ready||!window.Paddle){BUY.disabled=true;BUY.textContent="Billing unavailable";return;}'
+    + ' if(c.environment!=="production"){Paddle.Environment.set(c.environment);}'
+    + ' Paddle.Initialize({token:c.token});'
+    + ' BUY.onclick=function(){'
+    + '  Paddle.Checkout.open({items:[{priceId:c.price,quantity:1}],'
+    + '   customer:{email:' + JSON.stringify(user.email) + '},'
+    + '   customData:{user_id:' + JSON.stringify(user.id) + ',plan:"pro"},'
+    + '   settings:{displayMode:"overlay",theme:"light",successUrl:location.origin+"/account?upgraded=1"}});'
+    + ' };'
+    + '})();}'
+    + 'if(location.search.indexOf("upgraded=1")>=0){var mm=q("buymsg");if(mm){mm.style.display="block";mm.style.color="var(--pass)";mm.textContent="Payment received - your plan updates within a few seconds.";}}'
+    + 'if(location.search.indexOf("checkout=1")>=0&&BUY){setTimeout(function(){BUY.click();},600);}'
     + 'q("mint").onclick=async function(){var b=q("mint");b.disabled=true;b.textContent="Creating…";'
     + 'var r=await post("/auth/api-key",{});'
     + 'if(r.ok&&r.d.key){q("keyout").innerHTML="<div class=keybox>"+r.d.key+"</div><p style=\\"color:var(--high);font-size:13px;margin-top:8px\\">Copy it now — this is the only time it is shown.</p>";b.textContent="Create a new key";b.disabled=false;}'
@@ -3249,8 +3278,8 @@ const LEGAL_CSS = '.lg{max-width:760px;margin:30px auto 0}'
   + '.lg td{padding:10px;border-bottom:1px solid var(--line);color:var(--ink2)}';
 
 const LEGAL_UPDATED = '21 August 2026';
-const LEGAL_CONTACT = 'legal@redcell.dev';
-const LEGAL_SUPPORT = 'support@redcell.dev';
+const LEGAL_CONTACT = 'caglarf646@gmail.com';
+const LEGAL_SUPPORT = 'caglarf646@gmail.com';
 
 function legalShell(title, desc, body) {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON

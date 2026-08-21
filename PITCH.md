@@ -42,7 +42,7 @@ nine figures — the category is validated; the winner isn't decided.
 | Tier | Price | Includes |
 |------|-------|----------|
 | Free | $0 | Browser scanner · attack library · hardened-prompt kit · CI gate (static) |
-| Team | $499/mo | Live engine on N agents · continuous corpus + judge · CI deep mode · firewall SDK |
+| Pro | $39/mo | Live engine on N agents · continuous corpus + judge · CI deep mode · firewall SDK |
 | Enterprise | Custom | Unlimited agents · runtime firewall at scale · compliance evidence exports · private attack tuning · SSO |
 
 ## Status — what's built vs what remains
