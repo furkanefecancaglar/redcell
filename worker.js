@@ -756,6 +756,10 @@ export default {
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
 
+    if (url.pathname === '/terms') return html(renderTerms());
+    if (url.pathname === '/privacy') return html(renderPrivacy());
+    if (url.pathname === '/refunds') return html(renderRefund());
+
     /* ---------------- accounts, plans, billing ---------------- */
     if (url.pathname === '/signup') return html(renderSignup(), 200, NOSTORE);
     if (url.pathname === '/login') return html(renderLogin(), 200, NOSTORE);
@@ -872,7 +876,7 @@ const SITE_FOOT = '<style>'
   + '.rf-brand p{color:#6B7280;font-size:13.5px;line-height:1.6;margin:13px 0 0}'
   + '.rf-live{display:inline-flex;align-items:center;gap:7px;margin-top:15px;font-size:12px;color:#6B7280}'
   + '.rf-live i{width:6px;height:6px;border-radius:50%;background:#067647;display:block}'
-  + '.rf-cols{flex:2;min-width:260px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px}'
+  + '.rf-cols{flex:2;min-width:260px;display:grid;grid-template-columns:repeat(4,1fr);gap:24px}'
   + '.rf-cols h4{margin:0 0 13px;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#12141A}'
   + '.rf-cols a{display:block;color:#565D6D;font-size:13.5px;text-decoration:none;padding:4px 0;transition:color .16s}'
   + '.rf-cols a:hover{color:#12141A}'
@@ -889,6 +893,7 @@ const SITE_FOOT = '<style>'
   + '<div><h4>Product</h4><a href="/">Console</a><a href="/ci">CI gate</a><a href="/mcp">MCP tool</a><a href="/breach">Breach challenge</a><a href="/account">Your account</a></div>'
   + '<div><h4>Developers</h4><a href="/quickstart">Quickstart</a><a href="/docs">Docs</a><a href="/openapi.json">OpenAPI</a><a href="/vs">Compare</a></div>'
   + '<div><h4>Research</h4><a href="/agents">Threat model</a><a href="/methodology">Methodology</a><a href="/example">Worked example</a><a href="/changelog">Changelog</a></div>'
+  + '<div><h4>Legal</h4><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/refunds">Refunds</a></div>'
   + '</div></div>'
   + '<div class=rf-bar><span>&copy; 2026 REDCELL</span><span>Authorized security testing only</span></div>'
   + '</footer>';
@@ -3225,4 +3230,159 @@ function renderAdminDenied() {
   return authShell('REDCELL admin', 'Internal admin.',
     '<div class=auth><h1>Admin</h1><p class=sub>This page is restricted. Sign in with an admin account, or send the ops token.</p>'
     + '<a class=cta href="/login">Sign in</a></div>', 'void 0;');
+}
+
+/* ---------------- legal pages (required for merchant-of-record approval) ----------------
+   Every factual claim here was checked against what the Worker actually does:
+   /firewall, /scan-config and /toolcheck write nothing to storage; /review keeps a
+   report for 30 days; /breach keeps a 500-char slice of each attempt for 120 days. */
+const LEGAL_CSS = '.lg{max-width:760px;margin:30px auto 0}'
+  + '.lg h1{font-size:30px;margin:10px 0 6px}'
+  + '.lg h2{font-size:16px;margin:30px 0 8px}'
+  + '.lg p,.lg li{color:var(--ink2);font-size:14.8px;line-height:1.72}'
+  + '.lg ul{padding-left:20px;margin:8px 0}'
+  + '.lg li{margin:5px 0}'
+  + '.lg .upd{font-family:var(--mono);font-size:12px;color:var(--ink3)}'
+  + '.lg strong{color:var(--ink)}'
+  + '.lg table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}'
+  + '.lg th{text-align:left;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);padding:9px 10px;border-bottom:1px solid var(--line)}'
+  + '.lg td{padding:10px;border-bottom:1px solid var(--line);color:var(--ink2)}';
+
+const LEGAL_UPDATED = '21 August 2026';
+const LEGAL_CONTACT = 'legal@redcell.dev';
+const LEGAL_SUPPORT = 'support@redcell.dev';
+
+function legalShell(title, desc, body) {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=description content="' + esc(desc) + '">'
+    + '<title>' + esc(title) + ' — REDCELL</title><style>' + REPORT_CSS + LEGAL_CSS
+    + '</style></head><body>' + SITE_NAV + '<div class=wrap><div class=lg>'
+    + '<div class=ey>' + _mk() + 'REDCELL</div>'
+    + '<h1>' + esc(title) + '</h1>'
+    + '<p class=upd>Last updated ' + LEGAL_UPDATED + '</p>'
+    + body + '</div></div>' + SITE_FOOT + '</body></html>';
+}
+
+function renderTerms() {
+  return legalShell('Terms of Service', 'The terms that govern your use of REDCELL.',
+    '<p>These terms govern your use of REDCELL (the &ldquo;Service&rdquo;), a security testing and runtime protection product for AI agents, operated from T&uuml;rkiye. By creating an account or using the Service you agree to them.</p>'
+
+    + '<h2>1. Who you are contracting with</h2>'
+    + '<p>The Service is provided by the REDCELL operator. Payments are processed by <strong>Paddle.com Market Ltd</strong>, which acts as the <strong>merchant of record</strong> and authorised reseller of the Service. Paddle handles the transaction, invoicing and applicable sales tax/VAT. Your purchase is therefore also subject to Paddle&rsquo;s own buyer terms.</p>'
+
+    + '<h2>2. The Service</h2>'
+    + '<p>REDCELL provides automated, software-only security analysis:</p><ul>'
+    + '<li>a static scanner that scores a system prompt against the OWASP LLM Top 10;</li>'
+    + '<li>a runtime firewall that classifies untrusted input;</li>'
+    + '<li>a tool-call screen that classifies a proposed function call;</li>'
+    + '<li>a CI gate and an MCP tool built on the same core;</li>'
+    + '<li>on paid plans, a live adversarial engine that sends generated attacks to a model endpoint you nominate.</li></ul>'
+    + '<p>Everything is automated. <strong>REDCELL is not a consultancy and does not perform manual penetration testing.</strong></p>'
+
+    + '<h2>3. Plans, billing and renewal</h2><ul>'
+    + '<li>The Free plan is free and needs no card.</li>'
+    + '<li>Paid plans are billed in advance on a recurring monthly basis at the price shown at checkout, until cancelled.</li>'
+    + '<li>Prices are in USD and exclude tax unless stated; Paddle adds any tax required in your jurisdiction.</li>'
+    + '<li>You can cancel at any time from your account or via the Paddle receipt. Cancellation stops future renewals; access continues to the end of the paid period.</li>'
+    + '<li>We may change prices with at least 30 days notice for existing subscribers.</li></ul>'
+
+    + '<h2>4. Acceptable use &mdash; authorised testing only</h2>'
+    + '<p>You may only use REDCELL against systems you own or have <strong>explicit written authorisation</strong> to test. You must not use the Service to attack third-party systems, to build or refine attacks against systems you are not authorised to test, or for any unlawful purpose. You must not resell, sublicense or expose the Service as your own product without a written agreement.</p>'
+    + '<p>We may suspend an account immediately for a breach of this section.</p>'
+
+    + '<h2>5. Your content</h2>'
+    + '<p>You keep all rights in the prompts, inputs and configurations you submit. You grant us only the limited licence needed to process them to deliver the Service. What we store and for how long is set out in the <a href="/privacy">Privacy Policy</a>. <strong>Do not submit credentials, personal data or secrets you cannot afford to share</strong> &mdash; a security scanner is not a secret store.</p>'
+
+    + '<h2>6. Availability</h2>'
+    + '<p>The Free plan is provided as-is with no uptime commitment. We aim for high availability on paid plans but do not offer a contractual SLA except under a separate Enterprise agreement.</p>'
+
+    + '<h2>7. No warranty on security outcomes</h2>'
+    + '<p><strong>REDCELL reduces risk; it does not eliminate it.</strong> Detection is heuristic and adversaries adapt. A passing score, an allow verdict or a clean scan is not a guarantee that your agent is secure, and must not be represented as a certification, audit or compliance attestation. The Service is provided &ldquo;as is&rdquo; without warranties of any kind to the maximum extent permitted by law.</p>'
+
+    + '<h2>8. Limitation of liability</h2>'
+    + '<p>To the maximum extent permitted by law, our total aggregate liability arising out of or relating to the Service is limited to the amount you paid in the twelve months before the event giving rise to the claim. We are not liable for indirect, incidental or consequential loss, including lost profits, lost data or security incidents in your own systems.</p>'
+
+    + '<h2>9. Termination</h2>'
+    + '<p>You may stop using the Service and delete your account at any time. We may suspend or terminate an account for breach of these terms, for non-payment, or if required by law.</p>'
+
+    + '<h2>10. Changes and governing law</h2>'
+    + '<p>We may update these terms; material changes will be announced on this page with a new date. These terms are governed by the laws of the Republic of T&uuml;rkiye, without prejudice to mandatory consumer protections in your country of residence.</p>'
+
+    + '<h2>11. Contact</h2>'
+    + '<p>Questions about these terms: <strong>' + LEGAL_CONTACT + '</strong>. Billing questions can also go to Paddle, who issued your invoice.</p>');
+}
+
+function renderPrivacy() {
+  return legalShell('Privacy Policy', 'What REDCELL collects, what it never stores, and how long anything is kept.',
+    '<p>This policy explains exactly what REDCELL collects and keeps. It is written against what the service actually does, not a generic template.</p>'
+
+    + '<h2>The short version</h2>'
+    + '<p>The three checks most people use &mdash; <strong>the prompt scanner, the input firewall and the tool-call screen &mdash; are stateless. Your text is analysed in memory at the edge and is never written to storage.</strong> We keep data only where a feature genuinely requires it, and each case is listed below.</p>'
+
+    + '<h2>What we store</h2>'
+    + '<table><thead><tr><th>Data</th><th>Why</th><th>Retention</th></tr></thead><tbody>'
+    + '<tr><td>Account: email, password hash, creation date</td><td>To let you sign in</td><td>Until you delete the account</td></tr>'
+    + '<tr><td>API key (SHA-256 hash only)</td><td>To authenticate API calls</td><td>Until rotated or deleted</td></tr>'
+    + '<tr><td>Session token</td><td>To keep you signed in</td><td>30 days</td></tr>'
+    + '<tr><td>Subscription state (plan, status, provider IDs)</td><td>To give you what you paid for</td><td>Until you delete the account</td></tr>'
+    + '<tr><td>Shareable report (only if you request one): the prompt you submitted plus its findings</td><td>So the report link works</td><td><strong>30 days</strong>, then deleted automatically</td></tr>'
+    + '<tr><td>Waitlist / contact email</td><td>To reply to you</td><td>Until you ask us to remove it</td></tr>'
+    + '<tr><td>Breach game: first 500 characters of each attempt, plus level and outcome</td><td>Public attack-technique research</td><td><strong>120 days</strong>, then deleted automatically</td></tr>'
+    + '<tr><td>Aggregate counters (page loads, scans run, blocks)</td><td>To know if the product is used</td><td>Indefinite &mdash; numbers only, no personal data</td></tr>'
+    + '</tbody></table>'
+
+    + '<h2>What we never store</h2><ul>'
+    + '<li>Input sent to <span class=mono>/firewall</span>, <span class=mono>/scan-config</span>, <span class=mono>/toolcheck</span> or <span class=mono>/agentcheck</span>. It is processed and discarded.</li>'
+    + '<li>Your password in any readable form. Only a PBKDF2-SHA256 hash with a per-user random salt is kept.</li>'
+    + '<li>Your API key in plaintext. Only its SHA-256 hash is kept; the key itself is shown once at creation.</li>'
+    + '<li>Card numbers or billing details. Those go to Paddle and never reach our servers.</li></ul>'
+
+    + '<h2>Payments</h2>'
+    + '<p><strong>Paddle.com Market Ltd</strong> is our merchant of record. When you buy a plan, Paddle collects and processes your payment and billing information under its own privacy policy. We receive only the subscription status, a customer identifier and your email &mdash; never card data.</p>'
+
+    + '<h2>Processors we rely on</h2><ul>'
+    + '<li><strong>Cloudflare</strong> &mdash; hosting and edge storage for the data listed above.</li>'
+    + '<li><strong>Paddle</strong> &mdash; payments, invoicing and tax.</li>'
+    + '<li><strong>Model providers</strong> &mdash; only for the live red-team engine and the Breach game, where the text you submit is sent to a third-party model to generate a response. The stateless checks never call a model.</li></ul>'
+
+    + '<h2>Cookies</h2>'
+    + '<p>One cookie: <span class=mono>rc_sess</span>, which keeps you signed in. It is httpOnly, Secure and SameSite=Lax, and expires after 30 days. <strong>No advertising, analytics or third-party tracking cookies.</strong></p>'
+
+    + '<h2>Your rights</h2>'
+    + '<p>You can ask us to export or delete your data, and deleting your account removes your account record, API key hashes and subscription state. If you are in the EU/UK you have the rights granted by the GDPR; in T&uuml;rkiye, those granted by KVKK. Email <strong>' + LEGAL_CONTACT + '</strong> and we will respond within 30 days.</p>'
+
+    + '<h2>Children</h2><p>The Service is not directed at anyone under 16.</p>'
+
+    + '<h2>Changes</h2><p>Material changes will be posted here with a new date.</p>'
+
+    + '<h2>Contact</h2><p><strong>' + LEGAL_CONTACT + '</strong></p>');
+}
+
+function renderRefund() {
+  return legalShell('Refund Policy', 'REDCELL refund and cancellation policy.',
+    '<p>We would rather refund you than keep money from someone the product did not help.</p>'
+
+    + '<h2>14-day money-back guarantee</h2>'
+    + '<p>If you are not satisfied with a paid plan, <strong>email us within 14 days of the charge and we will refund it in full</strong>. You do not need to justify the request. This applies to your first payment on a plan.</p>'
+
+    + '<h2>Try before you pay</h2>'
+    + '<p>The scanner, the runtime firewall, the tool-call screen and the CI gate are <strong>free forever and need no card</strong>. We strongly recommend running them against your own agents before you subscribe, so a paid plan is never a guess.</p>'
+
+    + '<h2>Renewals</h2>'
+    + '<p>Subscriptions renew monthly until cancelled. If a renewal charge caught you out, tell us within <strong>7 days of that renewal</strong> and we will refund it, provided the plan was not heavily used in the new period.</p>'
+
+    + '<h2>Cancelling</h2>'
+    + '<p>Cancel any time from your <a href="/account">account page</a> or from the link on your Paddle receipt. Cancelling stops future renewals; you keep access until the end of the period you already paid for. We do not pro-rate part-months.</p>'
+
+    + '<h2>How to request a refund</h2>'
+    + '<p>Email <strong>' + LEGAL_SUPPORT + '</strong> from the address on the account, or reply to your Paddle receipt. Refunds are issued by <strong>Paddle</strong>, our merchant of record, to the original payment method. Paddle typically completes a refund within 3&ndash;10 business days depending on your bank.</p>'
+
+    + '<h2>Exceptions</h2>'
+    + '<p>We may decline a refund where an account has breached the <a href="/terms">Terms of Service</a> &mdash; for example using the Service to test systems it was not authorised to test &mdash; or where there is clear evidence of abuse of this policy across repeated subscriptions.</p>'
+
+    + '<h2>Statutory rights</h2>'
+    + '<p>Nothing here limits any mandatory refund or withdrawal right you have under the consumer law of your own country. Where that law gives you more than this policy, that law applies.</p>'
+
+    + '<h2>Contact</h2><p><strong>' + LEGAL_SUPPORT + '</strong></p>');
 }

@@ -957,3 +957,19 @@ failure. For visual work, look at the rendered page in a real browser before cal
 - [x] FUNDING_TR.md — honest stage read (0 users, 0 revenue -> grants before VC), TÜBİTAK BiGG /
       KOSGEB / teknopark path, and the 3 gaps to close first.
       pytest 218 green. Deployed (1f537536).
+
+## ▶ round 29 — LEGAL PAGES for merchant-of-record approval (2026-08-21)
+- [x] /terms, /privacy, /refunds — Paddle (and any MoR) will not approve a seller without these,
+      and a reviewer clicks them. Linked from a new Legal column in the shared footer, so they are
+      reachable from every page including /account.
+- [x] The privacy policy is written against what the Worker ACTUALLY does, not a template. Verified
+      in code first: /firewall, /scan-config, /toolcheck and /agentcheck write nothing (stateless);
+      /review keeps the submitted prompt 30 days; /breach keeps a 500-char slice 120 days; counters
+      are aggregate-only. Also states plainly what is never stored (plaintext password, plaintext
+      API key, card data) — all true of the implementation.
+- [x] Terms carry the two claims that matter for this product: authorised-testing-only acceptable
+      use, and an explicit "a passing score is not a certification" no-warranty clause.
+- [x] Refunds: 14-day money-back, 7-day renewal grace, refunds issued by Paddle as MoR.
+      Verified live: 3 pages 200, footer links present on landing/docs/breach/account. pytest 218 green.
+      OPEN: the pages currently print legal@redcell.dev / support@redcell.dev — that domain is NOT
+      ours, so those addresses bounce. Must be swapped for a reachable address before Paddle review.
