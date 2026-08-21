@@ -12,6 +12,15 @@
  * Usage: node tools/snippet_check.mjs [baseUrl]
  */
 const BASE = (process.argv[2] || 'https://redcell.redcellv1.workers.dev').replace(/\/$/, '');
+
+/* Identify our own traffic so it can be kept out of the public counters at /stats.
+   Wrapping fetch once is the only reliable way — a header added per call site is a header
+   someone forgets at the next call site, and the counters go quietly wrong again. */
+const _fetch = globalThis.fetch;
+globalThis.fetch = (url, opts = {}) => _fetch(url, {
+  ...opts,
+  headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) },
+});
 const failures = [];
 const ok = [];
 const fail = (what, msg) => failures.push(what + ': ' + msg);

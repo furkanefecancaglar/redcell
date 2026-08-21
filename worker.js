@@ -100,12 +100,26 @@ function html(body, status = 200, extra) {
 
 // Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
 // waitUntil, so a burst of concurrent hits can lose an increment (undercounts, never over).
-const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'agentcheck', 'review', 'lead', 'scan_live', 'signup'];
-function bump(env, ctx, key) {
+const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'agentcheck', 'review', 'lead', 'scan_live', 'signup', 'gate', 'mcp'];
+/* Our own verification suite hits firewall, toolcheck and agentcheck on every run, and these
+   counters are published at /stats. So the public numbers were largely a count of how often we
+   tested ourselves — they looked like adoption and were nothing of the kind. Synthetic traffic
+   now lands under a separate prefix rather than being discarded, so the split stays visible and
+   nothing is quietly dropped. A marker, not a control: anyone may send the header, and a caller
+   who would rather not appear in our counters is welcome to. No IP, user agent or body is ever
+   stored — only counts. */
+function isSynthetic(request) {
+  if (!request) return false;
+  if ((request.headers.get('X-REDCELL-Synthetic') || '') === '1') return true;
+  return (request.headers.get('User-Agent') || '').indexOf('redcell-verify') >= 0;
+}
+
+function bump(env, ctx, key, request) {
   if (!env || !env.LEADS || !ctx) return;
+  const synthetic = isSynthetic(request);
   ctx.waitUntil((async () => {
     try {
-      const k = 'stat:' + key;
+      const k = 'stat:' + (synthetic ? 'syn:' : '') + key;
       const raw = await env.LEADS.get(k);
       const n = raw ? (parseInt(raw, 10) || 0) : 0;
       await env.LEADS.put(k, String(n + 1));
@@ -437,7 +451,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (url.pathname === '/') { bump(env, ctx, 'landing'); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
+    if (url.pathname === '/') { bump(env, ctx, 'landing', request); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
     // Retired: /admin does the same job with a server-side gate, while this page's token
     // check ran client-side. One internal surface, one gate.
@@ -552,19 +566,19 @@ export default {
     // GET convenience for quick curl/browser testing. POST (JSON body) is canonical —
     // don't put production prompts in URLs (they can land in logs/history).
     if (request.method === 'GET' && url.pathname === '/firewall' && url.searchParams.has('input')) {
-      bump(env, ctx, 'firewall');
+      bump(env, ctx, 'firewall', request);
       const gi = String(url.searchParams.get('input')).slice(0, 4096);
       return json(withSemantic(inspect(gi), gi, truthy(url.searchParams.get('semantic'))));
     }
     if (request.method === 'GET' && url.pathname === '/scan-config' && url.searchParams.has('system_prompt')) {
-      bump(env, ctx, 'scan');
+      bump(env, ctx, 'scan', request);
       return json(analyze(String(url.searchParams.get('system_prompt')).slice(0, 8000)));
     }
     // GET convenience for the tool-call firewall: name + args (a JSON object, URL-encoded).
     // POST (JSON body) is canonical — don't put production tool calls in URLs.
     if (request.method === 'GET' && url.pathname === '/toolcheck') {
       if (!url.searchParams.has('name')) return json({ error: 'name required (GET /toolcheck?name=...&args=... or POST)' }, 404);
-      bump(env, ctx, 'toolcheck');
+      bump(env, ctx, 'toolcheck', request);
       let args;
       try {
         const rawArgs = String(url.searchParams.get('args') || '').slice(0, 4096);
@@ -582,7 +596,7 @@ export default {
       const hasPrompt = url.searchParams.has('system_prompt');
       const hasInput = url.searchParams.has('input');
       if (!hasPrompt && !hasInput) return json({ error: 'provide at least one of: system_prompt, input (GET /agentcheck?system_prompt=...&input=...) or POST' }, 404);
-      bump(env, ctx, 'agentcheck');
+      bump(env, ctx, 'agentcheck', request);
       const rank = { allow: 0, flag: 1, block: 2 };
       const parts = {};
       let verdict = 'allow';
@@ -600,7 +614,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/firewall') {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.input) return json({ error: 'input required (POST JSON {input}) or ?input= for GET' }, 400);
-      bump(env, ctx, 'firewall');
+      bump(env, ctx, 'firewall', request);
       return json(withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic)));
     }
     // Joined-history pass over a conversation: joins USER turns and re-runs the rule set.
@@ -608,14 +622,14 @@ export default {
       const b = await request.json().catch(() => ({}));
       if (!b || !Array.isArray(b.turns) || b.turns.length === 0) return json({ error: 'turns required (POST JSON { turns: [...] })' }, 400);
       if (b.turns.length > 50) return json({ error: 'turns capped at 50' }, 400);
-      bump(env, ctx, 'firewall-thread');
+      bump(env, ctx, 'firewall-thread', request);
       const turns = b.turns.map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
       return json(fw.inspectThread(turns));
     }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
-      bump(env, ctx, 'scan');
+      bump(env, ctx, 'scan', request);
       const rep = analyze(String(b.system_prompt));
       rep.findings = withFixes(rep.findings);   // a finding without a fix is only half an answer
       // Signed-in callers get the scan recorded for their history. Anonymous use is
@@ -636,7 +650,7 @@ export default {
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
       const minScore = Number.isFinite(Number(b.min_score)) ? Number(b.min_score) : 60;
       const failOnCritical = b.fail_on_critical !== false;
-      bump(env, ctx, 'scan');
+      bump(env, ctx, 'gate', request);
       const rep = analyze(String(b.system_prompt));
       const reasons = [];
       if (rep.score < minScore) reasons.push('score ' + rep.score + ' is below min_score ' + minScore);
@@ -662,7 +676,7 @@ export default {
       try { msg = await request.json(); } catch (e) {
         return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }, 400);
       }
-      bump(env, ctx, 'agentcheck');
+      bump(env, ctx, 'mcp', request);
       if (Array.isArray(msg)) {   // JSON-RPC batch
         const out = msg.map(mcpHandle).filter(Boolean);
         return out.length ? json(out) : new Response(null, { status: 204, headers: CORS });
@@ -695,7 +709,7 @@ export default {
       let b;
       try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
       if (!b || typeof b !== 'object' || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
-      bump(env, ctx, 'toolcheck');
+      bump(env, ctx, 'toolcheck', request);
       return json(toolcheck.check(String(b.name), b.arguments || {}, inspect));
     }
     // Unified agent check: run all three surfaces in one call and return the worst verdict.
@@ -707,7 +721,7 @@ export default {
       if (!b || typeof b !== 'object' || (!b.system_prompt && !b.input && !hasTool && !hasTurns)) {
         return json({ error: 'provide at least one of: system_prompt, input, turns, tool_call {name, arguments}' }, 400);
       }
-      bump(env, ctx, 'agentcheck');
+      bump(env, ctx, 'agentcheck', request);
       const r = json(agentCheck(b));   // shared with the MCP agent_check tool
       r.headers.set('Cache-Control', 'no-store');
       return r;
@@ -717,7 +731,7 @@ export default {
       const b = await request.json().catch(() => ({}));
       const email = String((b && b.email) || '').trim().slice(0, 200);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'a valid email is required' }, 400);
-      bump(env, ctx, 'lead');
+      bump(env, ctx, 'lead', request);
       const rec = { ts: Date.now(), email, note: String((b && b.note) || '').slice(0, 1000), tier: String((b && b.tier) || '').slice(0, 40), source: String((b && b.source) || 'site').slice(0, 60) };
       if (env && env.LEADS && ctx) {
         ctx.waitUntil((async () => {
@@ -739,14 +753,14 @@ export default {
       const prompt = String((b && b.system_prompt) || '').slice(0, 8000);
       if (!prompt.trim()) return json({ error: 'a prompt is required' }, 400);
       const email = String((b && b.email) || '').trim().slice(0, 200);
-      bump(env, ctx, 'review');
+      bump(env, ctx, 'review', request);
       const rec = { ts: Date.now(), prompt, report: analyze(prompt), firewall: inspect(prompt) };
       const id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).replace(/[^a-z0-9]/g, '').slice(0, 16);
       if (env && env.LEADS) {
         try { await env.LEADS.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 30 }); }
         catch (e) { return json({ error: 'could not store report' }, 503); }
         if (ctx && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-          bump(env, ctx, 'lead');
+          bump(env, ctx, 'lead', request);
           ctx.waitUntil((async () => {
             try {
               const lead = { ts: Date.now(), email, note: ('[review /r/' + id + '] ' + prompt).slice(0, 1000), tier: 'review', source: String((b && b.source) || 'lead-magnet').slice(0, 60) };
@@ -820,7 +834,7 @@ export default {
       if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
-      bump(env, ctx, 'scan_live');
+      bump(env, ctx, 'scan_live', request);
       let keys; try { keys = JSON.parse(env.REDCELL_NIM_KEYS); } catch (e) { return json({ error: 'bad REDCELL_NIM_KEYS' }, 500); }
       try {
         const rep = await liveScan(String(b.system_prompt), keys,
@@ -887,16 +901,34 @@ export default {
     // Aggregate funnel counters — non-PII, no token needed. Real numbers or 0.
     if (url.pathname === '/stats') {
       const counts = {};
+      const synth = {};
       if (env && env.LEADS) {
-        for (const k of STAT_KEYS) { const v = await env.LEADS.get('stat:' + k); counts[k] = v ? (parseInt(v, 10) || 0) : 0; }
-      } else { for (const k of STAT_KEYS) counts[k] = 0; }
+        for (const k of STAT_KEYS) {
+          const v = await env.LEADS.get('stat:' + k); const total = v ? (parseInt(v, 10) || 0) : 0;
+          const sv = await env.LEADS.get('stat:syn:' + k); synth[k] = sv ? (parseInt(sv, 10) || 0) : 0;
+          /* Every total carries a lump of our own pre-cut-over test traffic that cannot be
+             separated after the fact. Baselining on first read freezes that lump, so what we
+             publish is traffic since the cut-over rather than a total we know to be inflated.
+             Subtracting silently would be worse than the inflated number — hence `since`. */
+          let base = await env.LEADS.get('stat:base:' + k);
+          if (base === null) { base = String(total); ctx.waitUntil(env.LEADS.put('stat:base:' + k, base)); }
+          counts[k] = Math.max(0, total - (parseInt(base, 10) || 0));
+        }
+      } else { for (const k of STAT_KEYS) { counts[k] = 0; synth[k] = 0; } }
       let breach = { attempts: 0, wins: 0 };
       if (env && env.BREACH_LOG) {
         const raw = await env.BREACH_LOG.get('stats');
         if (raw) { try { const s = JSON.parse(raw); breach = { attempts: s.attempts || 0, wins: s.wins || 0 }; } catch (e) { } }
       }
-      const r = json({ ok: true, counts, breach });
-      r.headers.set('Cache-Control', 'public, max-age=60'); // cache-aside: 8 KV reads collapse to 1/min/edge
+      // `counts` excludes our own test traffic; `synthetic` is that traffic, published rather
+      // than hidden so the figure can be checked. Counts before 2026-08-22 mix the two —
+      // see `note`, because a number without its caveat is a number that will be misread.
+      const r = json({ ok: true, since: '2026-08-22', counts, synthetic: synth,
+        note: 'counts are real traffic since the cut-over date, excluding REDCELL\'s own '
+          + 'verification runs (reported separately as `synthetic`). Totals from before that '
+          + 'date mixed the two and were not a measure of adoption, so they are not published.',
+        breach });
+      r.headers.set('Cache-Control', 'public, max-age=60'); // cache-aside: KV reads collapse to 1/min/edge
       return r;
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
@@ -915,7 +947,7 @@ export default {
       let b = {}; try { b = await request.json(); } catch (e) { }
       const r = await registerUser(env, b.email, b.password, b.name);
       if (r.error) return json({ error: r.error }, 400);
-      bump(env, ctx, 'signup');   // funnel: landing -> scan -> signup is otherwise invisible
+      bump(env, ctx, 'signup', request);   // funnel: landing -> scan -> signup is otherwise invisible
       const t = await startSession(env, r.user);
       const res = json({ ok: true, email: r.user.email });
       res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
@@ -1048,7 +1080,11 @@ export default {
     if (url.pathname === '/admin') {
       if (!(await adminOk(env, request))) return html(renderAdminDenied(), 403, NOSTORE);
       const counts = {};
-      for (const k of STAT_KEYS) { const v = await env.LEADS.get('stat:' + k); counts[k] = v ? (parseInt(v, 10) || 0) : 0; }
+      const synth = {};
+      for (const k of STAT_KEYS) {
+          const v = await env.LEADS.get('stat:' + k); counts[k] = v ? (parseInt(v, 10) || 0) : 0;
+          const sv = await env.LEADS.get('stat:syn:' + k); synth[k] = sv ? (parseInt(sv, 10) || 0) : 0;
+        }
       let breach = {}; try { breach = JSON.parse((await env.BREACH_LOG.get('stats')) || '{}'); } catch (e) { }
       const ulist = await env.LEADS.list({ prefix: 'usr:', limit: 1000 });
       const recent = []; let paid = 0;
@@ -1069,7 +1105,7 @@ export default {
       return html(renderAdmin({
         users: ulist.keys.length, paid, mrr: paid * PLAN_PRICE_USD,
         leads: parseInt((await env.LEADS.get('count')) || '0', 10) || 0,
-        counts, breach, recent: recent.slice(0, 25), recentLeads,
+        counts, synth, breach, recent: recent.slice(0, 25), recentLeads,
         billingReady: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO && env.PADDLE_WEBHOOK_SECRET),
         hasWebhookSecret: !!(env && env.PADDLE_WEBHOOK_SECRET),
         hasCheckout: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO),
@@ -3587,6 +3623,7 @@ function renderAdmin(data) {
     ['Accounts', data.users], ['Paid', data.paid], ['MRR (USD)', '$' + data.mrr],
     ['Leads', data.leads], ['Page loads', data.counts.landing || 0],
     ['Config scans', data.counts.scan || 0], ['Firewall checks', data.counts.firewall || 0],
+    ['CI gate runs', data.counts.gate || 0], ['MCP calls', data.counts.mcp || 0],
     ['Signups', data.counts.signup || 0],
     ['Breach attempts', data.breach.attempts || 0], ['Breach wins', data.breach.wins || 0],
     ['Attacks blocked', data.breach.blocked || 0],
@@ -3607,6 +3644,16 @@ function renderAdmin(data) {
     + '<h1 style="font-size:26px;margin:10px 0 4px">Business overview</h1>'
     + '<p style="color:var(--ink2);font-size:14.5px;margin:0">Live counters from KV. Billing state comes from the merchant-of-record webhook.</p>'
     + '<div class=mgrid>' + cells + '</div>'
+    + '<div class=card><div class=ey>Real vs synthetic traffic</div>'
+    + '<p style="color:var(--ink2);font-size:13.5px;margin:6px 0 10px">The counters above exclude '
+    + 'our own verification runs, which hit these endpoints on every deploy. Until 2026-08-22 they '
+    + 'did not, so anything before that date is mostly us.</p>'
+    + '<table class=adm><thead><tr><th>Surface</th><th>Real</th><th>Ours</th></tr></thead><tbody>'
+    + STAT_KEYS.map(function (k) {
+      return '<tr><td class=mono>' + esc(k) + '</td><td class=mono>' + esc(String(data.counts[k] || 0))
+        + '</td><td class=mono style="color:var(--ink3)">' + esc(String((data.synth || {})[k] || 0)) + '</td></tr>';
+    }).join('')
+    + '</tbody></table></div>'
     + '<div class=card><div class=ey>Recent accounts</div>'
     + '<table class=adm><thead><tr><th>Created</th><th>Email</th><th>Plan</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
     + '<div class=card><div class=ey>Recent leads</div>'

@@ -1459,3 +1459,34 @@ MEASUREMENT, and a wrong conclusion I had to withdraw:
 - [x] Removed the test accounts created during this work so /admin shows real signups only.
 NOTE on method: the negative control is what caught this. Two of my runs "measured" a key that
 was never valid. A measurement with no control can only confirm what you already believe.
+
+## ▶ round 49 — the usage numbers were measuring us (2026-08-22)
+Loop iteration 17. Went to look at adoption before doing GTM work and found the numbers could
+not answer the question. Counters read: firewall 110, agentcheck 105, toolcheck 101, signup 12.
+- ⚠️ Our own verify.sh hits firewall, toolcheck and agentcheck on **every run**, and it has run
+      dozens of times. The counters were largely a record of how often we tested ourselves.
+      They are published at **/stats**, so this was not just an internal blind spot — it was a
+      public claim that was not true.
+- ⚠️ /gate incremented `scan` and /mcp incremented `agentcheck`. The two surfaces built
+      specifically to remove adoption friction were invisible: no counter of their own, folded
+      into generic traffic. We could not have told whether either was ever used.
+- ⚠️ signup 12 counted the test accounts created while building auth. One real account exists.
+- [x] bump() takes the request and routes our traffic to a `stat:syn:` prefix. Marker, not a
+      control: anyone may send the header. No IP, user agent or body stored — only counts.
+- [x] page_audit and snippet_check wrap fetch once to mark every call. Wrapping beats adding a
+      header per call site, which is a header someone forgets at the next call site.
+- [x] gate and mcp given their own counters.
+- [x] The pre-cut-over lump cannot be separated after the fact, so /stats baselines it on first
+      read and publishes traffic **since 2026-08-22** plus `synthetic`, with a note. Subtracting
+      quietly would have been worse than the inflated number.
+- [x] /admin gains CI-gate and MCP cells and a real-vs-synthetic table.
+MEASURED, in three steps:
+  1. 3 unmarked + 2 marked calls -> real 101->104 (+3), synthetic 0->2 (+2). Exact.
+  2. After baselining, 2 real calls -> real 0->2. Exact.
+  3. A full verify.sh run -> **real toolcheck stayed at 2**; synthetic absorbed all of it
+     (mcp 8, gate 2, scan 2, firewall 1, agentcheck 1, signup 1).
+  All four layers pass: pytest 220, 18 pages, 37 snippet/protocol assertions.
+THE HONEST BOTTOM LINE: real traffic is **0 on every surface**. The product works end to end and
+nobody is using it. That was true yesterday too; the difference is that today the number says so.
+NOTE on method: I nearly built funnel optimisation on top of these numbers. Checking whether a
+metric can answer the question is part of using it, not a preliminary to it.
