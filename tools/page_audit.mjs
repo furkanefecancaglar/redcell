@@ -128,7 +128,10 @@ async function audit(page) {
   }
 
   // 7. the old dark/red identity must be gone
-  for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4']) {
+  // the first sweep only listed the primary tokens, so tinted leftovers (a dark-red border,
+  // a red wash behind a card) survived on five pages unnoticed. Check those too.
+  for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4', '3a2030', '2a1918', 'ff5b64',
+                     'rgba(255,59,70', 'rgba(255, 59, 70']) {
     if (html.includes(tok)) fail(page, 'legacy dark/red token ' + tok + ' still present');
   }
 }

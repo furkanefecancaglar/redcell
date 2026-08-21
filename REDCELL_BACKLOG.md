@@ -1306,3 +1306,30 @@ our ICP (people building agents), and it needs no account and no package registr
       all five are present), and a real tools/call per tool asserting the VERDICT, not just a 200 —
       a config pointing at a dead endpoint fails silently, which is the worst kind.
       VERIFIED: all four layers pass — pytest 218, 18 pages, 20 snippet/protocol assertions.
+
+## ▶ round 43 — verify the MCP install instead of trusting it (2026-08-21)
+Loop iteration 11. Last round I published a one-URL MCP config without checking that real clients
+accept that shape. Applied the "a published command is a claim" rule to my own new instruction.
+- [x] RESEARCHED the current remote-MCP reality rather than relying on stale knowledge: the
+      {"mcpServers":{"name":{"url":...}}} shape IS correct for Cursor and Streamable-HTTP clients,
+      so the config itself was right. But two protocol details and one instruction were wrong:
+- [x] SPEC BUG: a Streamable-HTTP client may GET the endpoint to open an SSE stream. We answered
+      200 with the HTML docs page, which a strict client would treat as a stream. Now
+      content-negotiated: `Accept: text/event-stream` -> 405 with `Allow: POST, OPTIONS`, a browser
+      still gets the docs. Same URL, both audiences, spec-correct.
+- [x] CORS BUG: preflight allowed only Content-Type and X-REDCELL-Token, so a browser-based MCP
+      client sending MCP-Protocol-Version or Mcp-Session-Id would be blocked before it ever
+      connected. Added those plus X-API-Key and Authorization.
+      (json() silently ignored the third argument I passed for the Allow header — it only took
+      (obj, status). Gave it the same optional-headers parameter html() already had.)
+- [x] ACCURACY: the page said "e.g. Claude Desktop claude_desktop_config.json" next to a URL
+      config. Claude Desktop adds REMOTE servers via Settings -> Connectors -> Add custom
+      connector, not that file — following our instruction literally would not have worked. The
+      page now names Cursor for the JSON and points Claude Desktop users at the connectors UI.
+- [x] FOUND WHILE READING THE PAGE: five pages (/agents /ci /mcp /quickstart /vs) still carried
+      dark-red leftovers — a #3a2030 border and an rgba(255,59,70,.05) wash. The round-26/27 sweep
+      only mapped the primary tokens, so tinted ones survived and page_audit was not looking for
+      them. Replaced with the light palette, and widened the audit's token list. Confirmed the
+      widened check catches them: run against the still-live pages it failed on 5 counts, and
+      passes after deploy.
+      All four layers pass: pytest 218, 18 pages, 20 snippet/protocol assertions.
