@@ -1395,3 +1395,24 @@ answered differently depending on how you called it.
 NOTE on method: two brace-blind replacements (line counts, a wrong anchor) silently no-oped and one
 of them deployed a half-applied change — the parity check caught it both times. Ended up matching
 braces properly. Structural edits need structural anchors.
+
+## ▶ round 47 — the last unguarded duplicate engine (2026-08-21)
+Loop iteration 15. Round 46 showed that a duplicated implementation drifts silently, so I went
+looking for the others. REDCELL ports four engines from Python to JS on purpose.
+- ⚠️ FOUND: firewall, scanner and semantic each had a parity test. **redcell_toolcheck.py <->
+      redcell_toolcheck.js had none.** That is the engine a user vendors for their own runtime
+      while our hosted API runs the JS port — if they drifted, self-hosted and API callers would
+      get different verdicts on the same tool call, and nothing would have noticed.
+- [x] MEASURED BEFORE WRITING THE TEST: ran 22 tool calls through both. Action, score and reasons
+      matched on all 22 — no drift exists today. The gap was the absence of a guard, not a bug.
+- [x] Added test_toolcheck_py_js_parity in the house style (Python in-process, JS via node), with
+      cases for every reason class plus benign lookalikes that must stay allow.
+- [x] Added test_toolcheck_corpus_exercises_every_reason_class — and it immediately earned its
+      place by failing: my corpus did NOT trigger executable-data-url or privileged-container-exec.
+      I had assumed `exec_in_container` + privileged:true and a base64 data URL would fire them;
+      the detectors actually require a shell-shaped tool name with `docker exec`/`sudo -i`, and a
+      data URL with a literal <script>. Without that assertion I would have shipped a parity test
+      that silently covered 11 of 13 classes and called it done.
+- [x] PROVED THE TEST CATCHES DRIFT: changed one JS score 22 -> 21 and it failed with
+      "toolcheck parity drift at item 5: 'read_file'". Reverted; all four parity tests green.
+      All four layers pass: pytest 220 (was 218), 18 pages, 25 snippet/protocol assertions.
