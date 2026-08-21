@@ -1282,3 +1282,27 @@ which turned up something more important.
 FOR FURKAN, in priority order: (1) appeal the GitHub suspension — it blocks the repo, packages and
 CI all at once; (2) Paddle KYC + payout, which still blocks taking money. Neither is something I
 can do, and neither is a reason for me to stop on everything else.
+
+## ▶ round 42 — MCP over HTTP: the install is now a URL (2026-08-21)
+Loop iteration 10. With the GitHub account suspended there is no repo, no npm, no PyPI — so the
+question was which distribution channel is still genuinely open. MCP is: the audience is exactly
+our ICP (people building agents), and it needs no account and no package registry on either side.
+- [x] THE FRICTION IT REMOVES: adding REDCELL to an agent used to mean four `curl -sO` downloads,
+      Python on the machine, and hand-editing an absolute path into a config. Now:
+        { "mcpServers": { "redcell": { "url": ".../mcp" } } }
+- [x] POST /mcp speaks JSON-RPC 2.0 (MCP 2024-11-05): initialize, ping, tools/list, tools/call,
+      notification handling (204, no body) and batches. Same five tools as redcell_mcp.py —
+      firewall_check, scan_prompt, tool_check, thread_check, agent_check — answered in-Worker by
+      the same engines the REST surfaces use, so calls are 0-API and deterministic. GET /mcp still
+      serves the docs page.
+- [x] TWO BUGS, both caught by driving the real protocol rather than assuming:
+      1. Every POST returned the HTML docs page. The existing `/mcp` route matched without checking
+         the method, so requests never reached the JSON-RPC handler. Restricted it to GET.
+      2. tool_check and agent_check failed with "inspect2 is not a function" —
+         toolcheck.check(name, args, inspect) takes the firewall as an injected third argument and
+         I had omitted it. The other three tools worked, which is exactly how a partial integration
+         hides: the listing was complete and two of five tools were dead.
+- [x] snippet_check extended to drive the protocol end to end: initialize, tools/list (asserting
+      all five are present), and a real tools/call per tool asserting the VERDICT, not just a 200 —
+      a config pointing at a dead endpoint fails silently, which is the worst kind.
+      VERIFIED: all four layers pass — pytest 218, 18 pages, 20 snippet/protocol assertions.

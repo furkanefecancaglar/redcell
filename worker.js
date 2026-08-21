@@ -441,7 +441,7 @@ export default {
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
     if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
     if (url.pathname === '/ci') return html(renderCI());
-    if (url.pathname === '/mcp') return html(renderMCP());
+    if (request.method === 'GET' && url.pathname === '/mcp') return html(renderMCP());   // POST /mcp is the JSON-RPC endpoint
     if (url.pathname === '/quickstart') return html(renderQuickstart());
     if (url.pathname.indexOf('/src/') === 0) {
       const name = url.pathname.slice(5);
@@ -642,6 +642,21 @@ export default {
         findings: rep.findings.map((f) => ({ id: f.id, title: f.title, sev: f.sev })),
         history_id: hid,
       }, ok ? 200 : 422);
+    }
+
+    // MCP over HTTP: adding REDCELL to an agent is now a URL, not four downloads.
+    if (request.method === 'POST' && url.pathname === '/mcp') {
+      let msg = null;
+      try { msg = await request.json(); } catch (e) {
+        return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }, 400);
+      }
+      bump(env, ctx, 'agentcheck');
+      if (Array.isArray(msg)) {   // JSON-RPC batch
+        const out = msg.map(mcpHandle).filter(Boolean);
+        return out.length ? json(out) : new Response(null, { status: 204, headers: CORS });
+      }
+      const res = mcpHandle(msg);
+      return res ? json(res) : new Response(null, { status: 204, headers: CORS });
     }
 
     if (url.pathname === '/history') {
@@ -2361,8 +2376,7 @@ function renderCI() {
 const MCP_CONFIG = `{
   "mcpServers": {
     "redcell": {
-      "command": "python3",
-      "args": ["/absolute/path/to/redcell/redcell_mcp.py"]
+      "url": "https://redcell.redcellv1.workers.dev/mcp"
     }
   }
 }`;
@@ -3748,4 +3762,106 @@ function historySarif(recs) {
     runs: [{ tool: { driver: { name: 'REDCELL', informationUri: 'https://redcell.redcellv1.workers.dev',
       rules: Object.keys(rules).map((k) => rules[k]) } }, results }],
   };
+}
+
+/* ---------------- MCP over HTTP ----------------
+   Adding REDCELL to an agent used to mean: curl four Python files, have Python on the
+   machine, then hand-edit an absolute path into a config. With the GitHub account
+   suspended there is no repo or package registry to lean on either, so the install had
+   to get smaller on its own. This endpoint makes it a URL.
+
+   Same five tools as redcell_mcp.py, but answered in-Worker by the same engines the
+   REST surfaces use — so a tool call is 0-API, deterministic and has no cold start.
+   JSON-RPC 2.0, MCP 2024-11-05. GET /mcp still serves the docs page. */
+const MCP_PROTOCOL = '2024-11-05';
+const MCP_SERVER_INFO = { name: 'redcell', version: '1.0.0' };
+
+const MCP_TOOLS = [
+  { name: 'firewall_check',
+    description: 'Inspect UNTRUSTED text (a user message, retrieved document or tool result) for prompt injection, jailbreak, exfiltration and obfuscation before it reaches the model. Returns allow / flag / block with the rules that matched. Deterministic, no model call.',
+    inputSchema: { type: 'object', required: ['input'],
+      properties: { input: { type: 'string', description: 'the untrusted text to inspect' } } } },
+  { name: 'scan_prompt',
+    description: 'Score an agent system prompt against the OWASP LLM Top 10 (22 static checks) and return the findings, so you can harden it before shipping. Deterministic, no model call.',
+    inputSchema: { type: 'object', required: ['system_prompt'],
+      properties: { system_prompt: { type: 'string', description: 'the agent system prompt to score' } } } },
+  { name: 'tool_check',
+    description: 'Screen a proposed tool/function call BEFORE it runs — dangerous names, data exfiltration, unbounded transfers, local-file and secret-env reads, SSRF, command injection, privileged identities. Returns allow / flag / block. Deterministic, no model call.',
+    inputSchema: { type: 'object', required: ['name'],
+      properties: { name: { type: 'string', description: 'the tool/function name being called' },
+        arguments: { type: 'object', description: 'the arguments the tool would be called with' } } } },
+  { name: 'thread_check',
+    description: 'Re-inspect a whole conversation as one joined span, catching a directive split across several turns that looks benign message by message. Deterministic, no model call.',
+    inputSchema: { type: 'object', required: ['turns'],
+      properties: { turns: { type: 'array', items: { type: 'string' },
+        description: "the conversation's USER turns" } } } },
+  { name: 'agent_check',
+    description: 'Run the prompt scanner, the input firewall and the tool-call screen together and return the worst verdict — one call to check an agent end to end. Deterministic, no model call.',
+    inputSchema: { type: 'object',
+      properties: { system_prompt: { type: 'string', description: 'an agent system prompt to score (optional)' },
+        input: { type: 'string', description: 'untrusted input to firewall (optional)' },
+        tool_call: { type: 'object', description: 'a proposed {name, arguments} call to screen (optional)' } } } },
+];
+
+function mcpText(obj) {
+  return { content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] };
+}
+
+function mcpCallTool(name, args) {
+  const a = args || {};
+  if (name === 'firewall_check') {
+    if (typeof a.input !== 'string') throw new Error('input (string) is required');
+    return mcpText(inspect(String(a.input).slice(0, 16000)));
+  }
+  if (name === 'scan_prompt') {
+    if (typeof a.system_prompt !== 'string') throw new Error('system_prompt (string) is required');
+    return mcpText(analyze(String(a.system_prompt).slice(0, 16000)));
+  }
+  if (name === 'tool_check') {
+    if (typeof a.name !== 'string') throw new Error('name (string) is required');
+    return mcpText(toolcheck.check(String(a.name), a.arguments || {}, inspect));
+  }
+  if (name === 'thread_check') {
+    if (!Array.isArray(a.turns)) throw new Error('turns (array) is required');
+    const turns = a.turns.map((t) => (typeof t === 'string' ? t : (t && t.content) || '')).filter(Boolean);
+    return mcpText(fw.inspectThread ? fw.inspectThread(turns) : inspect(turns.join('\n')));
+  }
+  if (name === 'agent_check') {
+    const out = {};
+    if (typeof a.system_prompt === 'string') out.scan = analyze(a.system_prompt.slice(0, 16000));
+    if (typeof a.input === 'string') out.firewall = inspect(a.input.slice(0, 16000));
+    if (a.tool_call && a.tool_call.name) out.tool = toolcheck.check(String(a.tool_call.name), a.tool_call.arguments || {}, inspect);
+    // worst verdict across whatever was supplied — the point of the unified call
+    const rank = { allow: 0, flag: 1, block: 2 };
+    let worst = 'allow';
+    for (const k of ['firewall', 'tool']) {
+      const v = out[k] && out[k].action;
+      if (v && rank[v] > rank[worst]) worst = v;
+    }
+    if (out.scan && out.scan.has_critical) worst = 'block';
+    out.verdict = worst;
+    return mcpText(out);
+  }
+  throw new Error('unknown tool: ' + name);
+}
+
+function mcpHandle(msg) {
+  const id = msg && msg.id;
+  const method = msg && msg.method;
+  if (method === 'initialize') {
+    return { jsonrpc: '2.0', id, result: { protocolVersion: MCP_PROTOCOL, capabilities: { tools: {} }, serverInfo: MCP_SERVER_INFO } };
+  }
+  if (method === 'notifications/initialized' || method === 'initialized') return null;  // notification
+  if (method === 'ping') return { jsonrpc: '2.0', id, result: {} };
+  if (method === 'tools/list') return { jsonrpc: '2.0', id, result: { tools: MCP_TOOLS } };
+  if (method === 'tools/call') {
+    const p = msg.params || {};
+    try {
+      return { jsonrpc: '2.0', id, result: mcpCallTool(p.name, p.arguments) };
+    } catch (e) {
+      // tool errors belong in the result, not as a protocol error, so the agent can read them
+      return { jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text: String(e.message || e) }] } };
+    }
+  }
+  return { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found: ' + String(method) } };
 }
