@@ -1235,3 +1235,26 @@ without any account access, so it beat writing more content.
       pytest 218 green, page_audit PASS on 18 pages.
 LESSON reinforced: a published command is a claim. Run it verbatim from the rendered page before
 shipping it, not the version you think you wrote.
+
+## ▶ round 40 — every published command is now verified, not trusted (2026-08-21)
+Loop iteration 8. Last round a shipped snippet turned out to be broken, so the rest of the site's
+copy-paste commands got the same treatment instead of being assumed fine.
+- [x] AUDITED EVERYTHING THE SITE TELLS PEOPLE TO RUN:
+        6 vendorable /src/*.py downloads -> all HTTP 200, all valid Python (py_compile)
+        4 published API examples         -> all 200 AND semantically correct
+        the vendored path end to end     -> downloaded redcell_firewall.py + redcell_static.py into
+                                            a clean dir, imported them, got block/allow and 23
+                                            Vulnerable — a new user following the docs succeeds
+      The landing's documented output ("action": "block", score 44, direct-injection +
+      prompt-extraction) matches the live API exactly. No fixes needed this time; that is a result,
+      not a non-result — it was previously unverified.
+- [x] tools/snippet_check.mjs — 13 assertions covering the downloads, the four examples, and the
+      CI gate in BOTH directions (a gate that always passes and one that always fails are both
+      broken, and only one is obvious). Runs against any base URL, exits non-zero on failure.
+- [x] PROVED THE CHECKER ACTUALLY CHECKS, rather than shipping a green light that means nothing:
+      pointed at a base where nothing exists -> 8 failures, exit 1; inverted the weak-prompt
+      expectation in a scratch copy -> caught immediately. Against the live site: 13/13, exit 0.
+- [x] Caught myself repeating last round's exact mistake while measuring: I read `$?` after
+      `node ... | tail`, which reports tail's status, not node's. Re-measured without the pipe.
+      The bug I had just fixed in someone else's shoes was sitting in my own verification command.
+      pytest 218 green, page_audit PASS on 18 pages, snippet_check PASS 13/13.
