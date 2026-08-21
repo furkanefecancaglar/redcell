@@ -1212,3 +1212,26 @@ which for a security product matters more than any blog post.
       pytest 218 green, page_audit PASS on 18 pages (now including claim verification).
 NOTE for future runs: the landing is edge-cached for 30 min, so an audit immediately after deploy
 can read a stale copy. Re-run before trusting a post-deploy failure.
+
+## ▶ round 39 — CI adoption with nothing to install (2026-08-21)
+Loop iteration 7. The stickiest use case is the CI gate (install once, runs forever), but adopting
+it required downloading redcell_ci.py and having Python in the runner. That tax is removable
+without any account access, so it beat writing more content.
+- [x] POST /gate — the HTTP status IS the verdict: 200 pass, 422 fail. Takes {system_prompt,
+      min_score=60, fail_on_critical=true}, returns the score, grade, the reasons it failed and a
+      one-line summary. Deterministic (static scanner only), no key, no install. Signed-in callers
+      get the run recorded in their history like any other scan.
+      VERIFIED: weak prompt -> 422, hardened -> 200, min_score 10 -> 200 / 90 -> 422.
+- [x] /ci now leads with the one-curl path; the vendored-Python route is kept below it for
+      air-gapped runners.
+- [x] CAUGHT BEFORE PUBLISHING — the snippet I was about to ship was broken. I wrote it as
+      `curl -sf ... | tee | jq`, and a bash pipeline returns the exit code of the LAST command, so
+      jq swallowed curl's failure: the weak prompt exited 0. A security gate that never blocks a
+      merge is worse than no gate. Rewrote it to capture the body and status separately
+      (set -euo pipefail, then `[ "$code" = "200" ]`), which prints the reason on pass and fail and
+      exits non-zero correctly. Re-ran the published text verbatim: weak -> exit 1 with
+      "FAIL — 23/100 (Vulnerable) ... below min_score 60", hardened -> exit 0 "PASS — 90/100".
+      The page now carries an explicit warning about the pipeline-exit-code trap.
+      pytest 218 green, page_audit PASS on 18 pages.
+LESSON reinforced: a published command is a claim. Run it verbatim from the rendered page before
+shipping it, not the version you think you wrote.

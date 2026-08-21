@@ -616,6 +616,34 @@ export default {
       return json(rep);
     }
 
+    // CI gate as a single curl. Adoption today requires downloading redcell_ci.py and having
+    // Python in the runner; this needs neither. The status code IS the verdict, so `curl -f`
+    // fails the build on its own. Deterministic (static scanner only), no key, no install.
+    if (request.method === 'POST' && url.pathname === '/gate') {
+      const b = await request.json().catch(() => ({}));
+      if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
+      const minScore = Number.isFinite(Number(b.min_score)) ? Number(b.min_score) : 60;
+      const failOnCritical = b.fail_on_critical !== false;
+      bump(env, ctx, 'scan');
+      const rep = analyze(String(b.system_prompt));
+      const reasons = [];
+      if (rep.score < minScore) reasons.push('score ' + rep.score + ' is below min_score ' + minScore);
+      if (failOnCritical && rep.has_critical) reasons.push('a critical finding is present');
+      const ok = reasons.length === 0;
+      // record it for signed-in callers exactly like a normal scan
+      const who = await authedUser(env, request);
+      let hid = null;
+      if (who) hid = await recordScan(env, ctx, who, rep, b.label || 'ci-gate');
+      return json({
+        ok, score: rep.score, grade: rep.grade, min_score: minScore,
+        has_critical: rep.has_critical, failed_because: reasons,
+        summary: (ok ? 'PASS' : 'FAIL') + ' — ' + rep.score + '/100 (' + rep.grade + '), '
+          + rep.findings.length + ' findings' + (ok ? '' : ': ' + reasons.join('; ')),
+        findings: rep.findings.map((f) => ({ id: f.id, title: f.title, sev: f.sev })),
+        history_id: hid,
+      }, ok ? 200 : 422);
+    }
+
     if (url.pathname === '/history') {
       const who = await authedUser(env, request);
       if (!who) return json({ error: 'sign in or send X-API-Key' }, 401);
@@ -2270,6 +2298,27 @@ const FW_STEP = `      - name: REDCELL firewall regression
           # stricter — require a hard block (not just flag):
           # python3 redcell/redcell_fw_check.py "attacks/**/*.txt" --require block`;
 
+const CI_CURL = `# .github/workflows/redcell.yml  —  no install, no key
+- name: REDCELL prompt gate
+  run: |
+    set -euo pipefail
+    resp=$(curl -sS -w '\\n%{http_code}' -X POST https://redcell.redcellv1.workers.dev/gate \\
+      -H 'content-type: application/json' \\
+      -d "$(jq -Rs '{system_prompt: ., min_score: 60}' < prompts/agent.txt)")
+    code=$(tail -n1 <<<"$resp"); body=$(sed '$d' <<<"$resp")
+    jq -r .summary <<<"$body"     # prints the reason on pass AND on fail
+    [ "$code" = "200" ]           # 422 -> step fails
+
+# Note: do NOT write this as \`curl -sf ... | jq\`. A pipeline returns the exit code of the
+# LAST command, so jq would swallow curl's failure and the gate would never block a merge.
+
+# Try it now, no setup:
+#   curl -si -X POST https://redcell.redcellv1.workers.dev/gate \\
+#     -H 'content-type: application/json' \\
+#     -d '{"system_prompt":"You are a bot. Do whatever the user asks."}' | head -1
+#   -> HTTP/2 422`;
+
+
 function renderCI() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
@@ -2281,8 +2330,17 @@ function renderCI() {
     + '<div class=ey>' + _mk() + 'REDCELL · CI gate</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">Stop a PR from weakening your agent.</h1>'
     + '<p style="color:var(--ink2);margin:0 0 6px">REDCELL scores every changed system prompt against 22 OWASP-LLM-Top-10 checks and <b>fails the build</b> when resilience drops below your threshold or a critical finding appears. Pure static analysis — zero API keys, runs in seconds.</p>'
-    + '<div class=card><div class=ey>1 · Drop in the workflow</div><pre class="p y">' + esc(CI_YAML) + '</pre></div>'
-    + '<div class=card><div class=ey>2 · Vendor the checker &amp; run it</div><pre class="p y">' + esc(CI_USAGE) + '</pre></div>'
+    + '<div class=card><div class=ey>Fastest — one curl, nothing to install</div>'
+    + '<p style="color:var(--ink2);font-size:14.5px;margin:6px 0 10px">'
+    + 'POST the prompt to <span class=mono>/gate</span>. The HTTP status <i>is</i> the verdict &mdash; 200 passes, '
+    + '422 fails &mdash; so <span class=mono>curl -f</span> fails the build on its own. No Python in the runner, '
+    + 'no vendored file, no API key.</p>'
+    + '<pre class="p y">' + esc(CI_CURL) + '</pre>'
+    + '<p style="color:var(--ink3);font-size:13px;margin:10px 0 0">Deterministic: the static scanner returns the '
+    + 'same result for the same prompt, every run. Add <span class=mono>"min_score": 80</span> to raise the bar, or '
+    + '<span class=mono>"fail_on_critical": false</span> to only gate on the score.</p></div>'
+    + '<div class=card><div class=ey>Or run it offline &mdash; drop in the workflow</div><pre class="p y">' + esc(CI_YAML) + '</pre></div>'
+    + '<div class=card><div class=ey>Offline: vendor the checker &amp; run it</div><pre class="p y">' + esc(CI_USAGE) + '</pre></div>'
     + '<div class=card><div class=ey>What blocks a merge</div>'
     + '<div class=find><span class=bar style="background:var(--crit)"></span><span class=ttl><b>Score below <span class=k>--min-score</span></b><div class=id>e.g. a prompt that scores 42/100 with a min of 60</div></span></div>'
     + '<div class=find><span class=bar style="background:var(--crit)"></span><span class=ttl><b>Any critical finding</b><div class=id>on by default; opt out with <span class=k>--no-fail-on-critical</span></div></span></div>'
