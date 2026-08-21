@@ -605,7 +605,35 @@ export default {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
       bump(env, ctx, 'scan');
-      return json(analyze(String(b.system_prompt)));
+      const rep = analyze(String(b.system_prompt));
+      // Signed-in callers get the scan recorded for their history. Anonymous use is
+      // unchanged and still stores nothing.
+      const who = await authedUser(env, request);
+      if (who) {
+        const hid = await recordScan(env, ctx, who, rep, b.label);
+        if (hid) rep.history_id = hid;
+      }
+      return json(rep);
+    }
+
+    if (url.pathname === '/history') {
+      const who = await authedUser(env, request);
+      if (!who) return json({ error: 'sign in or send X-API-Key' }, 401);
+      const plan = planOf(who);
+      const recs = await listScans(env, who, HIST_LIMIT[plan] || HIST_LIMIT.free);
+      return json({ plan, kept: HIST_LIMIT[plan] || HIST_LIMIT.free, count: recs.length, scans: recs },
+        200);
+    }
+    if (url.pathname === '/history.sarif') {
+      const who = await authedUser(env, request);
+      if (!who) return json({ error: 'sign in or send X-API-Key' }, 401);
+      if (!isPaid(who)) {
+        return json({ error: 'SARIF export is a Pro feature.', plan: planOf(who),
+          upgrade: 'https://redcell.redcellv1.workers.dev/account' }, 402);
+      }
+      const recs = await listScans(env, who, HIST_LIMIT[planOf(who)] || 500);
+      return new Response(JSON.stringify(historySarif(recs), null, 2),
+        { headers: { 'Content-Type': 'application/sarif+json; charset=utf-8', ...CORS, ...NOSTORE } });
     }
     // Agent tool-call firewall: assess a proposed {name, arguments} call → allow/flag/block.
     if (request.method === 'POST' && url.pathname === '/toolcheck') {
@@ -1342,7 +1370,7 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
   <div class=surf>
     <div class="s up"><div class=k>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class="s up"><div class=k>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci">Setup →</a></p></div>
-    <div class="s up"><div class=k>Attack</div><h3>Live red-team</h3><p>Fires a real adversarial corpus at your agent; a separate judge model scores each response PASS or FAIL.</p></div>
+    <div class="s up"><div class=k>Attack</div><h3>Live red-team <span style="font-size:11px;color:var(--ink3);font-weight:600">BETA</span></h3><p>Fires a real adversarial corpus at your agent and has a judge model score each response. Marked beta on purpose: on our current judge the verdict is not yet reproducible run-to-run, so treat it as a lead, not a measurement. The scanner, firewall and tool-call gate are deterministic.</p></div>
     <div class="s up"><div class=k>Defend</div><h3>Runtime firewall</h3><p>38 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. A joined-history pass (<code>/firewall-thread</code>) re-checks the whole conversation, catching a directive split across turns. Microsecond latency, 4 languages.</p></div>
     <div class="s up"><div class=k>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <code>{name, arguments}</code> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file and secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
   </div>
@@ -1370,12 +1398,12 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
     <div class="pc up">
       <div class=tier>Free</div>
       <div class=amt>$0</div>
-      <ul><li>Static scanner + firewall API</li><li>CI gate, SDKs, MCP tool</li><li>Breach challenge</li></ul>
+      <ul><li>Static scanner + firewall API</li><li>CI gate, SDKs, MCP tool</li><li>Last 5 scans kept</li></ul>
     </div>
     <div class="pc feat up">
       <div class=tier>Pro <span class=tag>POPULAR</span></div>
       <div class=amt>$39<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Pro</a>
-      <ul><li>Live red-team on your agents</li><li>Adaptive attacks + judge model</li><li>Runtime firewall + dashboards</li></ul>
+      <ul><li>Scan history &amp; score trend</li><li>SARIF export for CI &amp; code scanning</li><li>Live red-team engine <span style="font-size:11px;color:var(--ink3)">(beta)</span></li></ul>
     </div>
     <div class="pc up">
       <div class=tier>Enterprise</div>
@@ -3287,7 +3315,8 @@ function renderAccount(user, billingReady) {
   const planName = PLANS[sub.plan] || sub.plan;
   const upgrade = sub.plan === 'free'
     ? (billingReady
-      ? '<button class=cta id=buy style="border:0;cursor:pointer">Upgrade to Pro &mdash; $39/mo</button>'
+      ? '<p style="color:var(--ink2);font-size:14px;margin:8px 0 14px">Pro keeps 500 scans of history and unlocks <span class=mono>/history.sarif</span> for CI. Free keeps the last 5.</p>'
+        + '<button class=cta id=buy style="border:0;cursor:pointer">Upgrade to Pro &mdash; $39/mo</button>'
         + '<div id=buymsg class=mono style="display:none;margin-top:10px"></div>'
       : '<span class=btn style="opacity:.6">Upgrade &mdash; billing not configured yet</span>')
     : '<a class=btn href="/billing/portal">Manage subscription</a>';
@@ -3472,13 +3501,14 @@ function renderPrivacy() {
     + '<tr><td>Session token</td><td>To keep you signed in</td><td>30 days</td></tr>'
     + '<tr><td>Subscription state (plan, status, provider IDs)</td><td>To give you what you paid for</td><td>Until you delete the account</td></tr>'
     + '<tr><td>Shareable report (only if you request one): the prompt you submitted plus its findings</td><td>So the report link works</td><td><strong>30 days</strong>, then deleted automatically</td></tr>'
+    + '<tr><td>Scan history (signed-in accounts only): the score and the finding metadata &mdash; detector id, title, severity, OWASP class &mdash; plus a timestamp. <b>Never the prompt text or evidence excerpts.</b></td><td>So you can see your trend and export SARIF to CI</td><td>Last 5 on Free, last 500 on Pro; older ones are deleted automatically</td></tr>'
     + '<tr><td>Waitlist / contact email</td><td>To reply to you</td><td>Until you ask us to remove it</td></tr>'
     + '<tr><td>Breach game: first 500 characters of each attempt, plus level and outcome</td><td>Public attack-technique research</td><td><strong>120 days</strong>, then deleted automatically</td></tr>'
     + '<tr><td>Aggregate counters (page loads, scans run, blocks)</td><td>To know if the product is used</td><td>Indefinite &mdash; numbers only, no personal data</td></tr>'
     + '</tbody></table>'
 
     + '<h2>What we never store</h2><ul>'
-    + '<li>Input sent to <span class=mono>/firewall</span>, <span class=mono>/scan-config</span>, <span class=mono>/toolcheck</span> or <span class=mono>/agentcheck</span>. It is processed and discarded.</li>'
+    + '<li>The text you submit to <span class=mono>/firewall</span>, <span class=mono>/scan-config</span>, <span class=mono>/toolcheck</span> or <span class=mono>/agentcheck</span>. It is processed in memory and discarded. If you are signed in we record what was <i>found</i> (see the table above) &mdash; never the text you sent.</li>'
     + '<li>Your password in any readable form. Only a PBKDF2-SHA256 hash with a per-user random salt is kept.</li>'
     + '<li>Your API key in plaintext. Only its SHA-256 hash is kept; the key itself is shown once at creation.</li>'
     + '<li>Card numbers or billing details. Those go to Paddle and never reach our servers.</li></ul>'
@@ -3530,4 +3560,90 @@ function renderRefund() {
     + '<p>Nothing here limits any mandatory refund or withdrawal right you have under the consumer law of your own country. Where that law gives you more than this policy, that law applies.</p>'
 
     + '<h2>Contact</h2><p><strong>' + LEGAL_SUPPORT + '</strong></p>');
+}
+
+/* ---------------- Scan history (the deterministic paid surface) ----------------
+   Round 34 measured that the live engine cannot produce a stable verdict, so the paid
+   tier is built on the surfaces that are reproducible instead. History is one of them:
+   the static scanner gives identical output for identical input, so a trend line over
+   time is meaningful.
+
+   PRIVACY: the prompt itself is NEVER stored. Only the finding metadata (detector id,
+   title, severity, OWASP class), the score and a timestamp. The privacy policy says the
+   0-API surfaces discard your text and that stays true — there is nothing here to leak. */
+const HIST_LIMIT = { free: 5, pro: 500, team: 500, enterprise: 2000 };
+
+function planOf(user) {
+  return (user && user.sub && user.sub.status === 'active' && user.sub.plan) || 'free';
+}
+
+async function recordScan(env, ctx, user, report, label) {
+  if (!env || !env.LEADS || !user) return null;
+  const id = rndHex(8);
+  const rec = {
+    id,
+    at: new Date().toISOString(),
+    label: String(label || '').slice(0, 80),
+    score: report.score,
+    grade: report.grade,
+    passed: report.passed,
+    // finding metadata only — no prompt text, no evidence excerpts
+    findings: (report.findings || []).slice(0, 40).map((f) => ({
+      id: f.id, title: f.title, sev: f.sev, cat: f.cat,
+    })),
+  };
+  const write = (async () => {
+    try {
+      await env.LEADS.put('hist:' + user.id + ':' + id, JSON.stringify(rec));
+      // keep the newest N for the plan; drop the rest so free accounts cannot grow unbounded
+      const cap = HIST_LIMIT[planOf(user)] || HIST_LIMIT.free;
+      const list = await env.LEADS.list({ prefix: 'hist:' + user.id + ':', limit: 1000 });
+      if (list.keys.length > cap) {
+        const withTs = [];
+        for (const k of list.keys) {
+          const v = await env.LEADS.get(k.name);
+          if (v) { try { withTs.push({ k: k.name, at: JSON.parse(v).at }); } catch (e) { } }
+        }
+        withTs.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        for (const old of withTs.slice(cap)) await env.LEADS.delete(old.k);
+      }
+    } catch (e) { /* history is additive: never fail the scan because of it */ }
+  })();
+  if (ctx && ctx.waitUntil) ctx.waitUntil(write); else await write;
+  return id;
+}
+
+async function listScans(env, user, limit) {
+  const out = [];
+  const list = await env.LEADS.list({ prefix: 'hist:' + user.id + ':', limit: 1000 });
+  for (const k of list.keys) {
+    const v = await env.LEADS.get(k.name);
+    if (!v) continue;
+    try { out.push(JSON.parse(v)); } catch (e) { }
+  }
+  out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  return out.slice(0, limit || 100);
+}
+
+function historySarif(recs) {
+  const rules = {}, results = [];
+  for (const rec of recs) {
+    for (const f of rec.findings || []) {
+      rules[f.id] = { id: f.id, name: f.title || f.id,
+        shortDescription: { text: f.title || f.id },
+        properties: { category: f.cat || '', 'security-severity': ({ crit: '9.0', high: '7.0', med: '5.0', low: '3.0' })[f.sev] || '3.0' } };
+      results.push({
+        ruleId: f.id,
+        level: (f.sev === 'crit' || f.sev === 'high') ? 'error' : f.sev === 'med' ? 'warning' : 'note',
+        message: { text: (f.title || f.id) + ' — scan ' + rec.id + ' (' + rec.at.slice(0, 10) + ', score ' + rec.score + ')' },
+        locations: [{ physicalLocation: { artifactLocation: { uri: 'system_prompt.txt' } } }],
+      });
+    }
+  }
+  return {
+    version: '2.1.0',
+    $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+    runs: [{ tool: { driver: { name: 'REDCELL', informationUri: 'https://redcell.redcellv1.workers.dev',
+      rules: Object.keys(rules).map((k) => rules[k]) } }, results }],
+  };
 }

@@ -1120,3 +1120,29 @@ DECISION (product, not code): /scan cannot be what we charge for. Two ways forwa
 (b) is buildable now at $0 and is honest, so that is the direction. /scan stays available but must
 be labelled experimental and must not be the headline promise of a paid plan.
 NEXT: reposition the Pro tier onto deterministic surfaces; mark /scan beta wherever it is sold.
+
+## ▶ round 35 — the paid tier now sells something that exists (2026-08-21)
+Loop iteration 3, executing round 34's decision. Before this the Pro tier promised three things
+("live red-team", "adaptive attacks + judge", "runtime firewall + dashboards") and NONE of them
+held: two rested on the engine measured as non-reproducible, and dashboards did not exist.
+Rewording alone would have repeated the original sin, so the value was built first.
+- [x] Scan history on the deterministic static scanner: an authenticated POST /scan-config is
+      recorded, GET /history lists it. Free keeps 5, Pro keeps 500, older records auto-pruned.
+      Anonymous use is unchanged and records nothing.
+- [x] GET /history.sarif — real SARIF 2.1.0 for CI / code-scanning, gated on an active paid plan.
+- [x] PRIVACY HELD BY DESIGN, NOT BY PROMISE: only finding metadata is stored (detector id, title,
+      severity, OWASP class) plus score and timestamp. The submitted prompt and evidence excerpts
+      are never written. Verified by probing the stored records for three distinct phrases from the
+      submitted prompts — all absent. Privacy policy updated to describe exactly this, and the
+      "never stored" list reworded so it stays literally true.
+- [x] Copy aligned with what is enforced: Pro now reads "scan history / SARIF export / live engine
+      (beta)", Free says "last 5 scans kept", and the surfaces card labels the live engine BETA and
+      states plainly that its verdict is not yet reproducible run-to-run — a lead, not a measurement.
+      VERIFIED live: anonymous scan -> no history_id; 3 authenticated scans -> 3 records; free plan
+      -> /history.sarif 402; unauthenticated -> 401; after a signed webhook upgrade -> plan pro,
+      kept 500, SARIF 200 with 4 rules / 21 results. pytest 218 green, page_audit PASS on 18 pages.
+      Test account and its history deleted afterwards.
+NOTE: an earlier check of mine flagged "prompt stored? True" — that was my own false positive
+(finding titles contain the word "prompt"). Re-verified against the actual submitted text.
+NEXT: /account should show the history and the SARIF link, so the thing customers pay for is
+visible in the product rather than only over the API.
