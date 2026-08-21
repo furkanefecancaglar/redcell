@@ -439,7 +439,9 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') { bump(env, ctx, 'landing'); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
-    if (url.pathname === '/dashboard') return new Response(DASHBOARD_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
+    // Retired: /admin does the same job with a server-side gate, while this page's token
+    // check ran client-side. One internal surface, one gate.
+    if (url.pathname === '/dashboard') return Response.redirect(url.origin + '/admin', 301);
     if (url.pathname === '/ci') return html(renderCI());
     if (request.method === 'GET' && url.pathname === '/mcp') {
       // Content-negotiate: an MCP client asking for a stream gets a spec-correct 405,
@@ -1748,6 +1750,7 @@ renderLevel();add('sys','— Level 1: Novice — talk to the guard and get the p
 
 /* ---------------- investor pitch page (/pitch) ---------------- */
 const PITCH_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=robots content="noindex">
 ${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — investor brief</title>
 <meta name=description content="REDCELL — the security layer for AI agents. Market, product, and traction brief.">
 <meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL">
@@ -1844,99 +1847,6 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <footer><div class=wrap>REDCELL · the security layer for AI agents · redcell.redcellv1.workers.dev</div></footer>
 ${SITE_FOOT}</body></html>`;
 
-/* ---------------- founder dashboard (/dashboard) — token entered client-side ---------------- */
-const DASHBOARD_PAGE = `<!doctype html><html lang=en><head><meta charset=utf-8>
-${FAVICON}<meta name=viewport content="width=device-width,initial-scale=1"><title>REDCELL — dashboard</title>
-<meta name=description content="REDCELL founder dashboard — funnel counts, breach-attack data, and live self-check. Token stays in the browser.">
-<meta property="og:type" content="website"><meta property="og:site_name" content="REDCELL"><meta property="og:title" content="REDCELL — founder dashboard"><meta property="og:description" content="Funnel counts, breach-attack data, and live self-check for the REDCELL security layer for AI agents."><meta property="og:url" content="https://redcell.redcellv1.workers.dev/dashboard"><meta property="og:image" content="https://redcell.redcellv1.workers.dev/og.svg"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="REDCELL — founder dashboard"><meta name="twitter:description" content="Funnel counts, breach-attack data, and live self-check. Token stays in the browser."><meta name="twitter:image" content="https://redcell.redcellv1.workers.dev/og.svg">
-<style>
-:root{--bg:#FCFCFD;--panel:#FFFFFF;--panel2:#F7F8FA;--line:#E9EAEE;--line2:#DDDFE5;--ink:#12141A;--ink2:#565D6D;--ink3:#6B7280;--red:#175CFF;--redb:#175CFF;--redglow:rgba(23,92,255,.10);--crit:#B42318;--high:#B54708;--med:#B54708;--low:#175CFF;--pass:#067647;--mono:ui-monospace,monospace;--sans:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--redb);outline-offset:2px}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);background-image:radial-gradient(60% 40% at 50% -10%,var(--redglow),transparent 60%);background-repeat:no-repeat}
-.wrap{max-width:720px;margin:0 auto;padding:28px 22px}
-h1{font-size:20px;letter-spacing:-.02em;margin:0 0 4px}h1 b{color:var(--red)}
-.sub{color:var(--ink2);font:12px var(--mono);margin:0 0 20px}
-.row{display:flex;gap:8px;margin:14px 0}
-input{flex:1;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:11px;font:13px var(--mono)}
-button{background:var(--red);color:#fff;border:0;border-radius:9px;padding:11px 18px;font-weight:600;cursor:pointer}button:hover{background:var(--redb)}
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
-.c{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
-.c .n{font:11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
-.c .v{font-size:28px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
-h2{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);margin:22px 0 8px}
-table{width:100%;border-collapse:collapse;font-size:13.5px}td,th{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{color:var(--ink3);font:11px var(--mono);font-weight:500}
-td.m{font-family:var(--mono);color:var(--ink2)}
-.err{color:var(--high);font:12px var(--mono)}
-@media(max-width:560px){.cards{grid-template-columns:repeat(2,1fr)}}
-</style></head><body><div class=wrap>
-<h1>RED<b>CELL</b> — founder dashboard</h1>
-<p class=sub>funnel + attack-data moat · token stays in your browser</p>
-<div class=row><input id=tok type=password placeholder="X-REDCELL-Token (from ~/redcell/.scan_token)"><button onclick=load()>Load</button></div>
-<div id=err class=err></div>
-<div class=cards>
-<div class=c><div class=n>Leads</div><div class=v id=leads>—</div></div>
-<div class=c><div class=n>Breach attempts</div><div class=v id=att>—</div></div>
-<div class=c><div class=n>Breaches (wins)</div><div class=v id=wins>—</div></div>
-<div class=c><div class=n>Firewall blocks</div><div class=v id=blk>—</div></div>
-</div>
-<h2>System status <span style="color:var(--line2);text-transform:none;letter-spacing:0">· live self-check</span></h2>
-<div id=status style="display:flex;gap:10px;flex-wrap:wrap;font:12px ui-monospace,monospace"><span style="color:var(--ink3)">checking…</span></div>
-<h2>Conversion funnel <span style="color:var(--line2);text-transform:none;letter-spacing:0">· live, no token needed</span></h2>
-<div class=cards>
-<div class=c><div class=n>Page loads</div><div class=v id=f_landing>—</div></div>
-<div class=c><div class=n>Config scans</div><div class=v id=f_scan>—</div></div>
-<div class=c><div class=n>Firewall checks</div><div class=v id=f_firewall>—</div></div>
-<div class=c><div class=n>Reviews built</div><div class=v id=f_review>—</div></div>
-<div class=c><div class=n>Leads (all)</div><div class=v id=f_lead>—</div></div>
-<div class=c><div class=n>Live red-team</div><div class=v id=f_scan_live>—</div></div>
-</div>
-<h2>Top attack techniques seen <span style="color:var(--line2);text-transform:none;letter-spacing:0">· Breach data moat</span></h2>
-<div id=techniques style="font:13px ui-monospace,monospace;color:var(--ink3)">loading…</div>
-<h2>Recent leads</h2>
-<table id=leadtbl><thead><tr><th>When</th><th>Email</th><th>Tier</th><th>Source</th></tr></thead><tbody></tbody></table>
-<script>
-function fmt(ts){try{return new Date(ts).toISOString().slice(0,16).replace('T',' ');}catch(e){return '';}}
-async function load(){var t=document.getElementById('tok').value.trim();var er=document.getElementById('err');er.textContent='';
- if(!t){er.textContent='Enter your token.';return;}
- try{localStorage.setItem('rc_tok',t);}catch(e){}
- try{
-  var st=await fetch('/breach/stats').then(function(x){return x.json();});
-  document.getElementById('att').textContent=(st.attempts||0).toLocaleString();
-  document.getElementById('wins').textContent=(st.wins||0).toLocaleString();
-  document.getElementById('blk').textContent=(st.blocked||0).toLocaleString();
-  var lr=await fetch('/leads',{headers:{'X-REDCELL-Token':t}});
-  if(lr.status===401||lr.status===403){er.textContent='Token rejected ('+lr.status+').';return;}
-  var ld=await lr.json();
-  document.getElementById('leads').textContent=(ld.count||0).toLocaleString();
-  var tb=document.querySelector('#leadtbl tbody');tb.innerHTML='';
-  (ld.leads||[]).slice(0,25).forEach(function(l){var tr=document.createElement('tr');tr.innerHTML='<td class=m>'+fmt(l.ts)+'</td><td>'+(l.email||'')+'</td><td class=m>'+(l.tier||'')+'</td><td class=m>'+(l.source||'')+'</td>';tb.appendChild(tr);});
- }catch(e){er.textContent='Load failed — check the token and try again.';}
-}
-async function loadStats(){try{var s=await fetch('/stats').then(function(x){return x.json();});var c=(s&&s.counts)||{};
- ['landing','scan','firewall','review','lead','scan_live'].forEach(function(k){var e=document.getElementById('f_'+k);if(e)e.textContent=(c[k]||0).toLocaleString();});
-}catch(e){}}
-async function loadStatus(){var el=document.getElementById('status');try{var t0=performance.now();var s=await fetch('/selfcheck').then(function(x){return x.json();});var ms=Math.max(1,Math.round(performance.now()-t0));
- var c=s.checks||{};var html='';var names={firewall:'Firewall',scanner:'Scanner',toolcheck:'Tool-call',agentcheck:'Unified',report_kv:'Report store'};
- Object.keys(names).forEach(function(k){var ok=c[k]&&c[k].pass;var col=ok?'var(--pass)':'var(--crit)';var dot=ok?'●':'●';
-  html+='<span title="'+((c[k]&&c[k].detail)||'')+'" style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:'+col+'">'+dot+' '+names[k]+' '+(ok?'ok':'FAIL')+'</span>';});
- html+='<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:'+(s.ok?'var(--pass)':'var(--crit)')+'">'+(s.ok?'● all systems go':'● degraded')+'</span>';
- var now=new Date();var hh=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
- html+='<span style="border:1px solid var(--line);border-radius:8px;padding:6px 10px;color:var(--ink3)">'+ms+' ms round-trip · checked '+hh+'</span>';
- el.innerHTML=html;
-}catch(e){el.innerHTML='<span style="color:var(--high)">self-check unreachable</span>';}}
-async function loadTechniques(){var el=document.getElementById('techniques');try{var s=await fetch('/breach/techniques').then(function(x){return x.json();});
- var t=(s&&s.techniques)||[];if(!t.length){el.textContent='no data yet — play the Breach game to seed it.';return;}
- var max=t[0].count||1;var html='';t.slice(0,10).forEach(function(x){var w=Math.max(4,Math.round((x.count/max)*100));
-  html+='<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><span style="flex:0 0 190px;color:var(--ink)">'+x.id.replace(/[<>&]/g,'')+'</span>'
-   +'<span style="flex:1;background:var(--panel2);border-radius:6px;overflow:hidden"><span style="display:block;height:16px;width:'+w+'%;background:var(--crit)"></span></span>'
-   +'<span style="flex:0 0 40px;text-align:right;color:var(--ink2)">'+x.count+'</span></div>';});
- el.innerHTML=html;
-}catch(e){el.textContent='techniques unavailable';}}
-loadStatus();
-loadTechniques();
-loadStats();
-try{var s=localStorage.getItem('rc_tok');if(s){document.getElementById('tok').value=s;load();}}catch(e){}
-</script></div></body></html>`;
 
 /* ---------------- Open Graph share image (/og.svg) ---------------- */
 const OG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Manrope, Segoe UI, Arial, sans-serif"><rect width="1200" height="630" fill="#FCFCFD"/><g transform="translate(90,84)"><rect x="0" y="0" width="44" height="44" rx="12" fill="#12141A"/><text x="22" y="31" font-size="23" font-weight="800" fill="#ffffff" text-anchor="middle">R</text><text x="60" y="32" font-size="31" font-weight="800" fill="#12141A" letter-spacing="-1">REDCELL</text></g><text x="90" y="300" font-size="74" font-weight="800" fill="#12141A" letter-spacing="-2.6">The security layer</text><text x="90" y="382" font-size="74" font-weight="800" fill="#12141A" letter-spacing="-2.6">for AI agents.</text><rect x="92" y="404" width="286" height="8" rx="4" fill="#175CFF"/><text x="92" y="466" font-size="26" fill="#565D6D">Test, red-team &amp; firewall your agents against prompt injection.</text><g font-family="monospace" font-size="19" fill="#6B7280"><text x="92" y="552">RUNTIME FIREWALL</text><text x="358" y="552" fill="#DDDFE5">|</text><text x="380" y="552">LIVE RED-TEAM</text><text x="586" y="552" fill="#DDDFE5">|</text><text x="608" y="552">OWASP LLM TOP 10</text></g><rect x="90" y="576" width="1020" height="1" fill="#E9EAEE"/><circle cx="97" cy="608" r="5" fill="#067647"/><text x="112" y="614" font-family="monospace" font-size="18" fill="#565D6D">redcell.redcellv1.workers.dev</text></svg>`;
@@ -1961,8 +1871,6 @@ const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <url><loc>https://redcell.redcellv1.workers.dev/agents</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/changelog</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
 <url><loc>https://redcell.redcellv1.workers.dev/benchmark</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>
-<url><loc>https://redcell.redcellv1.workers.dev/pitch</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-<url><loc>https://redcell.redcellv1.workers.dev/dashboard</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
 </urlset>
 `;
 

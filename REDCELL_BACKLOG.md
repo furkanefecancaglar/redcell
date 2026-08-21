@@ -1333,3 +1333,24 @@ accept that shape. Applied the "a published command is a claim" rule to my own n
       widened check catches them: run against the still-live pages it failed on 5 counts, and
       passes after deploy.
       All four layers pass: pytest 218, 18 pages, 20 snippet/protocol assertions.
+
+## ▶ round 44 — sweep the site for stale surfaces, not just stale words (2026-08-21)
+Loop iteration 12. Two rounds running had turned up published-but-wrong content, so this was a
+systematic pass instead of a spot check.
+- [x] Every internal link on every page, collected and requested: 21 unique links, all resolve.
+      No dead links. (Checked because a 404 in the docs is a broken promise and is trivially
+      verifiable — it had never actually been verified.)
+- [x] No stale "Team" tier references survived the round-30 rename — confirmed on the live pages
+      and in the source, not assumed.
+- ⚠️ FOUND: **we were telling Google to index our internal ops page.** /dashboard was in the
+      sitemap with no noindex, returned 200 to anonymous requests, and was linked from nowhere.
+      It does not leak data (the token check is client-side, so the shell renders but the data
+      calls fail) — but it duplicated /admin with a weaker gate.
+      Retired it: /dashboard now 301s to /admin, which 403s anonymous requests server-side. One
+      internal surface, one gate. Removed from the sitemap.
+- [x] /pitch was also indexed. An investor deck ranking next to the product for a brand search is
+      off-message for buyers, so it is now noindex and out of the sitemap — still fully reachable
+      by direct link, which is how a pitch is shared anyway. Sitemap 14 -> 12 entries, all product.
+- [x] Deleted the now-unreferenced DASHBOARD_PAGE const: 9,131 bytes / 92 lines of dead code that
+      still carried the old dark theme. Verified zero remaining references before removing.
+      All four layers pass: pytest 218, 18 pages, 20 snippet/protocol assertions.
