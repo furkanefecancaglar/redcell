@@ -100,7 +100,7 @@ function html(body, status = 200, extra) {
 
 // Privacy-safe funnel counters — aggregate counts only, never PII. Read-modify-write in
 // waitUntil, so a burst of concurrent hits can lose an increment (undercounts, never over).
-const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'agentcheck', 'review', 'lead', 'scan_live'];
+const STAT_KEYS = ['landing', 'scan', 'firewall', 'toolcheck', 'agentcheck', 'review', 'lead', 'scan_live', 'signup'];
 function bump(env, ctx, key) {
   if (!env || !env.LEADS || !ctx) return;
   ctx.waitUntil((async () => {
@@ -878,6 +878,7 @@ export default {
       let b = {}; try { b = await request.json(); } catch (e) { }
       const r = await registerUser(env, b.email, b.password, b.name);
       if (r.error) return json({ error: r.error }, 400);
+      bump(env, ctx, 'signup');   // funnel: landing -> scan -> signup is otherwise invisible
       const t = await startSession(env, r.user);
       const res = json({ ok: true, email: r.user.email });
       res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
@@ -1503,7 +1504,7 @@ async function scan(){var t=inp.value;if(!t.trim()){inp.focus();return;}
      +'<span class=sv style="color:'+c+'">'+esc(f.sev)+'</span><span class=id>'+esc(f.id)+'</span></div>';}).join('')+'</div>';}
   else{h+='<div class=clean>no weaknesses matched — strong baseline.</div>';}
   LASTP=t;LASTSHARE='I scored my AI system prompt '+r.score+'/100 on REDCELL — the OWASP LLM Top-10 scanner for AI agents.';
-  out.innerHTML=h+shareBar()+revBox('config');wireRev();
+  out.innerHTML=h+shareBar()+revBox('config',!!r.history_id);wireRev();
   var sc=out.querySelector('.score'),n=r.score,i=0;sc.firstChild.textContent='0';
   var iv=setInterval(function(){i+=Math.max(1,Math.round((n-i)/6));if(i>=n){i=n;clearInterval(iv);}sc.firstChild.textContent=i;},26);
  }catch(e){oops();}
@@ -1520,7 +1521,7 @@ async function fw(){var t=inp.value;if(!t.trim()){inp.focus();return;}
      +'<span class=sv style="color:'+c+'">'+esc(m.severity)+'</span></div>';}).join('')+'</div>';}
   else{h+='<div class=clean>clean — no attack patterns matched.</div>';}
   LASTP=t;LASTSHARE='I ran a prompt-injection test through REDCELL and the firewall said '+String(r.action).toUpperCase()+'. Free AI-agent security check:';
-  out.innerHTML=h+shareBar()+revBox('input');wireRev();
+  out.innerHTML=h+shareBar()+revBox('input',false);wireRev();
  }catch(e){oops();}
  busy(false);}
 
@@ -1542,10 +1543,19 @@ var LASTP='',LASTSHARE='',REVKIND='config';
 var RCURL='https://redcell.redcellv1.workers.dev/';
 function shareBar(){return '<div class=share><span>SHARE RESULT</span>'
  +'<button id=shx>Post on X</button><button id=shl>LinkedIn</button></div>';}
-function revBox(kind){REVKIND=kind;return '<div class=rev><h4>Want the full security review?</h4>'
- +'<p>Get a shareable report — all 22 checks plus a runtime firewall pass on this prompt. Free, instant.</p>'
- +'<div class=f><input id=revmail type=email placeholder="you@company.com"><button id=revbtn>Get my review</button></div>'
- +'<div id=revmsg class=mono style="display:none;margin-top:9px"></div></div>';}
+/* Post-scan call to action. This box predated accounts and still only asked for an email,
+   so a scan that IS now saved for signed-in users said nothing about it, and an anonymous
+   visitor was never told that an account keeps their result. Both states are handled. */
+function revBox(kind,saved){REVKIND=kind;
+ if(saved){return '<div class=rev><h4>Saved to your history</h4>'
+  +'<p>This scan is on your account. Re-run it after you harden the prompt and the score trend is the proof it worked.</p>'
+  +'<div class=f><a class=btn href="/account">View your history</a></div></div>';}
+ return '<div class=rev><h4>Keep this scan</h4>'
+  +'<p>Create a free account and every scan is saved, so you can re-run after hardening and see the score move. No card. Pro adds SARIF export for CI.</p>'
+  +'<div class=f><a class=btn href="/signup" style="font-weight:600">Create a free account</a></div>'
+  +'<p style="margin:12px 0 0;font-size:13px">Or just email yourself a shareable report of this scan:</p>'
+  +'<div class=f style="margin-top:6px"><input id=revmail type=email placeholder="you@company.com"><button id=revbtn>Email the report</button></div>'
+  +'<div id=revmsg class=mono style="display:none;margin-top:9px"></div></div>';}
 function wireRev(){
  var x=document.getElementById('shx');if(x)x.onclick=function(){window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(LASTSHARE)+'&url='+encodeURIComponent(RCURL),'_blank','noopener');};
  var l=document.getElementById('shl');if(l)l.onclick=function(){window.open('https://www.linkedin.com/sharing/share-offsite/?url='+encodeURIComponent(RCURL),'_blank','noopener');};
@@ -3407,6 +3417,7 @@ function renderAdmin(data) {
     ['Accounts', data.users], ['Paid', data.paid], ['MRR (USD)', '$' + data.mrr],
     ['Leads', data.leads], ['Page loads', data.counts.landing || 0],
     ['Config scans', data.counts.scan || 0], ['Firewall checks', data.counts.firewall || 0],
+    ['Signups', data.counts.signup || 0],
     ['Breach attempts', data.breach.attempts || 0], ['Breach wins', data.breach.wins || 0],
     ['Attacks blocked', data.breach.blocked || 0],
   ].map((c) => '<div class=mcell><div class=n>' + esc(String(c[1])) + '</div><div class=l>' + esc(c[0]) + '</div></div>').join('');

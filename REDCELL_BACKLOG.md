@@ -1166,3 +1166,28 @@ nothing change in the UI.
       pytest 218 green, page_audit PASS on 18 pages. Test accounts and the old hist: keys removed.
 NEXT: distribution. The product is now honest and demonstrable end to end (free surfaces + a paid
 tier that exists), but it has 0 users. Nothing else moves the business until that changes.
+
+## ▶ round 37 — close the conversion gap, make the funnel measurable (2026-08-21)
+Loop iteration 5, distribution. Chose a measurable funnel fix over writing marketing copy that
+would sit in a file.
+- [x] THE GAP: the post-scan box predated accounts. It only asked for an email ("get the full
+      security review"), so a signed-in user whose scan WAS now being saved was told nothing, and
+      an anonymous visitor was never told that a free account keeps their result. The product had
+      grown past its own call to action.
+      Now auth-aware, driven by the history_id the API already returns:
+        signed in  -> "Saved to your history" + link to /account
+        anonymous  -> "Keep this scan" + "Create a free account", with the emailed report kept as
+                      a secondary option rather than the only one.
+- [x] Added a `signup` funnel counter (bumped on register) and surfaced it in /admin. Without it
+      landing -> scan -> signup was invisible, so there was no way to tell whether any of this works.
+      VERIFIED live in the browser, both branches: signed-in scan rendered "Saved to your history"
+      -> /account; the anonymous branch renders "Keep this scan" -> /signup while still offering the
+      emailed report. pytest 218 green, page_audit PASS on 18 pages.
+BASELINE captured today (honest caveat: a large share of these are my own verification runs and the
+landing auto-demo, not organic users): landing 235 · scan 26 · firewall 94 · toolcheck 85 ·
+agentcheck 20 · review 13 · scan_live 15 · signup 0 · accounts 1 (Furkan's).
+Treat signup=0 as the real starting line; everything from here is measured against it.
+NEXT: the two lowest-friction distribution assets are a public GitHub repo and installable packages
+(npm/PyPI) — today the quickstart tells people to vendor a file by hand, which is the single biggest
+adoption tax. Both need account auth I do not have, so they are queued for Furkan rather than faked.
+What I can still do unblocked: sharper worked examples and content that earns the click.
