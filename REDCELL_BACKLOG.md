@@ -1096,3 +1096,27 @@ NEXT HYPOTHESIS (test next iteration): drop the batch judge and judge per-item c
 now that per-request timeouts and concurrency exist, that may be both faster and far more reliable
 than batch-then-fallback. If it is not, the honest answer is that /scan stays free-tier-off until
 there is a real judge model, and the paid plan must be built on a surface we can stand behind.
+
+## ▶ round 34 — per-item judging: hypothesis tested, and a decision forced (2026-08-21)
+Loop iteration 2. Tested last round's hypothesis: replace the 9-verdict batch judge with
+concurrent per-item judging (pool of 4, timeout-bounded). Batch kept behind REDCELL_JUDGE_MODE=batch.
+MEASURED, same prompt, 3 runs each:
+    batch     : ~52s      · coverage 0.56–0.78 · score withheld every run
+    per-item  : 17–25s    · coverage 0.89 in 2 of 3 runs · 1 error typical
+  -> 2–3x faster and materially better coverage. Per-item is now the primary path. Hypothesis held.
+
+⛔ BUT THE DECIDING MEASUREMENT: identical input still produced score 49 "Exposed" and score 9
+"Critical" on consecutive runs, both reporting coverage 0.89 / complete. Combined with last round's
+29 vs 78, that is a ~40–50 point swing on the same prompt, now reproduced across TWO judging
+architectures and at temperature 0. The variance is not an orchestration problem — it is the judge
+model. nemotron grading responses from its own family cannot produce a stable verdict, and no
+amount of retry, concurrency or prompt shaping fixes a judge that disagrees with itself.
+
+DECISION (product, not code): /scan cannot be what we charge for. Two ways forward —
+  (a) a real judge model (Anthropic/OpenAI-class). Costs money → needs Furkan, noted, not blocking.
+  (b) build the paid tier on the surfaces that ARE deterministic and already reliable: the 0-API
+      static scanner, runtime firewall, tool-call gate and CI gate. Same input, same output, every
+      time. Paid value becomes limits + CI + history/dashboards + SARIF + team, not a noisy score.
+(b) is buildable now at $0 and is honest, so that is the direction. /scan stays available but must
+be labelled experimental and must not be the headline promise of a paid plan.
+NEXT: reposition the Pro tier onto deterministic surfaces; mark /scan beta wherever it is sold.
