@@ -1372,3 +1372,26 @@ Loop iteration 13. Back to product surface after the content sweep came back cle
 - [x] snippet_check now asserts every finding from a failing gate carries a usable fix (>20 chars),
       and the same for /scan-config — so this cannot silently regress to bare titles.
       All four layers pass: pytest 218, 18 pages, 22 snippet/protocol assertions.
+
+## ▶ round 46 — one implementation, two transports (2026-08-21)
+Loop iteration 14. Verified the landing's claim that "one call — /agentcheck — runs all of it and
+returns the worst verdict". The claim held, but checking it exposed that the same logical operation
+answered differently depending on how you called it.
+- ⚠️ THREE DIVERGENCES between REST /agentcheck and the MCP agent_check tool I wrote in round 42:
+      shape        REST {ok, parts:{...}, verdict}   vs MCP flat {scan, firewall, tool, verdict}
+      turns        REST supported joined-history     vs MCP did not
+      verdict rule REST ranks allow/flag/block only  vs MCP alone blocked on scan.has_critical
+      A developer using both surfaces would have hit all three.
+- [x] Fixed structurally rather than by copying: extracted one agentCheck(), and both the REST
+      route and the MCP tool now call it. They cannot drift again because there is only one.
+      Kept REST's verdict rule as canonical (it was the documented behaviour) and recorded why:
+      the static scan yields a score, and promoting that to a block is a separate judgement.
+- [x] Scan findings inside /agentcheck now carry the same `fix` as /gate and /scan-config —
+      previously the unified surface was the one place that still returned bare titles.
+- [x] snippet_check asserts REST and MCP return byte-identical JSON for identical input, plus the
+      worst-verdict rule and the presence of fixes.
+      VERIFIED live: REST == MCP is true, verdict block, fixes present, turns work on both.
+      All four layers pass: pytest 218, 18 pages, 25 snippet/protocol assertions.
+NOTE on method: two brace-blind replacements (line counts, a wrong anchor) silently no-oped and one
+of them deployed a half-applied change — the parity check caught it both times. Ended up matching
+braces properly. Structural edits need structural anchors.

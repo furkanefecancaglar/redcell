@@ -708,27 +708,9 @@ export default {
         return json({ error: 'provide at least one of: system_prompt, input, turns, tool_call {name, arguments}' }, 400);
       }
       bump(env, ctx, 'agentcheck');
-      const rank = { allow: 0, flag: 1, block: 2 };
-      const parts = {};
-      let verdict = 'allow';
-      if (b.system_prompt) parts.scan = analyze(String(b.system_prompt));
-      if (b.turns) {
-        // joined-history: turns takes precedence over a plain input for the firewall surface
-        const turns = b.turns.slice(0, 50).map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
-        const tv = fw.inspectThread(turns);
-        parts.firewall = tv;
-        if (rank[tv.action] > rank[verdict]) verdict = tv.action;
-      } else if (b.input) {
-        const fwv = withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic));
-        parts.firewall = fwv;
-        if (rank[fwv.action] > rank[verdict]) verdict = fwv.action;
-      }
-      if (hasTool) {
-        const tv = toolcheck.check(String(b.tool_call.name), b.tool_call.arguments || {}, inspect);
-        parts.tool = tv;
-        if (rank[tv.action] > rank[verdict]) verdict = tv.action;
-      }
-      return json({ ok: verdict === 'allow', verdict, parts });
+      const r = json(agentCheck(b));   // shared with the MCP agent_check tool
+      r.headers.set('Cache-Control', 'no-store');
+      return r;
     }
     // Lead capture — waitlist / book-a-demo. Stores to KV; emails are never exposed without a token.
     if (request.method === 'POST' && url.pathname === '/lead') {
@@ -2268,6 +2250,37 @@ function withFixes(findings) {
   }));
 }
 
+// Unified agent check. REST POST /agentcheck and the MCP agent_check tool both call this,
+// so the two transports cannot drift apart again (they already had: different shape, missing
+// `turns` support on MCP, and MCP alone folding scan criticality into the verdict).
+// Verdict ranks only the allow/flag/block surfaces; the static scan reports a score, and
+// turning that into a block is a separate judgement we deliberately do not make here.
+function agentCheck(b) {
+  const rank = { allow: 0, flag: 1, block: 2 };
+  const parts = {};
+  let verdict = 'allow';
+  const bump2 = (a) => { if (rank[a] > rank[verdict]) verdict = a; };
+
+  if (b.system_prompt) {
+    const rep = analyze(String(b.system_prompt).slice(0, 16000));
+    rep.findings = withFixes(rep.findings);   // same actionable findings as /gate
+    parts.scan = rep;
+  }
+  if (Array.isArray(b.turns) && b.turns.length) {
+    const turns = b.turns.slice(0, 50).map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
+    parts.firewall = fw.inspectThread(turns);
+    bump2(parts.firewall.action);
+  } else if (b.input) {
+    parts.firewall = withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic));
+    bump2(parts.firewall.action);
+  }
+  if (b.tool_call && b.tool_call.name) {
+    parts.tool = toolcheck.check(String(b.tool_call.name), b.tool_call.arguments || {}, inspect);
+    bump2(parts.tool.action);
+  }
+  return { ok: verdict === 'allow', verdict, parts };
+}
+
 function renderCI() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON
     + '<meta name=viewport content="width=device-width,initial-scale=1">'
@@ -3766,20 +3779,7 @@ function mcpCallTool(name, args) {
     return mcpText(fw.inspectThread ? fw.inspectThread(turns) : inspect(turns.join('\n')));
   }
   if (name === 'agent_check') {
-    const out = {};
-    if (typeof a.system_prompt === 'string') out.scan = analyze(a.system_prompt.slice(0, 16000));
-    if (typeof a.input === 'string') out.firewall = inspect(a.input.slice(0, 16000));
-    if (a.tool_call && a.tool_call.name) out.tool = toolcheck.check(String(a.tool_call.name), a.tool_call.arguments || {}, inspect);
-    // worst verdict across whatever was supplied — the point of the unified call
-    const rank = { allow: 0, flag: 1, block: 2 };
-    let worst = 'allow';
-    for (const k of ['firewall', 'tool']) {
-      const v = out[k] && out[k].action;
-      if (v && rank[v] > rank[worst]) worst = v;
-    }
-    if (out.scan && out.scan.has_critical) worst = 'block';
-    out.verdict = worst;
-    return mcpText(out);
+    return mcpText(agentCheck(a));   // identical to POST /agentcheck, by construction
   }
   throw new Error('unknown tool: ' + name);
 }
