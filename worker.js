@@ -947,8 +947,48 @@ export default {
     if (url.pathname === '/auth/api-key' && request.method === 'POST') {
       const u = await currentUser(env, request);
       if (!u) return json({ error: 'not signed in' }, 401);
-      return json({ ok: true, key: await mintApiKey(env, u) });
+      const minted = await mintApiKey(env, u);
+      if (minted.error) return json({ error: minted.error }, 409);
+      return json({ ok: true, key: minted.key });
     }
+    if (url.pathname === '/auth/keys') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      const keys = await listApiKeys(env, u);
+      // never return the hash: it is the only thing standing between a leak and a live key
+      return json({ max: MAX_KEYS, count: keys.length,
+        keys: keys.map((k) => ({ prefix: k.prefix, created: k.at })) }, 200, NOSTORE);
+    }
+    if (url.pathname === '/auth/keys/revoke' && request.method === 'POST') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      let b = {}; try { b = await request.json(); } catch (e) { }
+      const r = await revokeApiKey(env, u, String(b.prefix || ''));
+      return json(r, r.error ? 404 : 200);
+    }
+
+    if (url.pathname === '/auth/export') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      const data = await exportUserData(env, u);
+      return new Response(JSON.stringify(data, null, 2), {
+        headers: { 'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="redcell-export.json"', ...CORS, ...NOSTORE },
+      });
+    }
+    if (url.pathname === '/auth/delete' && request.method === 'POST') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      let b = {}; try { b = await request.json(); } catch (e) { }
+      // irreversible, so re-authenticate: a borrowed session must not be able to wipe an account
+      const okPw = await verifyLogin(env, u.email, b.password || '');
+      if (!okPw) return json({ error: 'Password is incorrect.' }, 403);
+      const removed = await deleteUserData(env, u);
+      const res = json({ ok: true, deleted: removed });
+      res.headers.set('Set-Cookie', sessionCookie('', 0));
+      return res;
+    }
+
     if (url.pathname === '/account') {
       const u = await currentUser(env, request);
       if (!u) return Response.redirect(url.origin + '/login', 302);
@@ -3206,14 +3246,80 @@ async function verifyLogin(env, email, password) {
   const h = await pbkdf2(password || '', u.salt, u.iters || PBKDF2_ITERS);
   return eqConst(h, u.hash) ? u : null;
 }
-async function mintApiKey(env, user) {
-  const plain = 'rk_live_' + rndHex(20);
-  await env.LEADS.put('akey:' + (await sha256hex(plain)), JSON.stringify({ uid: user.id, at: Date.now() }));
-  const u = await getUserByEmail(env, user.email);
-  u.keyPrefix = plain.slice(0, 16);
-  await env.LEADS.put('usr:' + u.email, JSON.stringify(u));
-  return plain;
+const MAX_KEYS = 10;
+
+// Two stores, two different flaws: a single index value is read-your-write consistent but a
+// read-modify-write races (two quick mints lost one), while list() never races but lags by
+// about a minute (a key just minted is invisible). Neither alone is correct, so listing is the
+// UNION of both — the index catches what is new, the scan catches what the index dropped.
+async function listApiKeys(env, user) {
+  const byHash = new Map();
+
+  try {
+    const idx = JSON.parse((await env.LEADS.get('keyidx:' + user.id)) || '[]');
+    if (Array.isArray(idx)) for (const k of idx) if (k && k.hash) byHash.set(k.hash, k);
+  } catch (e) { }
+
+  let cursor;
+  do {
+    const page = await env.LEADS.list({ prefix: 'akey:', limit: 1000, cursor });
+    for (const k of page.keys) {
+      const hash = k.name.slice(5);
+      if (byHash.has(hash)) continue;
+      const raw = await env.LEADS.get(k.name);
+      if (!raw) continue;
+      let rec = null;
+      try { rec = JSON.parse(raw); } catch (e) { continue; }
+      if (rec && rec.uid === user.id) byHash.set(hash, { hash, prefix: rec.prefix || null, at: rec.at || null });
+    }
+    cursor = page.list_complete ? null : page.cursor;
+  } while (cursor);
+
+  // a revoked key can linger in the index; the record is authoritative for existence
+  const out = [];
+  for (const k of byHash.values()) {
+    if ((await env.LEADS.get('akey:' + k.hash)) !== null) out.push(k);
+  }
+  out.sort((a, b) => (b.at || 0) - (a.at || 0));
+  return out;
 }
+
+async function mintApiKey(env, user) {
+  const keys = await listApiKeys(env, user);
+  if (keys.length >= MAX_KEYS) {
+    return { error: 'You already have ' + MAX_KEYS + ' keys. Revoke one before creating another.' };
+  }
+  const plain = 'rk_live_' + rndHex(20);
+  const hash = await sha256hex(plain);
+  const rec = { uid: user.id, prefix: plain.slice(0, 16), at: Date.now() };
+  await env.LEADS.put('akey:' + hash, JSON.stringify(rec));
+  // best-effort index so the new key is listable immediately; list() is the safety net
+  try {
+    const idx = JSON.parse((await env.LEADS.get('keyidx:' + user.id)) || '[]');
+    const arr = Array.isArray(idx) ? idx : [];
+    arr.unshift({ hash, prefix: rec.prefix, at: rec.at });
+    await env.LEADS.put('keyidx:' + user.id, JSON.stringify(arr.slice(0, 50)));
+  } catch (e) { }
+  const u = await getUserByEmail(env, user.email);
+  u.keyPrefix = rec.prefix;
+  await env.LEADS.put('usr:' + u.email, JSON.stringify(u));
+  return { key: plain };
+}
+
+async function revokeApiKey(env, user, prefix) {
+  const keys = await listApiKeys(env, user);
+  const hit = keys.find((k) => k.prefix === prefix);
+  if (!hit) return { error: 'No key with that prefix on this account.' };
+  await env.LEADS.delete('akey:' + hit.hash);
+  try {
+    const idx = JSON.parse((await env.LEADS.get('keyidx:' + user.id)) || '[]');
+    if (Array.isArray(idx)) {
+      await env.LEADS.put('keyidx:' + user.id, JSON.stringify(idx.filter((k) => k.hash !== hit.hash)));
+    }
+  } catch (e) { }
+  return { ok: true, revoked: prefix };
+}
+
 async function userForApiKey(env, plain) {
   if (!plain || plain.indexOf('rk_live_') !== 0) return null;
   const raw = await env.LEADS.get('akey:' + (await sha256hex(plain)));
@@ -3369,12 +3475,31 @@ function renderAccount(user, billingReady, history) {
     + '<p style="color:var(--ink2);font-size:14px;margin:8px 0 0">One key per account. Send it as <span class=mono>X-API-Key</span>. Creating a new key revokes nothing — the old one keeps working until you rotate it.</p>'
     + (user.keyPrefix ? '<div class=keybox>' + esc(user.keyPrefix) + '&hellip; <span style="color:var(--ink3)">(shown once at creation)</span></div>' : '')
     + '<button class=cta id=mint style="margin-top:14px;border:0;cursor:pointer">' + (user.keyPrefix ? 'Create a new key' : 'Create an API key') + '</button>'
-    + '<div id=keyout></div></div>'
+    + '<div id=keyout></div>'
+    + '<div id=keylist style="margin-top:16px"></div>'
+    + '<p style="color:var(--ink3);font-size:12.5px;margin:12px 0 0">Revoking deletes the key here '
+    + 'immediately and it stops authenticating within about a minute \\u2014 11s and 22s in two '
+    + 'measured runs, bounded by the 60s edge cache. '
+    + 'Treat a leaked key as live until then.</p></div>'
     + histCard(user, history || [])
     + '<div class=card><div class=ey>Account</div>'
     + '<div class=kv style="border-top:0"><span>Email</span><b>' + esc(user.email) + '</b></div>'
     + '<div class=kv><span>Member since</span><b>' + esc(String(user.createdAt || '').slice(0, 10)) + '</b></div>'
     + '<div style="margin-top:16px"><button class=btn id=out style="cursor:pointer">Sign out</button></div></div>'
+    + '<div class=card><div class=ey>Your data</div>'
+    + '<p style="color:var(--ink2);font-size:14px;margin:8px 0 0">The <a href="/privacy">privacy policy</a> '
+    + 'gives you the right to export or delete everything we hold. Both are self-serve &mdash; you do not have to email us.</p>'
+    + '<div style="margin-top:14px"><a class=btn href="/auth/export">Download my data (JSON)</a></div>'
+    + '<div style="margin-top:22px;padding-top:16px;border-top:1px solid var(--line)">'
+    + '<div style="font-weight:700;font-size:14.5px;color:var(--crit)">Delete this account</div>'
+    + '<p style="color:var(--ink2);font-size:13.5px;margin:4px 0 10px">Removes your account, API keys, '
+    + 'sessions, scan history and subscription state. <b>This cannot be undone.</b> Cancel any paid plan '
+    + 'from your Paddle receipt first &mdash; deleting here does not stop billing. Your records are '
+    + 'erased at once; sign-in stops working within about a minute, once edge caches expire.</p>'
+    + '<div class=f style="display:flex;gap:8px;flex-wrap:wrap">'
+    + '<input id=delpw type=password placeholder="Confirm your password" style="flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line2);border-radius:9px;color:var(--ink);padding:10px 12px;font:14px var(--sans)">'
+    + '<button class=btn id=delbtn style="cursor:pointer;border-color:var(--crit);color:var(--crit)">Delete permanently</button></div>'
+    + '<div id=delmsg class=mono style="display:none;margin-top:10px"></div></div></div>'
     + '</div>',
     AUTH_JS
     + 'var BUY=q("buy");'
@@ -3394,9 +3519,30 @@ function renderAccount(user, billingReady, history) {
     + 'if(location.search.indexOf("checkout=1")>=0&&BUY){setTimeout(function(){BUY.click();},600);}'
     + 'q("mint").onclick=async function(){var b=q("mint");b.disabled=true;b.textContent="Creating…";'
     + 'var r=await post("/auth/api-key",{});'
-    + 'if(r.ok&&r.d.key){q("keyout").innerHTML="<div class=keybox>"+r.d.key+"</div><p style=\\"color:var(--high);font-size:13px;margin-top:8px\\">Copy it now — this is the only time it is shown.</p>";b.textContent="Create a new key";b.disabled=false;}'
+    + 'if(r.ok&&r.d.key){q("keyout").innerHTML="<div class=keybox>"+r.d.key+"</div><p style=\\"color:var(--high);font-size:13px;margin-top:8px\\">Copy it now — this is the only time it is shown.</p>";b.textContent="Create a new key";b.disabled=false;drawKeys();}'
     + 'else{b.textContent="Try again";b.disabled=false;}};'
-    + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};',
+    + 'async function drawKeys(){var r=await fetch("/auth/keys",{credentials:"same-origin"}).then(function(x){return x.json()}).catch(function(){return null});'
+    + ' var el=q("keylist"); if(!el||!r||!r.keys){return;}'
+    + ' if(!r.keys.length){el.innerHTML="<p style=\"color:var(--ink3);font-size:13.5px;margin:0\">No active keys.</p>";return;}'
+    + ' el.innerHTML="<table class=adm><thead><tr><th>Key</th><th>Created</th><th></th></tr></thead><tbody>"'
+    + '  +r.keys.map(function(k){return "<tr><td class=mono>"+k.prefix+"\u2026</td><td class=mono style=\"color:var(--ink3)\">"'
+    + '   +(k.at?new Date(k.at).toISOString().slice(0,16).replace("T"," "):"")+"</td>"'
+    + '   +"<td style=\"text-align:right\"><button data-rev=\""+k.prefix+"\" class=btn style=\"cursor:pointer;padding:4px 10px;font-size:12.5px;border-color:var(--crit);color:var(--crit)\">Revoke</button></td></tr>";}).join("")'
+    + '  +"</tbody></table>";'
+    + ' Array.prototype.forEach.call(el.querySelectorAll("[data-rev]"),function(b){b.onclick=async function(){'
+    + '  if(!confirm("Revoke "+b.getAttribute("data-rev")+"\u2026 ? Anything using it will start failing.")){return;}'
+    + '  b.disabled=true;b.textContent="Revoking\u2026";'
+    + '  await post("/auth/keys/revoke",{prefix:b.getAttribute("data-rev")});drawKeys();};});}'
+    + 'drawKeys();'
+    + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};'
+    + 'q("delbtn").onclick=async function(){var m=q("delmsg");m.style.display="block";'
+    + ' var pw=q("delpw").value;'
+    + ' if(!pw){m.style.color="var(--crit)";m.textContent="Enter your password to confirm.";return;}'
+    + ' if(!confirm("Permanently delete this account and all its data? This cannot be undone.")){m.style.display="none";return;}'
+    + ' var b=q("delbtn");b.disabled=true;b.textContent="Deleting…";'
+    + ' var r=await post("/auth/delete",{password:pw});'
+    + ' if(r.ok){m.style.color="var(--pass)";m.textContent="Deleted. Signing you out…";setTimeout(function(){location.href="/";},1200);}'
+    + ' else{m.style.color="var(--crit)";m.textContent=(r.d&&r.d.error)||"Could not delete the account.";b.disabled=false;b.textContent="Delete permanently";}};',
     'https://cdn.paddle.com/paddle/v2/paddle.js');
 }
 
@@ -3803,4 +3949,61 @@ function mcpHandle(msg) {
     }
   }
   return { jsonrpc: '2.0', id, error: { code: -32601, message: 'method not found: ' + String(method) } };
+}
+
+/* ---------------- Data export and account deletion ----------------
+   The privacy policy promises both and cites GDPR / KVKK rights, but neither existed:
+   there was no endpoint and no button. A promise a product cannot keep is worse than
+   not making it, and for a security product it is the whole proposition.
+
+   Deletion re-checks the password rather than trusting the session alone: a stolen or
+   borrowed session should not be able to destroy an account, and it is irreversible. */
+
+async function exportUserData(env, user) {
+  const sub = await getSub(env, user.id);
+  let history = [];
+  try { history = await listScans(env, user, 2000); } catch (e) { }
+  return {
+    exported_at: new Date().toISOString(),
+    note: 'Everything REDCELL holds for this account. Prompt text is never stored, so it does not '
+      + 'appear here — only the findings a scan produced.',
+    account: {
+      id: user.id,
+      email: user.email,
+      name: user.name || null,
+      created_at: user.createdAt,
+      api_key_prefix: user.keyPrefix || null,   // the key itself is only ever kept as a hash
+    },
+    subscription: sub,
+    scan_history: history,
+  };
+}
+
+// Everything keyed to this user, across every prefix that can hold their data.
+async function deleteUserData(env, user) {
+  const removed = { sessions: 0, api_keys: 0, history: 0, records: 0 };
+
+  // sessions and API keys are keyed by token/hash, so they have to be found by owner
+  for (const [prefix, counter] of [['sess:', 'sessions'], ['akey:', 'api_keys']]) {
+    let cursor;
+    do {
+      const page = await env.LEADS.list({ prefix, limit: 1000, cursor });
+      for (const k of page.keys) {
+        const raw = await env.LEADS.get(k.name);
+        if (!raw) continue;
+        let rec = null;
+        try { rec = JSON.parse(raw); } catch (e) { continue; }
+        if (rec && rec.uid === user.id) { await env.LEADS.delete(k.name); removed[counter]++; }
+      }
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  }
+
+  for (const key of ['histidx:' + user.id, 'keyidx:' + user.id, 'sub:' + user.id, 'uid:' + user.id, 'usr:' + user.email]) {
+    const existed = await env.LEADS.get(key);
+    await env.LEADS.delete(key);
+    if (existed !== null) removed.records++;
+    if (key.startsWith('histidx:') && existed !== null) removed.history = 1;
+  }
+  return removed;
 }

@@ -30,9 +30,20 @@ async function post(path, body) {
 /* 1 — the vendorable sources the docs tell people to curl must exist and be real files. */
 const SRC = ['redcell_firewall.py', 'redcell_static.py', 'redcell_toolcheck.py',
   'redcell_ci.py', 'redcell_mcp.py', 'redcell_fw_check.py'];
+// One TCP hiccup on the largest file failed a whole verification run once. The claim under
+// test is "this file is downloadable and real", and a single dropped connection is not
+// evidence against it — so transient failures are retried, real ones still fail.
+async function fetchRetry(url, tries = 3) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await fetch(url); } catch (e) { last = e; await new Promise((r) => setTimeout(r, 400 * (i + 1))); }
+  }
+  throw last;
+}
+
 for (const f of SRC) {
   try {
-    const r = await fetch(BASE + '/src/' + f);
+    const r = await fetchRetry(BASE + '/src/' + f);
     const t = await r.text();
     if (r.status !== 200) fail('/src/' + f, 'HTTP ' + r.status);
     else if (t.length < 1000) fail('/src/' + f, 'suspiciously small (' + t.length + ' bytes)');
@@ -165,6 +176,96 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   if (!(rest.body?.parts?.scan?.findings || []).every((f) => f.fix))
     fail('agentcheck remediation', 'scan findings missing fix');
   else ok.push('agentcheck scan findings carry a fix');
+}
+
+/* 6 — the account surfaces that make a promise. The privacy policy commits to data export
+       and account deletion under GDPR/KVKK, and the account page offers per-key revocation.
+       A promise a product cannot keep is worse than one it never made, so each is exercised
+       end to end against a throwaway account and then cleaned up. */
+{
+  const EMAIL = 'snippetcheck' + Math.floor(Date.now() / 1000) + '@example.org';
+  const PASS = 'Str0ng-Pass-9xQ';
+  let cookie = '';
+  const authed = async (path, opts = {}) => {
+    const r = await fetch(BASE + path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, ...(opts.headers || {}) },
+    });
+    const set = r.headers.get('set-cookie');
+    if (set) cookie = set.split(';')[0];
+    let d = null;
+    try { d = JSON.parse(await r.text()); } catch (e) { }
+    return { status: r.status, body: d };
+  };
+
+  const reg = await authed('/auth/register', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS, name: 'snippet check' }) });
+  if (reg.status !== 200) {
+    fail('account surfaces', 'could not register a test account: HTTP ' + reg.status);
+  } else {
+    ok.push('register a new account');
+
+    // key management: mint, list, revoke, and the cap that stops unbounded minting
+    const mint = await authed('/auth/api-key', { method: 'POST', body: JSON.stringify({}) });
+    const key = mint.body?.key;
+    if (!key || !key.startsWith('rk_live_')) fail('api-key mint', 'no key returned: ' + JSON.stringify(mint.body).slice(0, 90));
+    else ok.push('mint an API key');
+
+    if (key) {
+      const useOk = await fetch(BASE + '/history', { headers: { 'X-API-Key': key } });
+      if (useOk.status !== 200) fail('api-key auth', '/history rejected a fresh key: HTTP ' + useOk.status);
+      else ok.push('a fresh API key authenticates');
+
+      const listed = await authed('/auth/keys');
+      const prefixes = (listed.body?.keys || []).map((k) => k.prefix);
+      if (!prefixes.includes(key.slice(0, 16))) fail('api-key list', 'a minted key is not listed: ' + JSON.stringify(prefixes));
+      else ok.push('minted keys are listed');
+
+      const rev = await authed('/auth/keys/revoke', { method: 'POST', body: JSON.stringify({ prefix: key.slice(0, 16) }) });
+      if (!rev.body?.ok) fail('api-key revoke', JSON.stringify(rev.body).slice(0, 90));
+      else ok.push('revoke an API key');
+
+      // the record must be gone from the listing at once, even though edge caches may
+      // still honour the key for a while — that delay is documented, an unrevoked
+      // listing would be a bug
+      const after = await authed('/auth/keys');
+      if ((after.body?.keys || []).some((k) => k.prefix === key.slice(0, 16)))
+        fail('api-key revoke', 'a revoked key is still listed');
+      else ok.push('a revoked key leaves the listing immediately');
+    }
+
+    // export must return the account's data and must not contain prompt text,
+    // which the product promises it never stores
+    const exp = await authed('/auth/export');
+    const e = exp.body;
+    if (exp.status !== 200) fail('data export', 'HTTP ' + exp.status);
+    else if (e?.account?.email !== EMAIL) fail('data export', 'wrong or missing account block');
+    else if (!('subscription' in e) || !('scan_history' in e)) fail('data export', 'missing subscription or scan_history');
+    else if (/system_prompt|"prompt"/.test(JSON.stringify(e))) fail('data export', 'export appears to contain prompt text');
+    else ok.push('data export returns the account and no prompt text');
+
+    // deletion is irreversible, so it must not accept a session alone
+    const wrong = await authed('/auth/delete', { method: 'POST', body: JSON.stringify({ password: 'not-the-password' }) });
+    if (wrong.status !== 403) fail('account deletion', 'a wrong password returned ' + wrong.status + ', expected 403');
+    else ok.push('deletion refuses a wrong password');
+
+    const del = await authed('/auth/delete', { method: 'POST', body: JSON.stringify({ password: PASS }) });
+    if (!del.body?.ok) fail('account deletion', JSON.stringify(del.body).slice(0, 90));
+    else ok.push('delete the account');
+
+    // Deletion cannot be instant: reads are served from a 60s edge cache, so the account
+    // keeps signing in briefly after its records are gone. Measured at 11s, and revocation
+    // at 11s and 22s, so 90s is a generous ceiling. Asserting 401 on the first try was
+    // asserting something the storage layer cannot deliver — this asserts that it converges,
+    // and still fails loudly if deletion never takes effect.
+    let signedInFor = null;
+    for (let waited = 0; waited <= 90; waited += 10) {
+      const relog = await authed('/auth/login', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS }) });
+      if (relog.status === 401) { signedInFor = waited; break; }
+      await new Promise((r) => setTimeout(r, 10000));
+    }
+    if (signedInFor === null) fail('account deletion', 'the account still signs in 90s after deletion');
+    else ok.push('a deleted account stops signing in (took ' + signedInFor + 's)');
+  }
 }
 
 console.log('snippet check against ' + BASE);

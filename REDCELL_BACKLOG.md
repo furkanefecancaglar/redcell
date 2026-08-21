@@ -1416,3 +1416,46 @@ looking for the others. REDCELL ports four engines from Python to JS on purpose.
 - [x] PROVED THE TEST CATCHES DRIFT: changed one JS score 22 -> 21 and it failed with
       "toolcheck parity drift at item 5: 'read_file'". Reverted; all four parity tests green.
       All four layers pass: pytest 220 (was 218), 18 pages, 25 snippet/protocol assertions.
+
+## ▶ round 48 — the promises the account page made and could not keep (2026-08-22)
+Loop iteration 16. The privacy policy commits to data export and account deletion and cites
+GDPR/KVKK. Neither existed — no endpoint, no button. For a security product that is not a
+missing feature, it is a false statement on a legal page.
+- [x] GET /auth/export — the account, subscription and scan history as a JSON download.
+      Asserted it carries NO prompt text, because the product's claim is that prompts are
+      never stored, and an export is where that claim is checkable.
+- [x] POST /auth/delete — password-confirmed and irreversible. It re-checks the password
+      rather than trusting the session: a borrowed session should not be able to destroy an
+      account. Verified wrong password -> 403, correct -> records removed, sign-in stops.
+- ⚠️ FOUND while testing: one account held **13 simultaneously valid API keys** with no way
+      to see or revoke any of them. Minting was the only key operation that existed.
+- [x] Key listing, per-key revocation, and MAX_KEYS = 10.
+
+MEASUREMENT, and a wrong conclusion I had to withdraw:
+- A per-user index using read-modify-write LOST keys — three quick mints listed one.
+      Pure list() enumeration never races but lags: zero keys visible immediately.
+      Listing is now the UNION of both, with the akey: record authoritative for existence.
+      Measured: 2/3 visible at once, 3/3 by t+20s, stable at t+40s and t+60s.
+- ⚠️ I then measured revocation as "still valid after 630s" and wrote that this was
+      Cloudflare KV read consistency rather than my code. **That was wrong on both counts.**
+      630s contradicts KV's own 60s bound by an order of magnitude, which should have been
+      the tell. The measurement had no controls; re-run with three (the revoked key, a
+      never-revoked control key, and a fabricated key that must be rejected at t=0), the
+      fabricated-key control immediately exposed the rig — the script was minting against
+      /auth/key, which does not exist, so it had been polling with an empty key all along.
+- [x] MEASURED PROPERLY, controls passing (200 / 200 / 401 before the change):
+      revocation effective at **11s and 22s** across two runs, control unaffected.
+      Account deletion effective at **11s**, control unaffected.
+      Both are inside the 60s edge-cache bound. The UI now states the measured number
+      instead of the "few minutes" hedge I had written from the broken run.
+- [x] Bounded, not permanent: every write path resolves the user record first, so once uid:
+      is gone no request can re-create data. The exposure is a short window, not resurrection.
+- [x] snippet_check +12 assertions covering mint / use / list / revoke / export / wrong
+      password / delete / post-delete sign-in. The deletion assertion polls to 90s instead of
+      demanding an instant 401 — asserting something the storage layer cannot deliver is a
+      broken test, not a strict one.
+- [x] Source downloads now retry: one dropped connection on the largest file (36KB) failed a
+      whole verification run. A flaky suite is a suite people stop believing.
+- [x] Removed the test accounts created during this work so /admin shows real signups only.
+NOTE on method: the negative control is what caught this. Two of my runs "measured" a key that
+was never valid. A measurement with no control can only confirm what you already believe.
