@@ -1490,3 +1490,34 @@ THE HONEST BOTTOM LINE: real traffic is **0 on every surface**. The product work
 nobody is using it. That was true yesterday too; the difference is that today the number says so.
 NOTE on method: I nearly built funnel optimisation on top of these numbers. Checking whether a
 metric can answer the question is part of using it, not a preliminary to it.
+
+## ▶ round 50 — findable at all (2026-08-22)
+Round 49 established real traffic is 0 on every surface including `landing`. Nobody is
+arriving, so the constraint is discovery, not conversion. Audited what makes the site findable.
+- ⚠️ **og:image pointed at an SVG on all 13 pages.** X, LinkedIn, Facebook, Slack and Discord
+      all decline to render SVG previews, so every shared link appeared with no card — on a
+      product whose only distribution path is somebody sharing a link. The tag was present and
+      returned 200, so nothing in the suite noticed.
+- [x] Rendered a real 1200x630 PNG with PIL in the site's own palette and typefaces (fetched
+      Manrope + JetBrains Mono TTFs). The card shows a verdict rather than a slogan: an
+      untrusted input and the BLOCK it returns. 18,305 bytes, embedded base64, decoded once at
+      module scope. Verified served byte-identical, image/png, 1200x630.
+- [x] page_audit now requires og:image to be a renderable raster AND to resolve with an
+      image/* content type. It immediately found 5 more pages with no og:image at all.
+      Two were noindex (rule corrected: noindex pages are not required to carry a card), but
+      **/terms, /privacy and /refunds are indexable and had neither a card nor a canonical** —
+      the pages a buyer and the merchant of record read. Both added.
+- [x] /llms.txt — the convention for telling a model what a site offers without scraping HTML.
+      Apt here: the audience is people building agents, and increasingly the agents. Lists every
+      deterministic endpoint with its exact request shape, the MCP URL, and an honest-limits
+      section saying what the pattern engines will not catch.
+- [x] snippet_check executes llms.txt rather than trusting it: all 13 links resolve, all five
+      documented request shapes return what the file says, /gate returns the documented 422/200,
+      and the MCP protocol version named is the one the server speaks. A human skims a broken
+      link; an agent calling a dead endpoint just fails.
+- [x] /favicon.ico was a 404 (pages carry an inline SVG icon, so it went unnoticed). Real ICO
+      at 16/32/48px from the same R mark.
+      Verified: pytest 220, 18 pages, 37+21 snippet assertions, all green.
+NOTE on method: the first attempt at the og tags broke the Worker — the meta block lives inside
+both template literals and single-quoted concatenations, and I inserted newlines that terminated
+the latter. node --check caught it before deploy; reverted and redid it on one line.

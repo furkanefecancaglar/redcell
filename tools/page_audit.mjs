@@ -136,7 +136,25 @@ async function audit(page) {
     }
   }
 
-  // 7. the old dark/red identity must be gone
+  // 7. the social preview must be a format the platforms will actually render.
+  //     og:image pointed at an SVG for months; X, LinkedIn, Facebook, Slack and Discord all
+  //     decline to render SVG, so every shared link appeared with no card. Nothing in the
+  //     suite noticed, because the tag was present and the URL returned 200.
+  //     A noindex page is deliberately out of search, so it is not required to carry a card —
+  //     but if it does carry one, the format rule still applies.
+  const og = /property="og:image" content="([^"]+)"/.exec(html);
+  const noindex = /name=robots content="noindex"/.test(html);
+  if (!og) { if (!noindex) fail(page, 'no og:image'); }
+  else if (/\.svgs*$/i.test(og[1])) fail(page, 'og:image is an SVG; social platforms will not render it');
+  else if (!ogChecked.has(og[1])) {
+    ogChecked.add(og[1]);
+    const r = await fetch(og[1]).catch(() => null);
+    const ct = r && r.headers.get('content-type') || '';
+    if (!r || r.status !== 200) fail(page, 'og:image does not resolve: ' + og[1]);
+    else if (!/^image\/(png|jpeg|webp|gif)/.test(ct)) fail(page, 'og:image serves ' + ct + ', which social platforms will not render');
+  }
+
+  // 8. the old dark/red identity must be gone
   // the first sweep only listed the primary tokens, so tinted leftovers (a dark-red border,
   // a red wash behind a card) survived on five pages unnoticed. Check those too.
   for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4', '3a2030', '2a1918', 'ff5b64',
@@ -144,6 +162,8 @@ async function audit(page) {
     if (html.includes(tok)) fail(page, 'legacy dark/red token ' + tok + ' still present');
   }
 }
+
+const ogChecked = new Set();   // fetch each distinct share image once, not once per page
 
 const t0 = Date.now();
 await loadTruth();
