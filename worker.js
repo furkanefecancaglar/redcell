@@ -914,7 +914,9 @@ export default {
     if (url.pathname === '/account') {
       const u = await currentUser(env, request);
       if (!u) return Response.redirect(url.origin + '/login', 302);
-      return html(renderAccount(u, !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO)), 200, NOSTORE);
+      let hist = [];
+      try { hist = await listScans(env, u, 25); } catch (e) { /* page still renders without it */ }
+      return html(renderAccount(u, !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO), hist), 200, NOSTORE);
     }
 
     if (url.pathname === '/billing/checkout') {
@@ -3310,7 +3312,7 @@ function renderLogin() {
     + 'q("pw").onkeydown=function(e){if(e.key==="Enter")go()};');
 }
 
-function renderAccount(user, billingReady) {
+function renderAccount(user, billingReady, history) {
   const sub = user.sub || { plan: 'free', status: 'active' };
   const planName = PLANS[sub.plan] || sub.plan;
   const upgrade = sub.plan === 'free'
@@ -3334,6 +3336,7 @@ function renderAccount(user, billingReady) {
     + (user.keyPrefix ? '<div class=keybox>' + esc(user.keyPrefix) + '&hellip; <span style="color:var(--ink3)">(shown once at creation)</span></div>' : '')
     + '<button class=cta id=mint style="margin-top:14px;border:0;cursor:pointer">' + (user.keyPrefix ? 'Create a new key' : 'Create an API key') + '</button>'
     + '<div id=keyout></div></div>'
+    + histCard(user, history || [])
     + '<div class=card><div class=ey>Account</div>'
     + '<div class=kv style="border-top:0"><span>Email</span><b>' + esc(user.email) + '</b></div>'
     + '<div class=kv><span>Member since</span><b>' + esc(String(user.createdAt || '').slice(0, 10)) + '</b></div>'
@@ -3361,6 +3364,42 @@ function renderAccount(user, billingReady) {
     + 'else{b.textContent="Try again";b.disabled=false;}};'
     + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};',
     'https://cdn.paddle.com/paddle/v2/paddle.js');
+}
+
+// The paid tier is history + SARIF, so both have to be visible in the product —
+// not only reachable over the API.
+function histCard(user, recs) {
+  const plan = planOf(user);
+  const cap = HIST_LIMIT[plan] || HIST_LIMIT.free;
+  const paid = isPaid(user);
+  const sev = { crit: 'var(--crit)', high: 'var(--high)', med: 'var(--med)', low: 'var(--ink3)' };
+  let rows;
+  if (!recs.length) {
+    rows = '<p style="color:var(--ink3);font-size:14px;margin:10px 0 0">No scans yet. Run one from the '
+      + '<a href="/">console</a> while signed in, or POST to <span class=mono>/scan-config</span> with your API key '
+      + '&mdash; it lands here automatically.</p>';
+  } else {
+    rows = '<table class=adm><thead><tr><th>When</th><th>Label</th><th>Score</th><th>Findings</th></tr></thead><tbody>'
+      + recs.map((r) => {
+        const col = r.score >= 70 ? 'var(--pass)' : r.score >= 45 ? 'var(--high)' : 'var(--crit)';
+        const top = (r.findings || []).slice(0, 3).map((f) =>
+          '<span class=sv style="color:' + (sev[f.sev] || 'var(--ink3)') + '">' + esc(f.id) + '</span>').join(' ');
+        return '<tr><td class=mono>' + esc(String(r.at || '').slice(0, 16).replace('T', ' ')) + '</td>'
+          + '<td>' + (r.label ? esc(r.label) : '<span style="color:var(--ink3)">&mdash;</span>') + '</td>'
+          + '<td><b style="color:' + col + '">' + (r.score == null ? '&mdash;' : r.score) + '</b> '
+          + '<span style="color:var(--ink3);font-size:12.5px">' + esc(r.grade || '') + '</span></td>'
+          + '<td>' + ((r.findings || []).length) + ' ' + top + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  const sarif = paid
+    ? '<a class=btn href="/history.sarif">Download SARIF</a>'
+    : '<span class=btn style="opacity:.6">SARIF export &mdash; Pro</span>';
+  return '<div class=card><div class=ey>Scan history</div>'
+    + '<p style="color:var(--ink2);font-size:14px;margin:8px 0 0">Keeping your last <b>' + cap + '</b> scans on the '
+    + esc(PLANS[plan] || plan) + ' plan. Only the findings are stored &mdash; never your prompt text.</p>'
+    + rows
+    + '<div style="margin-top:14px">' + sarif + ' <a class=btn href="/history">View as JSON</a></div>'
+    + '</div>';
 }
 
 function renderAdmin(data) {
@@ -3592,21 +3631,19 @@ async function recordScan(env, ctx, user, report, label) {
       id: f.id, title: f.title, sev: f.sev, cat: f.cat,
     })),
   };
+  // One index key per user rather than one key per scan. KV list() is noticeably laggier
+  // than get(), which made a fresh scan invisible on /account for ~20s; a single get is
+  // also cheaper than list + N gets. Concurrent scans can race this read-modify-write and
+  // drop one entry — acceptable for a history view, and never affects the scan result.
   const write = (async () => {
     try {
-      await env.LEADS.put('hist:' + user.id + ':' + id, JSON.stringify(rec));
-      // keep the newest N for the plan; drop the rest so free accounts cannot grow unbounded
+      const k = 'histidx:' + user.id;
+      let arr = [];
+      try { arr = JSON.parse((await env.LEADS.get(k)) || '[]'); } catch (e) { arr = []; }
+      arr.unshift(rec);
       const cap = HIST_LIMIT[planOf(user)] || HIST_LIMIT.free;
-      const list = await env.LEADS.list({ prefix: 'hist:' + user.id + ':', limit: 1000 });
-      if (list.keys.length > cap) {
-        const withTs = [];
-        for (const k of list.keys) {
-          const v = await env.LEADS.get(k.name);
-          if (v) { try { withTs.push({ k: k.name, at: JSON.parse(v).at }); } catch (e) { } }
-        }
-        withTs.sort((a, b) => String(b.at).localeCompare(String(a.at)));
-        for (const old of withTs.slice(cap)) await env.LEADS.delete(old.k);
-      }
+      if (arr.length > cap) arr = arr.slice(0, cap);
+      await env.LEADS.put(k, JSON.stringify(arr));
     } catch (e) { /* history is additive: never fail the scan because of it */ }
   })();
   if (ctx && ctx.waitUntil) ctx.waitUntil(write); else await write;
@@ -3614,15 +3651,11 @@ async function recordScan(env, ctx, user, report, label) {
 }
 
 async function listScans(env, user, limit) {
-  const out = [];
-  const list = await env.LEADS.list({ prefix: 'hist:' + user.id + ':', limit: 1000 });
-  for (const k of list.keys) {
-    const v = await env.LEADS.get(k.name);
-    if (!v) continue;
-    try { out.push(JSON.parse(v)); } catch (e) { }
-  }
-  out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
-  return out.slice(0, limit || 100);
+  let arr = [];
+  try { arr = JSON.parse((await env.LEADS.get('histidx:' + user.id)) || '[]'); } catch (e) { arr = []; }
+  if (!Array.isArray(arr)) arr = [];
+  arr.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  return arr.slice(0, limit || 100);
 }
 
 function historySarif(recs) {

@@ -1146,3 +1146,23 @@ NOTE: an earlier check of mine flagged "prompt stored? True" — that was my own
 (finding titles contain the word "prompt"). Re-verified against the actual submitted text.
 NEXT: /account should show the history and the SARIF link, so the thing customers pay for is
 visible in the product rather than only over the API.
+
+## ▶ round 36 — the paid value is now visible in the product (2026-08-21)
+Loop iteration 4. History and SARIF existed only over the API, so a customer could pay and see
+nothing change in the UI.
+- [x] /account now renders a Scan history card: date, label, score (colour-coded), grade, finding
+      count and the top finding ids. Empty state explains how to populate it. SARIF is a live
+      download link on Pro and a visibly locked button on Free, next to a "View as JSON" link.
+      The card states in plain language that only findings are stored, never the prompt text.
+- [x] REAL ISSUE FOUND BY TESTING, NOT ASSUMED: a fresh scan did not appear in history for ~20s.
+      Cause was the storage shape — one KV key per scan plus a list() to enumerate them, and KV
+      list() lags noticeably behind get(). Reworked to a single per-user index key (histidx:<uid>)
+      holding the capped summary array: one get instead of list + N gets, so it is both more
+      consistent and cheaper. MEASURED: scan -> read history with no delay now returns the record
+      immediately (previously empty). A second scan written in waitUntil is intentionally not
+      visible in the same render — the write is deferred so it never slows the scan response.
+      Known trade-off, recorded: concurrent scans race the read-modify-write and one summary can
+      be dropped. It never affects the returned scan result, only the history view.
+      pytest 218 green, page_audit PASS on 18 pages. Test accounts and the old hist: keys removed.
+NEXT: distribution. The product is now honest and demonstrable end to end (free surfaces + a paid
+tier that exists), but it has 0 users. Nothing else moves the business until that changes.
