@@ -1258,3 +1258,27 @@ copy-paste commands got the same treatment instead of being assumed fine.
       `node ... | tail`, which reports tail's status, not node's. Re-measured without the pipe.
       The bug I had just fixed in someone else's shoes was sitting in my own verification command.
       pytest 218 green, page_audit PASS on 18 pages, snippet_check PASS 13/13.
+
+## ▶ round 41 — GitHub is suspended, and 161 commits existed in one place (2026-08-21)
+Loop iteration 9. Set out to wire the audits into CI. Checked first whether CI would ever run,
+which turned up something more important.
+- ⛔ **THE GITHUB ACCOUNT IS SUSPENDED.** `git fetch origin` returns
+  `remote: Your account is suspended. Please visit https://support.github.com`, push is 403 and
+  api.github.com/repos/furkanefecan/redcell is 404. This is NOT "Claude lacks auth", which is what
+  I had been repeating — it needs Furkan to appeal with GitHub support. Until then a GitHub Action
+  would never execute, so writing one would have been a file that pretends to be a safety net.
+  It also means the public-repo distribution channel is closed, not merely unclicked.
+- [x] RISK THAT MATTERED MORE: all **161 commits existed only on this machine** — no remote, no
+  backup. One disk failure and every round of this work is gone. Created
+  ~/redcell-backup/redcell-<date>.bundle (666K, full history) and VERIFIED it by cloning from the
+  bundle into a temp dir: 161 commits restored, HEAD hash identical, worker.js byte-count intact.
+  A backup that has never been restored is not a backup.
+- [x] tools/verify.sh — one command runs all four layers (pytest, JS syntax, page_audit,
+  snippet_check) against any base URL, and `npm run verify` is wired up. Uses PIPESTATUS so
+  pytest's status is not masked by the `| tail` — the same pipeline-exit-code trap that produced
+  the broken CI snippet two rounds ago, avoided deliberately this time.
+  PROVED THE FAILURE PATH: against a broken base URL it exits 1; against production it exits 0.
+  All four layers currently PASS (pytest 218, 18 pages, 13 snippet assertions).
+FOR FURKAN, in priority order: (1) appeal the GitHub suspension — it blocks the repo, packages and
+CI all at once; (2) Paddle KYC + payout, which still blocks taking money. Neither is something I
+can do, and neither is a reason for me to stop on everything else.
