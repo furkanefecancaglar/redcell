@@ -1026,3 +1026,18 @@ and said too much is left hanging. Both were fair. What was actually broken:
       Verified live: anon /scan -> 401, free account (cookie AND API key) -> 402 with upgrade path,
       bogus key -> 401, and after a signed webhook upgrade the same key passes the gate and runs the
       real engine. page_audit PASS on 18 pages; pytest 218 green.
+
+### round 31 verification result + an honest flag
+Entitlement gate PROVEN end-to-end on the live site: with an active Pro plan, both the
+API-key call and the session-cookie call reach the engine and return 200 with a real report
+(score 69 Exposed, 9 attacks). Test account deleted afterwards; only Furkan's real account remains.
+
+⚠️ QUALITY PROBLEM WITH THE PAID FEATURE — do not sell it yet:
+that report came back **passed 3 / failed 2 / errors 4, provisional: true**. Nearly half the
+corpus errored. Root cause is the known engine reality: /scan runs on shared free NIM keys where
+only `nemotron` is reliably usable and quota is thin, so target+judge contend for the same key and
+several judgements never complete. Charging $39 for a run that half-fails is not defensible.
+NEXT (before the paid plan is advertised as working):
+  - retry/backoff per attack instead of recording an ERROR on first failure
+  - stop reporting a score at all when errors > ~20% (return "incomplete", not a number)
+  - a dedicated judge key so target and judge stop competing for the same quota
