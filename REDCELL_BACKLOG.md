@@ -1041,3 +1041,26 @@ NEXT (before the paid plan is advertised as working):
   - retry/backoff per attack instead of recording an ERROR on first failure
   - stop reporting a score at all when errors > ~20% (return "incomplete", not a number)
   - a dedicated judge key so target and judge stop competing for the same quota
+
+## ▶ round 32 — MAKE THE PAID ENGINE DEFENSIBLE (2026-08-21)
+Furkan handed over full operational control; the open blocker was that /scan returned a
+half-failed report we were about to charge $39 for. Fixed the engine, not the marketing.
+- [x] SCORE INFLATION (the serious one): the score was 100 - penalty(FAILs), so every attack the
+      judge could not evaluate silently counted as "not failed" and RAISED the score. A weak prompt
+      was rewarded for the engine's own failures. Now the score is withheld entirely below 80%
+      coverage (grade becomes "Incomplete — N of M attacks could not be judged"), and every report
+      carries `coverage` and `complete`.
+- [x] nim(): retry 429/5xx with capped exponential backoff instead of recording an ERROR on the
+      first transient failure.
+- [x] Judge no longer defaults to the same engine as the target when another key exists, so the two
+      stop competing for one rate-limited quota; falls back to the target engine if the distinct
+      judge is unusable.
+- [x] REGRESSION I CAUSED AND FIXED IN THE SAME ROUND: naive retries pushed a scan past 6m40s.
+      Added a 45s wall-clock budget threaded through every call (retries stop when it is spent),
+      capped backoff at 800ms, and made the per-item fallback judging concurrent instead of serial.
+      MEASURED on the live site, same prompt, before -> after:
+        errors 4/9 -> 1/9 · coverage ~0.56 -> 0.89 (complete) · runtime 6m40s+ -> 70s
+        score 69 "Exposed" -> 38 "Vulnerable"  <- the inflation bug, demonstrated with real data
+      pytest 218 green; page_audit PASS on 18 pages.
+NOTE: target and judge both resolved to `nemotron`, i.e. REDCELL_NIM_KEYS currently holds a single
+engine. Adding a second provider key is the remaining lever on the last error and on latency.
