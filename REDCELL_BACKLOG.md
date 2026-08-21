@@ -1354,3 +1354,21 @@ systematic pass instead of a spot check.
 - [x] Deleted the now-unreferenced DASHBOARD_PAGE const: 9,131 bytes / 92 lines of dead code that
       still carried the old dark theme. Verified zero remaining references before removing.
       All four layers pass: pytest 218, 18 pages, 20 snippet/protocol assertions.
+
+## ▶ round 45 — a failing gate now tells you how to fix it (2026-08-21)
+Loop iteration 13. Back to product surface after the content sweep came back clean.
+- ⚠️ GAP FOUND: REDCELL has a REMEDIATION map — one concrete fix per detector — but it only fed
+      the shareable report and the SARIF export. The two surfaces a developer actually integrates,
+      POST /gate and POST /scan-config, returned {id, title, sev} and nothing else. So the CI gate
+      would block a merge with "No instruction-hierarchy / injection defense" and leave the
+      developer with no path forward. A gate that blocks without explaining is just an obstacle.
+- [x] Verified coverage before wiring it up rather than assuming: 22 detector titles, 22
+      remediation entries, zero missing and zero orphans — so `fix` is never empty.
+- [x] Both surfaces now return a `fix` per finding.
+- [x] The published CI snippet prints them, so a failing build shows the reason AND the remedy
+      inline. Tested the way the last two rounds taught me to: extracted the jq expression from the
+      RENDERED /ci page and ran that exact string — weak prompt prints summary + per-finding fixes
+      and exits 1, hardened prompt exits 0.
+- [x] snippet_check now asserts every finding from a failing gate carries a usable fix (>20 chars),
+      and the same for /scan-config — so this cannot silently regress to bare titles.
+      All four layers pass: pytest 218, 18 pages, 22 snippet/protocol assertions.

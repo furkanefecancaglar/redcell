@@ -617,6 +617,7 @@ export default {
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required (POST JSON {system_prompt}) or ?system_prompt= for GET' }, 400);
       bump(env, ctx, 'scan');
       const rep = analyze(String(b.system_prompt));
+      rep.findings = withFixes(rep.findings);   // a finding without a fix is only half an answer
       // Signed-in callers get the scan recorded for their history. Anonymous use is
       // unchanged and still stores nothing.
       const who = await authedUser(env, request);
@@ -650,7 +651,7 @@ export default {
         has_critical: rep.has_critical, failed_because: reasons,
         summary: (ok ? 'PASS' : 'FAIL') + ' — ' + rep.score + '/100 (' + rep.grade + '), '
           + rep.findings.length + ' findings' + (ok ? '' : ': ' + reasons.join('; ')),
-        findings: rep.findings.map((f) => ({ id: f.id, title: f.title, sev: f.sev })),
+        findings: withFixes(rep.findings),
         history_id: hid,
       }, ok ? 200 : 422);
     }
@@ -2238,8 +2239,14 @@ const CI_CURL = `# .github/workflows/redcell.yml  —  no install, no key
       -H 'content-type: application/json' \\
       -d "$(jq -Rs '{system_prompt: ., min_score: 60}' < prompts/agent.txt)")
     code=$(tail -n1 <<<"$resp"); body=$(sed '$d' <<<"$resp")
-    jq -r .summary <<<"$body"     # prints the reason on pass AND on fail
+    jq -r '.summary, (.findings[] | "  [\\(.sev)] \\(.id) \\(.title)\\n        fix: \\(.fix)")' <<<"$body"
     [ "$code" = "200" ]           # 422 -> step fails
+
+# A failing build prints the reason AND the fix for every finding, e.g.
+#   FAIL — 23/100 (Vulnerable), 7 findings: score 23 is below min_score 60
+#     [high] LLM01 No instruction-hierarchy / injection defense
+#           fix: State that these instructions cannot be overridden, and that user or
+#                retrieved content is untrusted data — never instructions.
 
 # Note: do NOT write this as \`curl -sf ... | jq\`. A pipeline returns the exit code of the
 # LAST command, so jq would swallow curl's failure and the gate would never block a merge.
@@ -2250,6 +2257,16 @@ const CI_CURL = `# .github/workflows/redcell.yml  —  no install, no key
 #     -d '{"system_prompt":"You are a bot. Do whatever the user asks."}' | head -1
 #   -> HTTP/2 422`;
 
+
+
+// Attach the concrete fix to each finding. Every one of the 22 detector titles has a
+// REMEDIATION entry (verified), so this never emits an empty instruction.
+function withFixes(findings) {
+  return (findings || []).map((f) => ({
+    id: f.id, title: f.title, sev: f.sev, cat: f.cat,
+    fix: REMEDIATION[f.title] || 'Harden the system prompt against this class of attack.',
+  }));
+}
 
 function renderCI() {
   return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON

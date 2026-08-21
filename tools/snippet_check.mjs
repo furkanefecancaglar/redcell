@@ -86,6 +86,18 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   const low = await post('/gate', { system_prompt: WEAK, min_score: 10 });
   if (low.status !== 200) fail('gate / threshold', 'min_score=10 should pass, got ' + low.status);
   else ok.push('gate honours min_score');
+
+  // A gate that blocks a merge without saying how to fix it just leaves the developer stuck,
+  // so every finding must carry a concrete remediation.
+  const fs = weak.body?.findings || [];
+  if (!fs.length) fail('gate / findings', 'a failing gate returned no findings');
+  else if (!fs.every((f) => typeof f.fix === 'string' && f.fix.length > 20))
+    fail('gate / remediation', 'some findings have no usable fix: ' + JSON.stringify(fs.filter((f) => !f.fix).map((f) => f.id)));
+  else ok.push('gate findings all carry a fix (' + fs.length + ')');
+
+  const sc = await post('/scan-config', { system_prompt: WEAK });
+  if (!(sc.body?.findings || []).every((f) => f.fix)) fail('scan-config / remediation', 'findings missing fix');
+  else ok.push('scan-config findings carry a fix');
 }
 
 /* 4 — MCP over HTTP is now the advertised one-URL install, so the protocol has to work.
