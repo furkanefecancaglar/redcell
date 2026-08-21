@@ -21,6 +21,18 @@ const PAGES = [
   '/signup', '/login', '/terms', '/privacy', '/refunds',
 ];
 
+// Ground truth for the numbers the marketing copy quotes. A security product that
+// advertises a detector count it does not have loses the argument before it starts;
+// the landing said 37 while the code and /health said 38.
+let TRUTH = null;
+async function loadTruth() {
+  try {
+    const r = await fetch(BASE + '/health');
+    const d = await r.json();
+    TRUTH = { firewall: d.firewall_rules, statics: d.detectors, attacks: d.attacks };
+  } catch (e) { TRUTH = null; }
+}
+
 const failures = [];
 const notes = [];
 function fail(page, msg) { failures.push(page + ': ' + msg); }
@@ -100,13 +112,29 @@ async function audit(page) {
     if (!html.includes('href="' + l + '"')) fail(page, 'legal link ' + l + ' missing from footer');
   }
 
-  // 6. the old dark/red identity must be gone
+  // 6. quoted numbers must match what the code actually ships
+  if (TRUTH) {
+    const claims = [
+      [/<b>(\d+)<\/b>\s*(?:&nbsp;)?\s*firewall detectors/g, TRUTH.firewall, 'firewall detectors'],
+      [/(\d+)\s+detectors block injection/g, TRUTH.firewall, 'firewall detectors'],
+      [/<b>(\d+)<\/b>\s*(?:&nbsp;)?\s*static checks/g, TRUTH.statics, 'static checks'],
+    ];
+    for (const [re, truth, what] of claims) {
+      let m;
+      while ((m = re.exec(html))) {
+        if (Number(m[1]) !== truth) fail(page, 'claims ' + m[1] + ' ' + what + ' but the code ships ' + truth);
+      }
+    }
+  }
+
+  // 7. the old dark/red identity must be gone
   for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4']) {
     if (html.includes(tok)) fail(page, 'legacy dark/red token ' + tok + ' still present');
   }
 }
 
 const t0 = Date.now();
+await loadTruth();
 for (const p of PAGES) await audit(p);   // sequential: parallel bursts trip the edge
 
 console.log('audited ' + PAGES.length + ' pages against ' + BASE + ' in ' + (Date.now() - t0) + 'ms');

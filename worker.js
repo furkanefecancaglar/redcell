@@ -1328,7 +1328,7 @@ footer{margin-top:104px;border-top:1px solid var(--line);padding-top:30px;paddin
   </div>
   <div class="trust load d5">
     <span><span class=pulse></span>Live on the edge</span>
-    <span><b>37</b> firewall detectors</span>
+    <span><b>38</b> firewall detectors</span>
     <span><b>22</b> static checks · 4 languages</span>
     <span><b>0</b> API keys to try it</span>
     <span id=trustlive style="display:none"><b id=stblk>0</b> attacks stopped</span>

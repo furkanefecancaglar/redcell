@@ -1191,3 +1191,24 @@ NEXT: the two lowest-friction distribution assets are a public GitHub repo and i
 (npm/PyPI) — today the quickstart tells people to vendor a file by hand, which is the single biggest
 adoption tax. Both need account auth I do not have, so they are queued for Furkan rather than faked.
 What I can still do unblocked: sharper worked examples and content that earns the click.
+
+## ▶ round 38 — the numbers on the site must be true (2026-08-21)
+Loop iteration 6. Went looking for content that earns a click and found an accuracy bug instead,
+which for a security product matters more than any blog post.
+- [x] CHECKED THE DATA BEFORE WRITING ANY CONTENT: the Breach game is the one genuinely unique
+      dataset we could publish, but it holds 8 attempts / 0 wins / 0 blocked — all of it my own
+      testing. There is no attack-technique corpus to write about yet, so nothing was written.
+      Recorded rather than dressed up.
+- [x] AUDITED EVERY NUMBER THE SITE QUOTES against the code:
+        static checks   22  -> code 22            ✓
+        reason classes  13  -> code 13 add() ids  ✓
+        attacks          9  -> CORPUS + 1         ✓
+        firewall     37/38  -> code 34 rules + 4 checks = 38   ✗ the landing trust row said 37
+      One wrong number, sitting on the most-read line of the site. Fixed to 38.
+- [x] DURABLE FIX, not just the edit: page_audit.mjs now pulls /health and asserts that every
+      advertised count on every page matches what the code actually ships. Proven to work — run
+      against the still-live 37 it failed with "claims 37 firewall detectors but the code ships 38",
+      and passes after the fix. Advertised numbers can no longer drift from reality silently.
+      pytest 218 green, page_audit PASS on 18 pages (now including claim verification).
+NOTE for future runs: the landing is edge-cached for 30 min, so an audit immediately after deploy
+can read a stale copy. Re-run before trusting a post-deploy failure.
