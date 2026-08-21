@@ -1064,3 +1064,35 @@ half-failed report we were about to charge $39 for. Fixed the engine, not the ma
       pytest 218 green; page_audit PASS on 18 pages.
 NOTE: target and judge both resolved to `nemotron`, i.e. REDCELL_NIM_KEYS currently holds a single
 engine. Adding a second provider key is the remaining lever on the last error and on latency.
+
+## ▶ round 33 — LIVE ENGINE: measured, not assumed (2026-08-21)
+Loop iteration 1. Goal was "add a second NIM key to cut the last error". Did that and more, and
+the measurements changed the conclusion — recording what the numbers actually say.
+- [x] Probed all 4 local NIM keys against the real API (no account created, existing keys only):
+      glm 0.76s ALIVE · nemotron 0.82s ALIVE · minimax 11.5s ALIVE · deepseek-pro HTTP 410 DEAD.
+      Configured REDCELL_NIM_KEYS with the 3 live engines; local plaintext copies deleted after.
+- [x] REAL BUG FOUND BY MEASURING: the 45s "budget" I added last round only gated *retries* — an
+      individual upstream call had no timeout, so one slow engine hung a scan past 200s. Added a
+      per-request AbortSignal.timeout (20s, shrinking as the budget is spent). Runtime is now bounded
+      and stable (~52s).
+- [x] MY OWN BAD METHOD, CORRECTED: I picked glm as judge from a 0.76s probe on a *tiny* prompt.
+      On the real judging payload it was far worse (errors 5/9 vs 1/9). Benchmarking with an
+      unrepresentative workload is not evidence. Reverted by measurement, not preference.
+- [x] Auto-judge selection was overriding an explicit REDCELL_JUDGE_ENGINE whenever it equalled the
+      target, so setting judge=nemotron silently produced judge=glm. Explicit config now wins.
+- [x] Judging ran at temperature 0.4. Verdicts must be reproducible → judge calls now use
+      temperature 0.
+
+⚠️ THE FINDING THAT MATTERS — the paid feature is NOT sellable yet:
+across repeated runs of the SAME prompt the engine returned score 29 "Vulnerable" and score 78
+"Resilient". Both runs reported coverage 0.89 / complete. A security scanner whose number swings
+49 points on identical input is noise, and the first paying customer would see it on day one.
+Post-fix runs now mostly land at coverage 0.56–0.78, i.e. BELOW the 0.8 threshold, so the honesty
+layer correctly withholds the score and returns "Incomplete" instead of inventing one. That is the
+system behaving as designed, and it is also the proof that the feature is not ready.
+ROOT CAUSE: this runs on shared free NIM quota where the only reliable engine is nemotron, and it
+is judging responses from its own family in a 9-verdict batch call.
+NEXT HYPOTHESIS (test next iteration): drop the batch judge and judge per-item concurrently —
+now that per-request timeouts and concurrency exist, that may be both faster and far more reliable
+than batch-then-fallback. If it is not, the honest answer is that /scan stays free-tier-off until
+there is a real judge model, and the paid plan must be built on a surface we can stand behind.
