@@ -79,7 +79,9 @@ BREACH_LOG and vice versa; every handler fail-open when its KV is missing).
 
 Constant factors we can state honestly:
 - Deployed surface is behind Cloudflare (multi-region PoPs). We measured live
-  external fetches; no downtime observed since the fly.io pivot.
+  external fetches and observed no downtime. (An earlier version of this line said
+  "since the fly.io pivot". There was no fly.io deployment of ours — flyctl has never
+  been installed here and redcell.fly.dev belongs to someone else. See DEPLOY.md.)
 - Every KV read/write is wrapped in try/catch and fail-open where the feature is
   protective rather than critical (rate limiting, §7).
 

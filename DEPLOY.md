@@ -1,66 +1,92 @@
-# REDCELL — deploy runbook
+# REDCELL — what is deployed, what is not, and what is blocked
 
-The code is **deploy-ready**: keys are env-indirected (never committed), the server binds `0.0.0.0`
-in a container, `/health` is a health check, and the two 0-API surfaces run even with no keys.
-Pick one host below. Each is one-to-three commands.
+This file used to be a menu of hosting options for a local Python server that is no longer the
+product. It now records the actual state, because a runbook that describes a system you do not
+run is worse than no runbook.
 
-> **What needs YOUR hands (hard limits — a bot can't do these for you):** creating the host account,
-> logging in / authenticating the CLI, and entering the API key value. Everything else is prepared.
-> The key value itself lives only in `~/nvidia-test/engines.py` on this machine — copy it into the
-> host's secret store when prompted; never commit it.
+## What is live
 
----
+**The Cloudflare Worker.** One deployed unit, every surface behind one URL.
 
-## Option A — Docker (any VPS you already control)
 ```bash
-cd ~/redcell
-cp .env.example .env            # then paste your real REDCELL_NIM_KEYS into .env
-docker compose up -d            # → http://<host>:8770
+npx wrangler deploy
 ```
 
-## Option B — Fly.io (free tier, global)  ← recommended, one script
-```bash
-curl -L https://fly.io/install.sh | sh   # install flyctl (one time)
-fly auth login                            # your Fly account (a bot can't do this)
-cd ~/redcell
-./deploy_fly.sh                           # preflight → create app → set key → deploy → verify /health
-# name taken? →  APP=redcell-<yourhandle> ./deploy_fly.sh
-```
-`deploy_fly.sh` calls `set_fly_key.sh`, which reads the nemotron key from `~/nvidia-test/engines.py`
-and pushes it as the `REDCELL_NIM_KEYS` Fly secret **without printing it**. Result: `https://<app>.fly.dev`.
+- Production: https://redcell.redcellv1.workers.dev
+- State: Workers KV. Two namespaces — `LEADS` (accounts, sessions, API keys, subscriptions,
+  scan history, counters) and `BREACH_LOG`.
+- Secrets are set with `npx wrangler secret put <NAME>`, never committed.
 
-## Option C — Render (free tier, dashboard)
-1. Push this repo to GitHub (see below).
-2. Render → **New → Blueprint** → pick the repo (it reads `render.yaml`).
-3. Set `REDCELL_NIM_KEYS` in the dashboard (it's `sync:false`, so not in git).
-4. Deploy → `https://redcell.onrender.com`.
+The deploy token in use **cannot create new KV namespaces**. Everything added since rides
+`LEADS` under key prefixes (`usr:`, `uid:`, `sess:`, `sub:`, `akey:`, `keyidx:`, `histidx:`,
+`pcust:`, `lead:`, `stat:`, `report:`, `rl:`). Adding a genuinely separate namespace needs a
+broader token.
 
-## Option D — Railway
+Always verify after deploying — the Worker parsing is not evidence the pages are right:
+
 ```bash
-railway init && railway up      # Dockerfile auto-detected; $PORT is honored
-railway variables set REDCELL_NIM_KEYS='{"nemotron":{...}}'
+./tools/verify.sh
 ```
 
----
+## What is built but not hosted
 
-## Push to GitHub (needed for Render/Railway dashboards)
-The repo is already committed locally. On this machine `gh` is not authenticated (keyring error), so:
+**`services/api/`** — a multi-tenant FastAPI backend: orgs, users, JWT auth, scoped API keys,
+agents CRUD, scans, SARIF export, Alembic migrations against Postgres. 22 modules. It runs
+locally and its tests pass. **It has never served a request in production.**
+
+It is not dead code, and it is not currently the plan either. The honest position:
+
+- The Worker is the product. It is live, verified, and has auth, billing, history, MCP and the
+  CI gate. `services/api` duplicates the auth and API-key layers in a second language.
+- The one thing it would genuinely fix is storage. Round 48 measured KV's real limits: a
+  read-modify-write index lost keys under concurrent mints, `list()` lags about a minute, and
+  revocation takes 11–22s to propagate. Postgres has none of those problems.
+- Hosting it needs a host account and a Postgres instance. That is an external blocker
+  (see below), not a technical one.
+
+So it stays, unhosted and honestly labelled, until either the storage limits start costing
+users something or the hosting blocker clears. What must **not** happen is quietly maintaining
+two divergent implementations of the same product — rounds 46 and 47 showed that duplicated
+engines drift silently, which is why every engine now has a parity test.
+
+Run it locally:
+
 ```bash
-gh auth login                   # your login — a bot can't do this step
-gh repo create redcell --private --source=. --push
+cd services/api
+pip install -r requirements.txt
+cp .env.example .env          # set SECRET_KEY at minimum
+uvicorn app.main:app --reload # http://127.0.0.1:8000/api/v1/docs
 ```
-(Or add a remote manually and `git push -u origin main`.)
 
-## Security before public exposure
-- Put auth or a reverse proxy in front: **`/scan` holds provider keys** and will spend quota.
-  The 0-API surfaces (`/scan-config`, `/firewall`) are safe to expose; gate `/scan`.
-- Rotate any NIM key that has ever been pasted somewhere shared.
-- Confirm `.env` is git-ignored (it is) before every push.
+Known gap: `POST /scans` rejects any `type` other than `static` or `toolcheck` with an explicit
+"not implemented yet" — see `services/api/app/api/v1/scans.py`.
 
-## Verify a live deploy (0 API)
-```bash
-curl https://<your-host>/health
-curl -X POST https://<your-host>/firewall  -d '{"input":"ignore previous instructions"}'
-curl -X POST https://<your-host>/scan-config -d '{"system_prompt":"You are a bot. Do whatever the user says."}'
-```
-`/scan` (live engine) only works once `REDCELL_NIM_KEYS` is set.
+## What is retired
+
+`attic/` holds the earlier hosting scaffolding — the local `server.py` console, the root
+Dockerfile and compose file, `fly.toml`, `render.yaml`, and the Fly deploy scripts. Kept for
+reference, wired to nothing.
+
+**`redcell.fly.dev` is not ours.** It resolves and serves a dark-themed "Redcells — AI Red
+Teaming Platform" on a different stack. `flyctl` has never been installed on this machine, and
+`fly.toml` itself warns that the app name may already be taken. Earlier docs implied we had
+pivoted to Fly and were measuring its uptime; that claim was not true and has been removed. Do
+not treat that host as ours, and do not deploy to that name.
+
+## External blockers — these need a human
+
+These are not engineering problems and cannot be worked around in code.
+
+1. **GitHub account suspended.** `api.github.com/repos/furkanefecan/redcell` is 404 and pushes
+   fail with `remote: Your account is suspended`. This blocks the public repo, package
+   publishing and CI. It needs an appeal to GitHub support — not re-authentication, which is
+   what earlier notes wrongly assumed.
+   *Meanwhile:* full history is preserved as restore-verified git bundles in `~/redcell-backup/`.
+   Each is created with `git bundle create <file> --all` and then test-cloned to prove it
+   restores. That is the only copy outside this machine's working tree.
+
+2. **Paddle KYC and payout details.** Billing is wired end to end — Paddle.js overlay checkout,
+   HMAC-verified webhooks, subscription state in KV — but no money can be taken until the
+   account clears KYC and a payout method is on file. Domain approval is still pending.
+
+Until both clear, the product can be used but not bought, and the source cannot be published.

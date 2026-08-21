@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Run every verification layer in one command.
 #
-# Three layers exist because they catch different classes of failure, and the ones that
-# actually bit us were never the first:
+# Each layer catches a different class of failure, and the ones that actually bit us were
+# never the first:
 #   pytest        — the code is correct
 #   page_audit    — the HTML we SERVE is sound and the numbers we advertise are true
 #   snippet_check — the commands we tell people to COPY actually work
-# A shipped bug had correct code, a passing suite, and a broken copy-paste snippet.
+#   doc_check     — the REPOSITORY's own docs match the product
+# A shipped bug had correct code, a passing suite, and a broken copy-paste snippet. Separately,
+# README described a local Python CLI months after the product became a deployed Worker.
 #
 #   ./tools/verify.sh                     # against production
 #   ./tools/verify.sh http://127.0.0.1:8787   # against a local wrangler dev
@@ -48,6 +50,7 @@ step "unit tests"        run_pytest
 step "js syntax"         run_js_syntax
 step "served pages"      node tools/page_audit.mjs "$BASE"
 step "published snippets" node tools/snippet_check.mjs "$BASE"
+step "documentation"      node tools/doc_check.mjs "$BASE"
 
 printf '\n'
 if [ "$fails" -ne 0 ]; then

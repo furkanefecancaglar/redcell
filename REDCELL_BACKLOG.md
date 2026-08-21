@@ -1521,3 +1521,48 @@ arriving, so the constraint is discovery, not conversion. Audited what makes the
 NOTE on method: the first attempt at the og tags broke the Worker — the meta block lives inside
 both template literals and single-quoted concatenations, and I inserted newlines that terminated
 the latter. node --check caught it before deploy; reverted and redid it on one line.
+
+## ▶ round 51 — the repository was lying about the product (2026-08-22)
+Furkan: "hala daha istediğim halde değil, askıda boşta olan bir çok şey var." Correct. Stopped
+picking off single items and audited the whole repository instead of the deployed surface.
+- ⚠️ **README.md described a different product.** It opened "REDCELL v1 — live adversarial
+      engine", documented a local Python CLI and a `server.py` on 127.0.0.1, and claimed 37
+      firewall detectors while the code ships 38. This is the file a customer or an investor
+      reads first. Rewritten around what actually exists, with the counts deliberately NOT
+      repeated in prose — /health is the source of truth and the audit enforces it.
+- ⚠️ **DEPLOY.md was a menu of hosts we do not use**, recommending Fly.io and Render and
+      telling the reader to deploy as app name `redcell`.
+- ⚠️ **`redcell.fly.dev` is live and is NOT ours.** It serves a dark-themed "Redcells — AI Red
+      Teaming Platform" on a different stack. flyctl has never been installed on this machine
+      and fly.toml itself warns the name may be taken. SYSTEM_DESIGN.md claimed "no downtime
+      observed since the fly.io pivot" — a measurement of somebody else's uptime, presented as
+      ours. Corrected in place, with the retraction left visible.
+- ⚠️ **services/api is a second, unshipped product**: 22 modules, orgs/JWT/scoped keys/agents/
+      Alembic+Postgres. It has never served a request. Not deleted and not hidden — DEPLOY.md
+      now states plainly that the Worker is the product, that the one thing Postgres would
+      genuinely fix is the KV consistency measured in round 48, and that hosting it is blocked
+      on an account. What must not happen is two divergent implementations maintained quietly.
+- [x] attic/ — 13 files of superseded hosting scaffolding (server.py, console.html, root
+      Dockerfile/compose, fly.toml, render.yaml, deploy scripts) moved with `git mv`, not
+      deleted, under a README explaining what each was. pytest 220 still green afterwards.
+- [x] **tools/doc_check.mjs — a fifth verification layer.** The other four check the deployed
+      product; nothing checked the repo, which is exactly why it drifted for weeks. It asserts
+      counts in prose match /health, paths named in markdown exist, links to our own domain
+      resolve, and retired hosts are not presented as ours.
+      On its first run it found 8 issues. Three were its own false positives (a `x.py/.js`
+      shorthand, the ratio "13/19 attacks", and POST-only routes probed with GET — now proven
+      to exist by an empty POST returning 400/401 instead). Two were deliberate historical
+      references in README, so the checker now understands past-tense framing rather than
+      forcing the docs to be vague about their own history.
+      **Three were real: GTM_LAUNCH.md (x2) and PITCH.md still claimed 37 detectors** — the
+      pitch deck and the launch copy, the two documents most likely to be read by someone
+      deciding whether to pay or fund.
+- [x] PROVED IT CATCHES DRIFT: changed PITCH.md to "31 detectors" and it failed with
+      "claims 31 detectors, /health says 22 or 38". Reverted; green.
+      All FIVE layers pass: pytest 220, js syntax, 18 pages, 58 snippet assertions, 16 documents.
+STILL OPEN, and honestly stated rather than quietly carried:
+  - services/api is built and unhosted. Blocked on a host account (external).
+  - GitHub suspension blocks repo/CI/packages. Needs Furkan's appeal, not re-auth.
+  - Paddle KYC + payout blocks taking money. Domain approval pending.
+  - /scan's live engine remains non-reproducible (40–50 point swings at temperature 0); the
+    paid tier stays on deterministic surfaces until a judge exists that is not.
