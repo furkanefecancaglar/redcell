@@ -14,3 +14,5 @@ dist/
 
 .venv/
 *.db
+
+.dev.vars

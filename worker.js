@@ -91,6 +91,9 @@ const REASON_LABELS = {
   'executable-data-url': 'a navigate/goto/open browser-execution tool given a data: HTML/JS URL with an executable marker (<script>, <iframe>, onload/onerror/onclick, meta-refresh) — script runs in the browser',
 };
 function reasonLabel(id) { return REASON_LABELS[id] || id; }
+// personalised pages (account/admin/auth) must never sit in a shared or browser cache
+const NOSTORE = { 'Cache-Control': 'no-store, private' };
+
 function html(body, status = 200, extra) {
   return new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800' }, CORS, extra || {}) });
 }
@@ -753,6 +756,108 @@ export default {
     }
     if (url.pathname === '/breach/levels') return json({ levels: LEVELS.map((l) => ({ n: l.n, name: l.name, defenses: [l.firewall ? 'input-firewall' : null, 'hardened-prompt', l.redact ? 'output-redaction' : null].filter(Boolean) })) });
 
+    /* ---------------- accounts, plans, billing ---------------- */
+    if (url.pathname === '/signup') return html(renderSignup(), 200, NOSTORE);
+    if (url.pathname === '/login') return html(renderLogin(), 200, NOSTORE);
+
+    if (url.pathname === '/auth/register' && request.method === 'POST') {
+      const rl = await rateLimit(env, ctx, 'reg:' + (request.headers.get('CF-Connecting-IP') || 'x'), 5, 60000);
+      if (rl) return json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+      let b = {}; try { b = await request.json(); } catch (e) { }
+      const r = await registerUser(env, b.email, b.password, b.name);
+      if (r.error) return json({ error: r.error }, 400);
+      const t = await startSession(env, r.user);
+      const res = json({ ok: true, email: r.user.email });
+      res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
+      return res;
+    }
+    if (url.pathname === '/auth/login' && request.method === 'POST') {
+      const rl = await rateLimit(env, ctx, 'login:' + (request.headers.get('CF-Connecting-IP') || 'x'), 8, 60000);
+      if (rl) return json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+      let b = {}; try { b = await request.json(); } catch (e) { }
+      const u = await verifyLogin(env, b.email, b.password);
+      if (!u) return json({ error: 'Wrong email or password.' }, 401);
+      const t = await startSession(env, u);
+      const res = json({ ok: true, email: u.email });
+      res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
+      return res;
+    }
+    if (url.pathname === '/auth/logout' && request.method === 'POST') {
+      const t = cookies(request).rc_sess;
+      if (t) await env.LEADS.delete('sess:' + t);
+      const res = json({ ok: true });
+      res.headers.set('Set-Cookie', sessionCookie('', 0));
+      return res;
+    }
+    if (url.pathname === '/auth/me') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      return json({ email: u.email, name: u.name, plan: u.sub.plan, status: u.sub.status, createdAt: u.createdAt });
+    }
+    if (url.pathname === '/auth/api-key' && request.method === 'POST') {
+      const u = await currentUser(env, request);
+      if (!u) return json({ error: 'not signed in' }, 401);
+      return json({ ok: true, key: await mintApiKey(env, u) });
+    }
+    if (url.pathname === '/account') {
+      const u = await currentUser(env, request);
+      if (!u) return Response.redirect(url.origin + '/login', 302);
+      return html(renderAccount(u, !!(env && env.PADDLE_CHECKOUT_TEAM)), 200, NOSTORE);
+    }
+
+    if (url.pathname === '/billing/checkout') {
+      const u = await currentUser(env, request);
+      if (!u) return Response.redirect(url.origin + '/login', 302);
+      const link = env && env.PADDLE_CHECKOUT_TEAM;
+      if (!link) return json({ error: 'Billing is not configured yet.' }, 503);
+      // pass the account id through so the webhook can match the payment to a user
+      const sep = link.indexOf('?') >= 0 ? '&' : '?';
+      return Response.redirect(link + sep + 'custom_data[user_id]=' + encodeURIComponent(u.id)
+        + '&custom_data[plan]=team&customer_email=' + encodeURIComponent(u.email), 302);
+    }
+    if (url.pathname === '/billing/portal') {
+      const link = (env && env.PADDLE_PORTAL_URL) || 'https://paddle.com';
+      return Response.redirect(link, 302);
+    }
+    if (url.pathname === '/billing/webhook/paddle' && request.method === 'POST') {
+      const raw = await request.text();
+      if (!(await paddleSigOk(env, request, raw))) return json({ error: 'bad signature' }, 401);
+      let evt = {}; try { evt = JSON.parse(raw); } catch (e) { return json({ error: 'bad json' }, 400); }
+      return json(await applyBillingEvent(env, evt));
+    }
+
+    if (url.pathname === '/admin') {
+      if (!(await adminOk(env, request))) return html(renderAdminDenied(), 403, NOSTORE);
+      const counts = {};
+      for (const k of STAT_KEYS) { const v = await env.LEADS.get('stat:' + k); counts[k] = v ? (parseInt(v, 10) || 0) : 0; }
+      let breach = {}; try { breach = JSON.parse((await env.BREACH_LOG.get('stats')) || '{}'); } catch (e) { }
+      const ulist = await env.LEADS.list({ prefix: 'usr:', limit: 1000 });
+      const recent = []; let paid = 0;
+      for (const k of ulist.keys) {
+        const v = await env.LEADS.get(k.name); if (!v) continue;
+        let u; try { u = JSON.parse(v); } catch (e) { continue; }
+        const s = await getSub(env, u.id);
+        if (s.plan && s.plan !== 'free' && s.status === 'active') paid++;
+        recent.push({ email: u.email, createdAt: u.createdAt, plan: s.plan, status: s.status });
+      }
+      recent.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      const llist = await env.LEADS.list({ prefix: 'lead:', limit: 200 });
+      const recentLeads = [];
+      for (const k of llist.keys.slice(-25).reverse()) {
+        const v = await env.LEADS.get(k.name); if (!v) continue;
+        try { recentLeads.push(JSON.parse(v)); } catch (e) { }
+      }
+      return html(renderAdmin({
+        users: ulist.keys.length, paid, mrr: paid * 499,
+        leads: parseInt((await env.LEADS.get('count')) || '0', 10) || 0,
+        counts, breach, recent: recent.slice(0, 25), recentLeads,
+        billingReady: !!(env && env.PADDLE_CHECKOUT_TEAM && env.PADDLE_WEBHOOK_SECRET),
+        hasWebhookSecret: !!(env && env.PADDLE_WEBHOOK_SECRET),
+        hasCheckout: !!(env && env.PADDLE_CHECKOUT_TEAM),
+        hasNim: !!(env && env.REDCELL_NIM_KEYS),
+      }), 200, NOSTORE);
+    }
+
     return json({ error: 'not found' }, 404);
   },
 };
@@ -781,7 +886,7 @@ const SITE_FOOT = '<style>'
   + '<span class=rf-live><i></i>Live on the edge &middot; 0-API</span>'
   + '</div>'
   + '<div class=rf-cols>'
-  + '<div><h4>Product</h4><a href="/">Console</a><a href="/ci">CI gate</a><a href="/mcp">MCP tool</a><a href="/breach">Breach challenge</a></div>'
+  + '<div><h4>Product</h4><a href="/">Console</a><a href="/ci">CI gate</a><a href="/mcp">MCP tool</a><a href="/breach">Breach challenge</a><a href="/account">Your account</a></div>'
   + '<div><h4>Developers</h4><a href="/quickstart">Quickstart</a><a href="/docs">Docs</a><a href="/openapi.json">OpenAPI</a><a href="/vs">Compare</a></div>'
   + '<div><h4>Research</h4><a href="/agents">Threat model</a><a href="/methodology">Methodology</a><a href="/example">Worked example</a><a href="/changelog">Changelog</a></div>'
   + '</div></div>'
@@ -803,7 +908,7 @@ const SITE_NAV = '<style>'
   + '<a class=sn-logo href="/"><span class=sn-glyph>R</span>REDCELL</a>'
   + '<nav class=sn-links>'
   + '<a class=sn-h href="/docs">Docs</a><a class=sn-h href="/agents">Threat model</a><a class=sn-h href="/quickstart">Quickstart</a>'
-  + '<a class=sn-cta href="/">Open console</a>'
+  + '<a class=sn-h href="/login">Sign in</a><a class=sn-cta href="/signup">Get started</a>'
   + '</nav></div></header>';
 
 const LANDING = `<!doctype html><html lang=en><head><meta charset=utf-8>
@@ -1062,7 +1167,9 @@ footer{margin-top:104px;border-top:1px solid var(--line);padding-top:30px;paddin
     <a class="q hide" href="#pricing">Pricing</a>
     <a class="q hide" href="#developers">Developers</a>
     <a class="q hide" href="/docs">Docs</a>
-    <a class=btn-dark href="/breach">Play Breach</a>
+    <a class="q hide" href="/breach">Breach</a>
+    <a class="q" href="/login">Sign in</a>
+    <a class=btn-dark href="/signup">Get started</a>
   </div>
 </div></header>
 
@@ -1153,7 +1260,7 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
     </div>
     <div class="pc feat up">
       <div class=tier>Team <span class=tag>POPULAR</span></div>
-      <div class=amt>$499<s>/mo</s></div>
+      <div class=amt>$499<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Team</a>
       <ul><li>Live red-team on your agents</li><li>Adaptive attacks + judge model</li><li>Runtime firewall + dashboards</li></ul>
     </div>
     <div class="pc up">
@@ -2781,4 +2888,341 @@ function renderBenchmark() {
     + '<p style="color:var(--ink2);font-size:13px;max-width:720px">Scored with <a href="/methodology" style="color:var(--pass)">the methodology on this site</a> — the same 0-API static engine behind the live scanner, CI gate, and /agentcheck. Run your own: <code style="background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13px;color:var(--ink2)">POST /scan-config</code></p>'
     + '<div class=id style="margin-top:16px">REDCELL · <a href="/">home</a> · <a href="/docs">docs</a> · <a href="/agents">threat model</a> · <a href="/openapi.json">openapi</a></div>'
     + '</div>' + SITE_FOOT + '</body></html>';
+}
+
+/* ================= Accounts, plans and billing =================
+   Storage rides on the existing LEADS KV namespace (the deploy token cannot
+   create new namespaces) under dedicated prefixes:
+     usr:<email>   user record        sess:<token>  session
+     uid:<id>      id -> email index  sub:<id>      subscription state
+     akey:<sha256> API key -> user
+
+   Passwords: PBKDF2-SHA256, 210k iterations, per-user random salt; only the
+   derived key is stored. Sessions are opaque random tokens in an httpOnly,
+   Secure, SameSite=Lax cookie.
+
+   Billing is Merchant-of-Record: the MoR (Paddle by default) is the seller of
+   record, so it collects the card, charges the right VAT/sales tax per country
+   and pays out to a Turkish bank account. Turkey is not a Stripe country, so a
+   direct Stripe account is not an option without a foreign entity.
+   Everything below is inert until these Worker secrets are set:
+     PADDLE_WEBHOOK_SECRET   PADDLE_CHECKOUT_TEAM   ADMIN_EMAILS            */
+
+// Cloudflare Workers hard-caps PBKDF2 at 100k iterations (NotSupportedError above that),
+// so this is the platform maximum rather than a tuning choice. Local workerd does not
+// enforce the cap, which is why 210k passed in dev and threw 1101 in production.
+const PBKDF2_MAX = 100000;
+const PBKDF2_ITERS = PBKDF2_MAX;
+const SESSION_TTL = 60 * 60 * 24 * 30;   // 30 days
+const PLANS = { free: 'Free', team: 'Team', enterprise: 'Enterprise' };
+
+function rndHex(n) {
+  const a = new Uint8Array(n); crypto.getRandomValues(a);
+  return Array.from(a).map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+function hex(buf) {
+  return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+async function sha256hex(s) {
+  return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+}
+async function pbkdf2(password, saltHex, iters) {
+  iters = Math.min(parseInt(iters, 10) || PBKDF2_MAX, PBKDF2_MAX);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const salt = Uint8Array.from(saltHex.match(/../g).map((h) => parseInt(h, 16)));
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: iters, hash: 'SHA-256' }, key, 256));
+}
+// constant-time compare so a wrong password cannot be narrowed down by timing
+function eqConst(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+function normEmail(e) { return String(e || '').trim().toLowerCase(); }
+function validEmail(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length < 200;
+}
+function cookies(request) {
+  const out = {};
+  const raw = request.headers.get('Cookie') || '';
+  raw.split(';').forEach((p) => { const i = p.indexOf('='); if (i > 0) out[p.slice(0, i).trim()] = p.slice(i + 1).trim(); });
+  return out;
+}
+function sessionCookie(token, maxAge) {
+  return 'rc_sess=' + token + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAge;
+}
+
+async function getUserByEmail(env, email) {
+  const raw = await env.LEADS.get('usr:' + normEmail(email));
+  return raw ? JSON.parse(raw) : null;
+}
+async function getUserById(env, id) {
+  const email = await env.LEADS.get('uid:' + id);
+  return email ? getUserByEmail(env, email) : null;
+}
+async function getSub(env, uid) {
+  const raw = await env.LEADS.get('sub:' + uid);
+  return raw ? JSON.parse(raw) : { plan: 'free', status: 'none' };
+}
+async function currentUser(env, request) {
+  const t = cookies(request).rc_sess;
+  if (!t) return null;
+  const raw = await env.LEADS.get('sess:' + t);
+  if (!raw) return null;
+  let s; try { s = JSON.parse(raw); } catch (e) { return null; }
+  const u = await getUserById(env, s.uid);
+  if (!u) return null;
+  u.sub = await getSub(env, u.id);
+  return u;
+}
+function isAdmin(env, user) {
+  const list = String((env && env.ADMIN_EMAILS) || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return !!user && list.indexOf(user.email) >= 0;
+}
+// Admin surface accepts either an allow-listed signed-in account or the ops token.
+async function adminOk(env, request) {
+  const tok = env && env.REDCELL_SCAN_TOKEN;
+  if (tok && eqConst(request.headers.get('X-REDCELL-Token') || '', tok)) return true;
+  return isAdmin(env, await currentUser(env, request));
+}
+
+async function registerUser(env, email, password, name) {
+  email = normEmail(email);
+  if (!validEmail(email)) return { error: 'Enter a valid email address.' };
+  if (!password || password.length < 8) return { error: 'Password must be at least 8 characters.' };
+  if (await getUserByEmail(env, email)) return { error: 'That email already has an account. Sign in instead.' };
+  const salt = rndHex(16);
+  const user = {
+    id: rndHex(12), email, name: String(name || '').slice(0, 80),
+    salt, iters: PBKDF2_ITERS, hash: await pbkdf2(password, salt, PBKDF2_ITERS),
+    createdAt: new Date().toISOString(),
+  };
+  await env.LEADS.put('usr:' + email, JSON.stringify(user));
+  await env.LEADS.put('uid:' + user.id, email);
+  await env.LEADS.put('sub:' + user.id, JSON.stringify({ plan: 'free', status: 'active', since: user.createdAt }));
+  const c = await env.LEADS.get('usercount'); await env.LEADS.put('usercount', String((parseInt(c, 10) || 0) + 1));
+  return { user };
+}
+async function startSession(env, user) {
+  const token = rndHex(32);
+  await env.LEADS.put('sess:' + token, JSON.stringify({ uid: user.id, at: Date.now() }), { expirationTtl: SESSION_TTL });
+  return token;
+}
+async function verifyLogin(env, email, password) {
+  const u = await getUserByEmail(env, email);
+  if (!u) { await pbkdf2(password || 'x', rndHex(16), PBKDF2_ITERS); return null; } // equalise work
+  const h = await pbkdf2(password || '', u.salt, u.iters || PBKDF2_ITERS);
+  return eqConst(h, u.hash) ? u : null;
+}
+async function mintApiKey(env, user) {
+  const plain = 'rk_live_' + rndHex(20);
+  await env.LEADS.put('akey:' + (await sha256hex(plain)), JSON.stringify({ uid: user.id, at: Date.now() }));
+  const u = await getUserByEmail(env, user.email);
+  u.keyPrefix = plain.slice(0, 16);
+  await env.LEADS.put('usr:' + u.email, JSON.stringify(u));
+  return plain;
+}
+async function userForApiKey(env, plain) {
+  if (!plain || plain.indexOf('rk_live_') !== 0) return null;
+  const raw = await env.LEADS.get('akey:' + (await sha256hex(plain)));
+  if (!raw) return null;
+  const u = await getUserById(env, JSON.parse(raw).uid);
+  if (u) u.sub = await getSub(env, u.id);
+  return u;
+}
+
+/* ---- Merchant-of-Record webhook (Paddle Billing v2 signature) ----
+   Paddle-Signature: ts=<unix>;h1=<hmac sha256 of "<ts>:<rawBody>">          */
+async function paddleSigOk(env, request, rawBody) {
+  const secret = env && env.PADDLE_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const header = request.headers.get('Paddle-Signature') || '';
+  const parts = {};
+  header.split(';').forEach((p) => { const i = p.indexOf('='); if (i > 0) parts[p.slice(0, i).trim()] = p.slice(i + 1).trim(); });
+  if (!parts.ts || !parts.h1) return false;
+  // reject replays older than 5 minutes
+  if (Math.abs(Math.floor(Date.now() / 1000) - parseInt(parts.ts, 10)) > 300) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = hex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(parts.ts + ':' + rawBody)));
+  return eqConst(mac, parts.h1);
+}
+const PADDLE_ACTIVE = ['subscription.created', 'subscription.activated', 'subscription.updated', 'subscription.resumed'];
+const PADDLE_OFF = ['subscription.canceled', 'subscription.paused', 'subscription.past_due'];
+
+async function applyBillingEvent(env, evt) {
+  const d = (evt && evt.data) || {};
+  const cd = d.custom_data || (d.transaction && d.transaction.custom_data) || {};
+  let uid = cd.user_id || cd.uid || null;
+  if (!uid && d.customer_id) uid = await env.LEADS.get('pcust:' + d.customer_id);
+  if (!uid) return { ok: false, reason: 'no user_id in custom_data' };
+  const active = PADDLE_ACTIVE.indexOf(evt.event_type) >= 0;
+  const off = PADDLE_OFF.indexOf(evt.event_type) >= 0;
+  if (!active && !off) return { ok: true, ignored: evt.event_type };
+  const sub = {
+    plan: active ? (cd.plan || 'team') : 'free',
+    status: active ? 'active' : (evt.event_type.split('.')[1] || 'canceled'),
+    provider: 'paddle',
+    providerSubId: d.id || null,
+    providerCustomerId: d.customer_id || null,
+    currentPeriodEnd: (d.current_billing_period && d.current_billing_period.ends_at) || null,
+    updatedAt: new Date().toISOString(),
+  };
+  await env.LEADS.put('sub:' + uid, JSON.stringify(sub));
+  if (d.customer_id) await env.LEADS.put('pcust:' + d.customer_id, uid);
+  await env.LEADS.put('billevt:' + Date.now() + ':' + rndHex(3),
+    JSON.stringify({ t: evt.event_type, uid, at: sub.updatedAt }), { expirationTtl: 60 * 60 * 24 * 90 });
+  return { ok: true, plan: sub.plan };
+}
+
+/* ---------------- account pages (light system, shared chrome) ---------------- */
+const AUTH_CSS = '.auth{max-width:420px;margin:56px auto 0}'
+  + '.auth h1{font-size:26px;margin:0 0 6px}'
+  + '.auth p.sub{color:var(--ink2);font-size:14.5px;margin:0 0 22px}'
+  + '.auth label{display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin:14px 0 6px}'
+  + '.auth input{width:100%;background:var(--panel);border:1px solid var(--line2);border-radius:10px;color:var(--ink);padding:11px 13px;font:15px var(--sans)}'
+  + '.auth input:focus{outline:0;border-color:var(--acc);box-shadow:0 0 0 4px var(--acc-soft)}'
+  + '.auth .go{width:100%;margin-top:20px;background:var(--ink);color:#fff;border:0;border-radius:10px;padding:12px;font:600 15px var(--sans);cursor:pointer}'
+  + '.auth .go:disabled{opacity:.55;cursor:not-allowed}'
+  + '.auth .alt{margin-top:16px;font-size:13.5px;color:var(--ink3);text-align:center}'
+  + '.msg{margin-top:14px;font-family:var(--mono);font-size:13px;display:none}'
+  + '.kv{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid var(--line);font-size:14.5px}'
+  + '.kv b{font-weight:600}'
+  + '.tag{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--acc-soft);color:var(--acc)}'
+  + '.keybox{font-family:var(--mono);font-size:12.5px;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px;word-break:break-all;margin-top:10px}'
+  + 'table.adm{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:10px}'
+  + 'table.adm th{text-align:left;font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);padding:8px 10px;border-bottom:1px solid var(--line)}'
+  + 'table.adm td{padding:9px 10px;border-bottom:1px solid var(--line)}'
+  + '.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}'
+  + '.mcell{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:15px}'
+  + '.mcell .n{font-size:26px;font-weight:800;letter-spacing:-.03em}'
+  + '.mcell .l{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-top:3px}';
+
+function authShell(title, desc, bodyHtml, script) {
+  return '<!doctype html><html lang=en><head><meta charset=utf-8>' + FAVICON
+    + '<meta name=viewport content="width=device-width,initial-scale=1">'
+    + '<meta name=robots content="noindex">'
+    + '<meta name=description content="' + esc(desc) + '">'
+    + '<title>' + esc(title) + '</title><style>' + REPORT_CSS + AUTH_CSS
+    + '</style></head><body>' + SITE_NAV + '<div class=wrap>' + bodyHtml + '</div>'
+    + SITE_FOOT + '<script>' + script + '</script></body></html>';
+}
+
+const AUTH_JS =
+  'function q(i){return document.getElementById(i)}'
+  + 'function say(t,ok){var m=q("msg");m.style.display="block";m.style.color=ok?"var(--pass)":"var(--crit)";m.textContent=t;}'
+  + 'async function post(u,b){var r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});'
+  + 'var d={};try{d=await r.json()}catch(e){}return {ok:r.ok,d:d};}';
+
+function renderSignup() {
+  return authShell('Create your REDCELL account', 'Create a REDCELL account to scan agents, get an API key and manage your plan.',
+    '<div class=auth><h1>Create your account</h1>'
+    + '<p class=sub>Free forever for the scanner, firewall and CI gate. No card.</p>'
+    + '<label for=name>Name <span style="color:var(--ink3);font-weight:400">(optional)</span></label><input id=name autocomplete=name>'
+    + '<label for=email>Work email</label><input id=email type=email autocomplete=email placeholder="you@company.com">'
+    + '<label for=pw>Password</label><input id=pw type=password autocomplete=new-password placeholder="at least 8 characters">'
+    + '<button class=go id=go>Create account</button>'
+    + '<div id=msg class=msg></div>'
+    + '<div class=alt>Already have an account? <a href="/login">Sign in</a></div></div>',
+    AUTH_JS
+    + 'async function go(){var b=q("go");b.disabled=true;b.textContent="Creating…";'
+    + 'var r=await post("/auth/register",{email:q("email").value,password:q("pw").value,name:q("name").value});'
+    + 'if(r.ok){location.href="/account";}else{say((r.d&&r.d.error)||"Could not create the account.",false);b.disabled=false;b.textContent="Create account";}}'
+    + 'q("go").onclick=go;'
+    + 'q("pw").onkeydown=function(e){if(e.key==="Enter")go()};');
+}
+
+function renderLogin() {
+  return authShell('Sign in to REDCELL', 'Sign in to your REDCELL account.',
+    '<div class=auth><h1>Sign in</h1>'
+    + '<p class=sub>Welcome back.</p>'
+    + '<label for=email>Email</label><input id=email type=email autocomplete=email placeholder="you@company.com">'
+    + '<label for=pw>Password</label><input id=pw type=password autocomplete=current-password>'
+    + '<button class=go id=go>Sign in</button>'
+    + '<div id=msg class=msg></div>'
+    + '<div class=alt>No account yet? <a href="/signup">Create one</a></div></div>',
+    AUTH_JS
+    + 'async function go(){var b=q("go");b.disabled=true;b.textContent="Signing in…";'
+    + 'var r=await post("/auth/login",{email:q("email").value,password:q("pw").value});'
+    + 'if(r.ok){location.href="/account";}else{say((r.d&&r.d.error)||"Sign-in failed.",false);b.disabled=false;b.textContent="Sign in";}}'
+    + 'q("go").onclick=go;'
+    + 'q("pw").onkeydown=function(e){if(e.key==="Enter")go()};');
+}
+
+function renderAccount(user, billingReady) {
+  const sub = user.sub || { plan: 'free', status: 'active' };
+  const planName = PLANS[sub.plan] || sub.plan;
+  const upgrade = sub.plan === 'free'
+    ? (billingReady
+      ? '<a class=cta href="/billing/checkout?plan=team">Upgrade to Team</a>'
+      : '<span class=btn style="opacity:.6">Upgrade — billing not configured yet</span>')
+    : '<a class=btn href="/billing/portal">Manage subscription</a>';
+  return authShell('Your REDCELL account', 'Your REDCELL plan, API key and account settings.',
+    '<div style="max-width:640px;margin:34px auto 0">'
+    + '<div class=ey>' + _mk() + 'REDCELL &middot; ACCOUNT</div>'
+    + '<h1 style="font-size:26px;margin:10px 0 20px">' + esc(user.name || user.email) + '</h1>'
+    + '<div class=card><div class=ey>Plan</div>'
+    + '<div class=kv style="border-top:0"><span>Current plan</span><b><span class=tag>' + esc(planName) + '</span></b></div>'
+    + '<div class=kv><span>Status</span><b>' + esc(sub.status || 'active') + '</b></div>'
+    + (sub.currentPeriodEnd ? '<div class=kv><span>Renews</span><b>' + esc(String(sub.currentPeriodEnd).slice(0, 10)) + '</b></div>' : '')
+    + '<div style="margin-top:16px">' + upgrade + '</div></div>'
+    + '<div class=card><div class=ey>API key</div>'
+    + '<p style="color:var(--ink2);font-size:14px;margin:8px 0 0">One key per account. Send it as <span class=mono>X-API-Key</span>. Creating a new key revokes nothing — the old one keeps working until you rotate it.</p>'
+    + (user.keyPrefix ? '<div class=keybox>' + esc(user.keyPrefix) + '&hellip; <span style="color:var(--ink3)">(shown once at creation)</span></div>' : '')
+    + '<button class=cta id=mint style="margin-top:14px;border:0;cursor:pointer">' + (user.keyPrefix ? 'Create a new key' : 'Create an API key') + '</button>'
+    + '<div id=keyout></div></div>'
+    + '<div class=card><div class=ey>Account</div>'
+    + '<div class=kv style="border-top:0"><span>Email</span><b>' + esc(user.email) + '</b></div>'
+    + '<div class=kv><span>Member since</span><b>' + esc(String(user.createdAt || '').slice(0, 10)) + '</b></div>'
+    + '<div style="margin-top:16px"><button class=btn id=out style="cursor:pointer">Sign out</button></div></div>'
+    + '</div>',
+    AUTH_JS
+    + 'q("mint").onclick=async function(){var b=q("mint");b.disabled=true;b.textContent="Creating…";'
+    + 'var r=await post("/auth/api-key",{});'
+    + 'if(r.ok&&r.d.key){q("keyout").innerHTML="<div class=keybox>"+r.d.key+"</div><p style=\\"color:var(--high);font-size:13px;margin-top:8px\\">Copy it now — this is the only time it is shown.</p>";b.textContent="Create a new key";b.disabled=false;}'
+    + 'else{b.textContent="Try again";b.disabled=false;}};'
+    + 'q("out").onclick=async function(){await fetch("/auth/logout",{method:"POST"});location.href="/";};');
+}
+
+function renderAdmin(data) {
+  const cells = [
+    ['Accounts', data.users], ['Paid', data.paid], ['MRR (USD)', '$' + data.mrr],
+    ['Leads', data.leads], ['Page loads', data.counts.landing || 0],
+    ['Config scans', data.counts.scan || 0], ['Firewall checks', data.counts.firewall || 0],
+    ['Breach attempts', data.breach.attempts || 0], ['Breach wins', data.breach.wins || 0],
+    ['Attacks blocked', data.breach.blocked || 0],
+  ].map((c) => '<div class=mcell><div class=n>' + esc(String(c[1])) + '</div><div class=l>' + esc(c[0]) + '</div></div>').join('');
+
+  const rows = data.recent.map((u) => '<tr><td class=mono>' + esc(String(u.createdAt || '').slice(0, 16).replace('T', ' '))
+    + '</td><td>' + esc(u.email) + '</td><td><span class=tag>' + esc(PLANS[u.plan] || u.plan) + '</span></td>'
+    + '<td class=mono style="color:var(--ink3)">' + esc(u.status || '') + '</td></tr>').join('')
+    || '<tr><td colspan=4 style="color:var(--ink3)">No accounts yet.</td></tr>';
+
+  const leadRows = data.recentLeads.map((l) => '<tr><td class=mono>' + esc(String(l.at || '').slice(0, 16).replace('T', ' '))
+    + '</td><td>' + esc(l.email || '') + '</td><td class=mono style="color:var(--ink3)">' + esc(l.source || '') + '</td></tr>').join('')
+    || '<tr><td colspan=3 style="color:var(--ink3)">No leads yet.</td></tr>';
+
+  return authShell('REDCELL admin', 'Internal admin.',
+    '<div style="max-width:900px;margin:30px auto 0">'
+    + '<div class=ey>' + _mk() + 'REDCELL &middot; ADMIN</div>'
+    + '<h1 style="font-size:26px;margin:10px 0 4px">Business overview</h1>'
+    + '<p style="color:var(--ink2);font-size:14.5px;margin:0">Live counters from KV. Billing state comes from the merchant-of-record webhook.</p>'
+    + '<div class=mgrid>' + cells + '</div>'
+    + '<div class=card><div class=ey>Recent accounts</div>'
+    + '<table class=adm><thead><tr><th>Created</th><th>Email</th><th>Plan</th><th>Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+    + '<div class=card><div class=ey>Recent leads</div>'
+    + '<table class=adm><thead><tr><th>When</th><th>Email</th><th>Source</th></tr></thead><tbody>' + leadRows + '</tbody></table></div>'
+    + '<div class=card><div class=ey>Billing configuration</div>'
+    + '<div class=kv style="border-top:0"><span>Merchant of record</span><b>' + (data.billingReady ? 'Paddle &mdash; configured' : 'not configured') + '</b></div>'
+    + '<div class=kv><span>Webhook secret</span><b>' + (data.hasWebhookSecret ? 'set' : 'missing') + '</b></div>'
+    + '<div class=kv><span>Team checkout link</span><b>' + (data.hasCheckout ? 'set' : 'missing') + '</b></div>'
+    + '<div class=kv><span>Live engine key</span><b>' + (data.hasNim ? 'set' : 'missing') + '</b></div>'
+    + '<p style="color:var(--ink3);font-size:13px;margin:12px 0 0">Set these as Worker secrets: <span class=mono>PADDLE_WEBHOOK_SECRET</span>, <span class=mono>PADDLE_CHECKOUT_TEAM</span>, <span class=mono>ADMIN_EMAILS</span>, <span class=mono>REDCELL_NIM_KEYS</span>.</p>'
+    + '</div></div>', 'void 0;');
+}
+
+function renderAdminDenied() {
+  return authShell('REDCELL admin', 'Internal admin.',
+    '<div class=auth><h1>Admin</h1><p class=sub>This page is restricted. Sign in with an admin account, or send the ops token.</p>'
+    + '<a class=cta href="/login">Sign in</a></div>', 'void 0;');
 }

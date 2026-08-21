@@ -924,3 +924,36 @@ Both were real; connecting to his Chrome and screenshotting each page showed the
       everywhere, shared footer on 13/14. pytest 218 green. Deployed (add47fd0).
 LESSON: computed-style + curl audits proved the tokens were right but could not show a compositing
 failure. For visual work, look at the rendered page in a real browser before calling it done.
+
+## ▶ round 28 — ACCOUNTS, BILLING, ADMIN + TR PAYMENT/FUNDING PLAN (2026-08-21)
+- [x] KEY FINDING: the FastAPI backend is not hosted anywhere, so the live site could never have
+      used it for signup. Built auth directly into the Worker instead (KV-backed, rides the existing
+      LEADS namespace under usr:/uid:/sess:/sub:/akey: prefixes — the deploy token cannot create
+      new namespaces). /signup /login /account /admin + /auth/* JSON API, all live.
+- [x] Security: PBKDF2-SHA256 + per-user salt, constant-time compare, identical error text for
+      unknown-email and wrong-password (no user enumeration), equalised work on unknown email,
+      httpOnly+Secure+SameSite=Lax session cookie, per-IP rate limits on register/login,
+      API keys stored only as SHA-256 (plaintext shown once), Cache-Control no-store on
+      account/admin/auth (html() defaults to public,max-age=1800 — would have cached a personal page).
+- [x] Billing = Merchant of Record, because **Stripe does not support Turkey**. Paddle adapter:
+      /billing/checkout passes the account id through custom_data, /billing/webhook/paddle verifies
+      the HMAC-SHA256 Paddle-Signature and rejects replays older than 5 min. Provider-agnostic sub
+      record so iyzico/PayTR can be added for TRY later. Inert until the secrets are set.
+- [x] /admin: real KV-derived metrics (accounts, paid, MRR, leads, funnel counters, breach data,
+      recent signups/leads, billing-config status). Gated by allow-listed account OR ops token.
+- [x] PRODUCTION-ONLY BUG caught by deploying and reading wrangler tail rather than trusting dev:
+      "Pbkdf2 failed: iteration counts above 100000 are not supported (requested 210000)". Local
+      workerd does not enforce the cap, so 210k passed every local test and threw 1101 live.
+      Clamped to the platform max (100k) on both derive paths.
+- [x] Verified LIVE: register -> 200, login -> 200, wrong password -> 401, /account -> 200 no-store,
+      API key minted, logout kills the session, unsigned webhook -> 401. Full money path proven
+      locally with a real HMAC: payment -> plan=team + admin shows $499 MRR; cancel -> plan=free;
+      tampered body -> 401; stale timestamp -> 401.
+- [x] Cleaned up the live test account afterwards (its password appears in the session transcript)
+      and confirmed deletion propagated: login now 401.
+- [x] PAYMENTS_TR.md — Stripe/MoR/local-PSP comparison, the 4 steps only Furkan can do (account,
+      KYC, product, webhook secret), and the TR tax picture (genç girişimci 400k TL 2026, software
+      export exemption, KDV istisna) with a "confirm with a mali müşavir" caveat.
+- [x] FUNDING_TR.md — honest stage read (0 users, 0 revenue -> grants before VC), TÜBİTAK BiGG /
+      KOSGEB / teknopark path, and the 3 gaps to close first.
+      pytest 218 green. Deployed (1f537536).
