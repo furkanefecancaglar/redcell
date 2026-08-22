@@ -233,13 +233,19 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
       if (!rev.body?.ok) fail('api-key revoke', JSON.stringify(rev.body).slice(0, 90));
       else ok.push('revoke an API key');
 
-      // the record must be gone from the listing at once, even though edge caches may
-      // still honour the key for a while — that delay is documented, an unrevoked
-      // listing would be a bug
-      const after = await authed('/auth/keys');
-      if ((after.body?.keys || []).some((k) => k.prefix === key.slice(0, 16)))
-        fail('api-key revoke', 'a revoked key is still listed');
-      else ok.push('a revoked key leaves the listing immediately');
+      // Listing decides existence by reading the akey: record, and that read comes from the
+      // same 60s edge cache as everything else — so a just-revoked key can linger in the list.
+      // This assertion used to demand it vanish on the first call and passed only when the
+      // cache happened to be cold. Same physics as account deletion; poll instead, and still
+      // fail loudly if it never clears.
+      let goneAfter = null;
+      for (let waited = 0; waited <= 90; waited += 10) {
+        const after = await authed('/auth/keys');
+        if (!(after.body?.keys || []).some((k) => k.prefix === key.slice(0, 16))) { goneAfter = waited; break; }
+        await new Promise((r) => setTimeout(r, 10000));
+      }
+      if (goneAfter === null) fail('api-key revoke', 'a revoked key is still listed 90s later');
+      else ok.push('a revoked key leaves the listing (took ' + goneAfter + 's)');
     }
 
     // export must return the account's data and must not contain prompt text,

@@ -19,3 +19,37 @@ id = "0180c20eac4c44d19122e73caf98f535"
 [[kv_namespaces]]
 binding = "LEADS"
 id = "a0e2b7025ec040c99db46206c793ecac"
+
+# Rate limiting. A KV-backed counter cannot do this: KV reads are served from a 60s edge
+# cache, so inside a 60-second window every read returns the same stale count and the
+# limiter never trips. Measured: 9 accounts created against a documented 5/min limit.
+# These bindings are enforced by the runtime, per-colo, with no storage round-trip.
+[[unsafe.bindings]]
+name = "RL_LOGIN"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 8, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_REGISTER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 5, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_REVIEW"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_SCAN"
+type = "ratelimit"
+namespace_id = "1004"
+simple = { limit = 5, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_BREACH"
+type = "ratelimit"
+namespace_id = "1005"
+simple = { limit = 5, period = 60 }

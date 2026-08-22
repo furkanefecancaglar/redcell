@@ -128,24 +128,48 @@ function bump(env, ctx, key, request) {
 }
 
 // Back pressure (system-design-primer): quota-spending / store-writing endpoints get a
-// fixed-window rate limit keyed by client IP. 429 + Retry-After tells the client to
-// back off instead of hammering the NIM quota or KV. Best-effort: on KV errors we fail
-// open (no limit) rather than break the endpoint. Bucket: N per windowMs per IP.
-async function rateLimit(env, ctx, key, limit, windowMs) {
-  if (!env || !env.LEADS || !ctx) return null;
-  const ip = (ctx.request ? ctx.request.headers.get('CF-Connecting-IP') : null) || 'anon';
-  const k = 'rl:' + key + ':' + ip;
-  try {
-    const raw = await env.LEADS.get(k);
-    const now = Date.now();
-    let rec = raw ? JSON.parse(raw) : { n: 0, w: now };
-    if (now - rec.w > windowMs) { rec = { n: 0, w: now }; }
-    rec.n += 1;
-    await env.LEADS.put(k, JSON.stringify(rec), { expirationTtl: Math.ceil(windowMs / 1000) + 60 });
-    if (rec.n > limit) return { retryAfter: Math.ceil((rec.w + windowMs - now) / 1000) || 1 };
-    return null;
-  } catch (e) { return null; } // fail open — the limit is protective, not critical
+/* Rate limiting.
+
+   This was a fixed-window counter in KV, and it could never have worked: KV reads are served
+   from a 60-second edge cache, so inside a 60-second window every read returned the same stale
+   count and the counter never passed 1. Measured against the live site: 12 wrong-password
+   logins produced twelve 401s and no 429, and 9 accounts were created against a documented
+   5/min register limit. It also read `ctx.request`, which does not exist on a Workers
+   ExecutionContext, so the IP always resolved to 'anon' and /review shared one global bucket.
+
+   Cloudflare's rate-limiting bindings are enforced by the runtime with no storage read, so
+   there is no cache to be stale. MEASURED, because the docs imply more than we observed:
+   12 calls inside one request -> 9 allowed then blocked, correct. 10 requests over one
+   keep-alive connection -> blocked from the 3rd on, correct. 10 requests each on a FRESH
+   connection -> 7 of 10 still allowed. The counter is scoped to the isolate, not to the IP
+   globally, so it reliably stops a client hammering one connection and only partially stops
+   one that reconnects each time.
+
+   That is a real limit and it is stated rather than papered over. It is still strictly better
+   than what it replaced, which never blocked anything at all. Exact global limits need Durable
+   Objects, which needs a paid plan — noted in the backlog, not pretended around.
+
+   Still fail-open on a missing binding — the limit is protective, not critical — but a missing
+   binding is now a deploy-time fact, not a silent runtime no-op. */
+function clientIp(request) {
+  return request.headers.get('CF-Connecting-IP') || 'anon';
 }
+
+async function rateLimit(binding, request, retryAfter = 60) {
+  if (!binding || typeof binding.limit !== 'function') return null;
+  try {
+    const { success } = await binding.limit({ key: clientIp(request) });
+    return success ? null : { retryAfter };
+  } catch (e) { return null; }
+}
+
+// 429 with Retry-After, so a client backs off instead of hammering.
+function tooMany(rl) {
+  const r = json({ error: 'Too many requests. Retry in ' + rl.retryAfter + 's.' }, 429);
+  r.headers.set('Retry-After', String(rl.retryAfter));
+  return r;
+}
+
 
 /* ---------------- live adversarial engine (mirrors redcell_engine.py) ---------------- */
 const SEVW = { critical: 34, high: 20, medium: 11, low: 5 };
@@ -494,6 +518,14 @@ export default {
         surfaces: { 'scan-config': 'static (0 API)', firewall: 'runtime (0 API)', 'firewall-thread': 'joined-history (0 API)', toolcheck: 'tool-call (0 API)', agentcheck: 'unified (0 API)',
           scan: env && env.REDCELL_NIM_KEYS ? 'live engine (configured)' : 'live engine (set REDCELL_NIM_KEYS secret to enable)' },
         detectors: scan.DET.length, firewall_rules: fw.RULES.length + 4, attacks: CORPUS.length + 1,
+        // Whether the rate limiters are actually wired. They were silently dead for weeks:
+        // a KV counter that could not count, failing open on every request. A limiter that is
+        // absent must be visible, not inferred from the absence of 429s.
+        rate_limit: (function () {
+          const names = ['RL_LOGIN', 'RL_REGISTER', 'RL_REVIEW', 'RL_SCAN', 'RL_BREACH'];
+          const live = names.filter((n) => env && env[n] && typeof env[n].limit === 'function');
+          return { bound: live.length, of: names.length, missing: names.filter((n) => !live.includes(n)) };
+        })(),
         scan_gated: !!(env && env.REDCELL_SCAN_TOKEN) });
     }
     // In-process reliability probe: exercises each 0-API surface with a known input and
@@ -750,7 +782,7 @@ export default {
     // persist it under an unguessable id, and hand back a shareable report URL. The email
     // (if given) is stored as a lead. The prompt lives in KV, never in a query string.
     if (request.method === 'POST' && url.pathname === '/review') {
-      const rl = await rateLimit(env, ctx, 'review', 10, 60_000); // 10 reports/min/IP (each writes KV)
+      const rl = await rateLimit(env.RL_REVIEW, request);   // 10 reports/min/IP (each writes KV)
       if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
       const prompt = String((b && b.system_prompt) || '').slice(0, 8000);
@@ -758,7 +790,12 @@ export default {
       const email = String((b && b.email) || '').trim().slice(0, 200);
       bump(env, ctx, 'review', request);
       const rec = { ts: Date.now(), prompt, report: analyze(prompt), firewall: inspect(prompt) };
-      const id = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).replace(/[^a-z0-9]/g, '').slice(0, 16);
+      // The URL is the only thing protecting this report: it is unauthenticated, lives 30 days,
+      // and contains the user's own system prompt. The previous id was Date.now() in base36
+      // (entirely predictable) plus Math.random(), which is not a CSPRNG and whose V8 state can
+      // be recovered from a handful of outputs — so reports minted in one isolate were related.
+      // rndHex uses crypto.getRandomValues; 8 bytes is 64 bits and fits the 16-char lookup.
+      const id = rndHex(8);
       if (env && env.LEADS) {
         try { await env.LEADS.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 30 }); }
         catch (e) { return json({ error: 'could not store report' }, 503); }
@@ -775,7 +812,8 @@ export default {
       }
       return json({ ok: true, id, url: '/r/' + id });
     }
-    // Shared report page (noindex — it can contain a user's own prompt). Unguessable id in path.
+    // Shared report page (noindex — it can contain a user's own prompt). The id is a 64-bit
+    // CSPRNG capability: anyone holding the link can read it, and nobody else can guess it.
     if (url.pathname.indexOf('/r/') === 0) {
       let rest = url.pathname.slice(3);
       let mode = 'html';
@@ -833,7 +871,7 @@ export default {
           }, 402);
         }
       }
-      const rl = await rateLimit(env, ctx, 'scan', 5, 60_000); // 5 live scans/min/IP (each costs NIM quota)
+      const rl = await rateLimit(env.RL_SCAN, request);     // 5 live scans/min/IP (each costs NIM quota)
       if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
       const b = await request.json().catch(() => ({}));
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
@@ -850,7 +888,7 @@ export default {
       if (request.method === 'GET') return new Response(BREACH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
       if (request.method === 'POST') {
         if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'game engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
-        const rl = await rateLimit(env, ctx, 'breach', 5, 60_000); // each attempt costs NIM quota
+        const rl = await rateLimit(env.RL_BREACH, request); // each attempt costs NIM quota
         if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
         const b = await request.json().catch(() => ({}));
         const lvl = LEVELS[(Number(b && b.level) || 1) - 1];
@@ -945,8 +983,8 @@ export default {
     if (url.pathname === '/login') return html(renderLogin(), 200, NOSTORE);
 
     if (url.pathname === '/auth/register' && request.method === 'POST') {
-      const rl = await rateLimit(env, ctx, 'reg:' + (request.headers.get('CF-Connecting-IP') || 'x'), 5, 60000);
-      if (rl) return json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+      const rl = await rateLimit(env.RL_REGISTER, request);
+      if (rl) return tooMany(rl);
       let b = {}; try { b = await request.json(); } catch (e) { }
       const r = await registerUser(env, b.email, b.password, b.name);
       if (r.error) return json({ error: r.error }, 400);
@@ -957,8 +995,8 @@ export default {
       return res;
     }
     if (url.pathname === '/auth/login' && request.method === 'POST') {
-      const rl = await rateLimit(env, ctx, 'login:' + (request.headers.get('CF-Connecting-IP') || 'x'), 8, 60000);
-      if (rl) return json({ error: 'Too many attempts. Wait a minute and try again.' }, 429);
+      const rl = await rateLimit(env.RL_LOGIN, request);
+      if (rl) return tooMany(rl);
       let b = {}; try { b = await request.json(); } catch (e) { }
       const u = await verifyLogin(env, b.email, b.password);
       if (!u) return json({ error: 'Wrong email or password.' }, 401);

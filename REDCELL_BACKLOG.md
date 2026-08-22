@@ -1566,3 +1566,49 @@ STILL OPEN, and honestly stated rather than quietly carried:
   - Paddle KYC + payout blocks taking money. Domain approval pending.
   - /scan's live engine remains non-reproducible (40–50 point swings at temperature 0); the
     paid tier stays on deterministic surfaces until a judge exists that is not.
+
+## ▶ round 52 — red-teaming our own auth (2026-08-22)
+A security product with a hole in its own auth is the one failure we cannot ship. Ran a
+red-team against the live surface: cookie flags, CORS, brute force, IDOR, admin access,
+logout, password policy, report-id entropy. 14 of 16 checks passed. The two that failed matter.
+
+- ⚠️ **Report ids were predictable.** `/r/{id}` is unauthenticated, lives 30 days and contains
+      the user's own system prompt — the URL is the only thing protecting it. The comment said
+      "Unguessable id in path". The code was `Date.now().toString(36)` (entirely predictable)
+      plus `Math.random()`, which is not a CSPRNG and whose V8 state is recoverable from a few
+      outputs, so reports minted in one isolate were related.
+- [x] Switched to `rndHex(8)` — crypto.getRandomValues, 64 bits, fits the 16-char lookup. The
+      helper already existed and mints session tokens, salts and API keys; this path just never
+      got it. VERIFIED live: 5 fresh ids share 0 leading characters, all 16 hex chars.
+
+- ⚠️ **Rate limiting had never worked at all.** Two independent bugs:
+      (a) it read `ctx.request`, which does not exist on a Workers ExecutionContext, so the IP
+          always resolved to 'anon' and /review shared one global bucket;
+      (b) the counter lived in KV, whose reads are served from a 60s edge cache — so inside a
+          60-second window every read returned the same stale count and it never passed 1.
+      A fixed-window counter in KV cannot count. MEASURED: 12 wrong-password logins produced
+      twelve 401s and no 429; 9 accounts were created against a documented 5/min register limit.
+      Login brute force, signup spam, and the NIM-quota guards on /scan and /breach were all
+      unprotected, silently, while the code read as though they were not.
+- [x] Moved all five limiters onto Cloudflare rate-limiting bindings (runtime-enforced, no
+      storage read, so nothing to be stale). Added /health `rate_limit: {bound, of, missing}` —
+      a limiter that is absent must be visible, not inferred from an absence of 429s.
+- [x] MEASURED the replacement rather than trusting it, and it is only a partial fix:
+        12 calls inside one request      -> 9 allowed, then blocked. Correct.
+        10 requests, one keep-alive conn -> blocked from the 3rd on. Correct.
+        10 requests, fresh conn each     -> **7 of 10 still allowed.**
+      The counter is isolate-scoped, not per-IP-global. It stops a client hammering a
+      connection and only partially stops one that reconnects. Stated in the code and here
+      rather than papered over. Exact global limits need Durable Objects → paid plan.
+- [x] PASSED, and worth recording as verified rather than assumed: cookie is HttpOnly+Secure+
+      SameSite=Lax; no Access-Control-Allow-Credentials (so ACAO:* cannot leak /auth/export
+      cross-origin); B cannot read A's export or keys; B cannot revoke A's key and A's key keeps
+      working; delete without a password is 403; /admin is 403 for a normal user and for a bogus
+      ops token; logout invalidates the session; short passwords are refused.
+- [x] Deleted the 18 accounts this testing created, so /admin shows real signups only.
+- ⚠️ The five-layer run then failed on "a revoked key is still listed". Not a new bug: listing
+      decides existence by reading the akey: record, which comes from the same 60s edge cache,
+      so a just-revoked key can linger. The assertion demanded it vanish on the first call and
+      had been passing only when the cache happened to be cold — a flaky test asserting
+      something the platform cannot deliver. Bounded to a 90s poll, same as account deletion.
+      All five layers pass: pytest 220, js syntax, 18 pages, 58 snippet assertions, 16 documents.
