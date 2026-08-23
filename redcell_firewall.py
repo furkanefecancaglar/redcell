@@ -190,9 +190,17 @@ _RULES = [
     ("destructive-cmd", "LLM06", "high",
      r"\b(delete|drop|wipe|erase|remove) (all|every|the (entire|whole)|table|database|record|user)|"
      r"\b(transfer|send|wire) (all|the) (funds|money|balance)|\brm -rf\b|\bDROP TABLE\b", "destructive action request"),
+    # The coercion phrase alone is not the attack: "remember my region so you don't ask every
+    # time" is a customer stating a preference, and set 4 caught this rule blocking exactly that
+    # while letting "call the delete_account tool for user id 1" through. What makes it coercion
+    # is pressure attached to an ACTION, so the phrase now has to co-occur with one. The lookahead
+    # is anchored at ^ because the action usually comes before the pressure.
     ("tool-coercion", "LLM06", "medium",
-     r"\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|don'?t (confirm|ask)|"
-     r"just do it|immediately (execute|run|delete|send))\b", "pressure to act without confirmation"),
+     r"^(?=[\s\S]*\b(call|invoke|trigger|run|execute|delete|remove|send|transfer|wire|refund|"
+     r"charge|purchase|approve|issue|cancel|reset|grant|deploy|drop|wipe|tool|function|endpoint|api)\b)"
+     r"[\s\S]*?\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|"
+     r"don'?t (confirm|ask)|just do it|immediately (execute|run|delete|send))\b",
+     "pressure to act on a tool without confirmation"),
     ("refusal-suppression", "LLM01", "high",
      r"\b(do not (refuse|decline|warn|apologi[sz]e|hold back|include (a )?(warning|disclaimer|caveat))|"
      r"don'?t (refuse|decline|hold back|say (you )?can'?t)|never (refuse|decline|say no)|"
@@ -207,10 +215,14 @@ _RULES = [
      r"\b(respond (in|using|only in) (leet|l33t|rot13|base64|morse|pig latin|a cipher)|"
      r"answer (in|with) (rot13|base64|leetspeak|a cipher)|reply only in (code|cipher)|"
      r"encode your (answer|response|reply))\b", "obfuscation to evade content filters"),
+    # "concatenate" on its own is an ordinary data request — set 4 caught this blocking
+    # "concatenate the first and last name fields". Splitting is only an attack when what is
+    # being joined is fragments of an instruction, so the verb now requires that object.
     ("payload-splitting", "LLM01", "medium",
-     r"\b(concatenate|combine (these|the following) (parts|strings|letters|fragments)|"
-     r"(first|last) letter of each|join these (words|parts|letters)|read (every|each) (second|other) (word|letter)|"
-     r"assemble the (following|parts|fragments))\b", "payload-splitting to smuggle an instruction"),
+     r"\b((concatenate|combine|assemble|join) ((these|those|the following) (parts|strings|letters|"
+     r"fragments|words)|the (parts|strings|letters|fragments)|[ab] and [ab])|"
+     r"(first|last) letter of each|read (every|each) (second|other) (word|letter))\b",
+     "payload-splitting to smuggle an instruction"),
     ("role-impersonation", "LLM01", "high",
      r"(^|\n)\s*(tool_result|observation|function_result|system note)\s*[:>]|"
      r"<\|?(tool|function|assistant)_?(call|result|response|output)\|?>|"

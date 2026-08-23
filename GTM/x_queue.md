@@ -41,10 +41,12 @@ profile already has it.
 ## POST 2 — the honest-numbers post
 
 Most tools in this space publish a detection rate against the corpus they also tuned on. Ours
-did too, so we wrote a second set afterwards and never tuned against it.
+did too. So we write a fresh set each time, from families the earlier ones never used, and
+measure on it once — a set stops being evidence the moment you fix things in response to it.
 
-0 false positives on 30 ordinary support messages.
-7 of 20 adversarial prompts missed.
+Newest set: 13 of 25 adversarial prompts missed. 2 false positives on 41 ordinary messages.
+
+Worse than the numbers it replaces. That is what an honest one looks like.
 
 Deterministic layers catch known shapes, not paraphrases.
 

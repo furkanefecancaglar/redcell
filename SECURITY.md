@@ -26,11 +26,15 @@ through volume, and anything requiring access to a maintainer's machine or accou
 Detection limits are measured and published rather than implied, because a security tool that
 oversells itself is a liability to the people who trust it.
 
-- The engines are deterministic pattern matchers. They catch known shapes of attack and **miss
-  roughly a third of novel phrasings** — measured on a held-out set nobody tuned against: 0
-  false positives on 30 ordinary business messages, 7 of 20 adversarial prompts missed. The families they
-  miss are social-engineering framing, payloads hidden inside documents the agent was asked to
-  process, and encodings outside the normalisers. See `/methodology`.
+- The engines are deterministic pattern matchers. Against attack families nobody tuned for they
+  catch **about half** — measured on a held-out set written from families and business domains
+  the earlier sets never used: 13 of 25 adversarial prompts missed, and 2 false positives on 41
+  ordinary business messages. The families they miss are exfiltration through a markdown image
+  URL, instructions written to memory for later, requests wrapped in fiction, refusal-suppression
+  that constrains the answer rather than asking for the secret, percent-encoding and HTML
+  entities, and tool-coercion phrased in a language other than English. Both false positives were
+  rules matching a family rather than an intent, and both were narrowed; the 2/41 above is the
+  held-out figure from before that fix, which is the one worth trusting. See `/methodology`.
 - Non-English coverage is Turkish, Spanish, German and French. Attacks in other languages are
   **not** detected, and that is asserted in the test suite so it cannot become an accidental claim.
 - A high prompt score means known weaknesses are absent. It is not proof an agent is safe.

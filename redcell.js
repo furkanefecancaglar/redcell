@@ -101,9 +101,11 @@
     ['destructive-cmd', 'LLM06', 'high',
       R`\b(delete|drop|wipe|erase|remove) (all|every|the (entire|whole)|table|database|record|user)|\b(transfer|send|wire) (all|the) (funds|money|balance)|\brm -rf\b|\bDROP TABLE\b`,
       'destructive action request'],
+    // See the Python engine: the coercion phrase must be attached to an action, or it blocks
+    // "so you don't ask every time" while missing "call the delete_account tool".
     ['tool-coercion', 'LLM06', 'medium',
-      R`\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|don'?t (confirm|ask)|just do it|immediately (execute|run|delete|send))\b`,
-      'pressure to act without confirmation'],
+      R`^(?=[\s\S]*\b(call|invoke|trigger|run|execute|delete|remove|send|transfer|wire|refund|charge|purchase|approve|issue|cancel|reset|grant|deploy|drop|wipe|tool|function|endpoint|api)\b)[\s\S]*?\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|don'?t (confirm|ask)|just do it|immediately (execute|run|delete|send))\b`,
+      'pressure to act on a tool without confirmation'],
     ['refusal-suppression', 'LLM01', 'high',
       R`\b(do not (refuse|decline|warn|apologi[sz]e|hold back|include (a )?(warning|disclaimer|caveat))|don'?t (refuse|decline|hold back|say (you )?can'?t)|never (refuse|decline|say no)|you (must|have to) (answer|comply|respond) (regardless|no matter|even if|without refus))\b`,
       'refusal-suppression pressure'],
@@ -114,7 +116,7 @@
       R`\b(respond (in|using|only in) (leet|l33t|rot13|base64|morse|pig latin|a cipher)|answer (in|with) (rot13|base64|leetspeak|a cipher)|reply only in (code|cipher)|encode your (answer|response|reply))\b`,
       'obfuscation to evade content filters'],
     ['payload-splitting', 'LLM01', 'medium',
-      R`\b(concatenate|combine (these|the following) (parts|strings|letters|fragments)|(first|last) letter of each|join these (words|parts|letters)|read (every|each) (second|other) (word|letter)|assemble the (following|parts|fragments))\b`,
+      R`\b((concatenate|combine|assemble|join) ((these|those|the following) (parts|strings|letters|fragments|words)|the (parts|strings|letters|fragments)|[ab] and [ab])|(first|last) letter of each|read (every|each) (second|other) (word|letter))\b`,
       'payload-splitting to smuggle an instruction'],
     ['role-impersonation', 'LLM01', 'high',
       R`(^|\n)\s*(tool_result|observation|function_result|system note)\s*[:>]|<\|?(tool|function|assistant)_?(call|result|response|output)\|?>|\bBEGIN (TOOL|FUNCTION|SYSTEM) (OUTPUT|RESULT|MESSAGE)\b|\[/?(TOOL|FUNCTION|OBSERVATION)\]`,
