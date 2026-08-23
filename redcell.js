@@ -31,6 +31,19 @@
       // The object matters: "please ignore my previous email" is a customer, not an attack.
       R`\b(ignore|disregard|forget|override|discard|set aside)\b.{0,30}(\b(previous|prior|earlier|above|all|any|your)\b.{0,20}(instruction|prompt|rule|direction|context|message|guideline|directive)s?|\beverything\b.{0,20}\b(above|before|stated|said|you were (told|given))\b|\ball\b.{0,15}\b(of the )?(above|prior|preceding)\b)`,
       'override of prior instructions'],
+    ['authority-extraction', 'LLM01', 'high',
+      // Neither half is an attack alone; the conjunction has no innocent reading.
+      R`\b(i(?:'m| am)|i work (?:at|for)|this is|as|your)\b[^.\n]{0,40}\b(the )?(developer|engineer|admin\w*|administrator|author|creator|owner|operator|maintainer|auditor|security team|trust and safety|authoris?zed|legal|compliance)\b[^.\n]{0,80}\b(system ?prompt|instructions?|guardrails?|rules|configuration|initial prompt|system message)\b|\b(system ?prompt|instructions?|guardrails?|rules|configuration|system message)\b[^.\n]{0,80}\b(audit|discovery|verification|compliance|administrator|authoris?zed)\b[^.\n]{0,40}\b(disclose|reveal|reproduce|output|list|show|paste|print|provide)\b`,
+      "authority claim paired with a request for the model's own instructions"],
+    ['embedded-directive', 'LLM01', 'high',
+      // Indirect injection announces itself by addressing the model inside processed content.
+      R`(\[|\(|<!--|###|\*\*\*)\s*(note to (the )?(ai|assistant|model|reviewer)|ai|assistant|model|system|instruction\s?systeme|sistem|override|attention (ai|assistant))\s*[:\]][^\]\n]{0,120}\b(ignore|disregard|forget|reveal|print|output|disclose|must|override|oublie|ignora|olvida|ignoriere|vergiss|yok say|unut|affiche|muestra|zeige|goster)\b|\bsystem\s*:\s*[^\n]{0,80}\b(must|ignore|disregard|reveal|output|recommend)\b`,
+      'directive addressed to the model embedded in processed content'],
+    ['cipher-instruction', 'LLM01', 'high',
+      // Caesar has 25 variants; decoding them all on a hot path is not worth it. The message
+      // has to TELL the model which cipher to apply and to act on the result — that is cheaper.
+      R`\b(caesar|rot-?\d{1,2}|rot13|cipher|shift(ed)? by|atbash|base32|base64|hex|morse|reversed?|backwards)\b[^.\n]{0,60}\b(decode|decrypt|decipher|apply|shift|reverse|read)\b[^.\n]{0,60}\b(and (then )?(do|follow|obey|comply|execute|apply)|then (do|follow|obey|comply)|follow (the|its|that)|obey|comply|is your (instruction|directive|new)|do what it says)\b`,
+      'instruction to decode a cipher and act on the result'],
     ['rule-expiry', 'LLM01', 'high',
       R`\b(pretend|imagine|suppose|assume|say)\b.{0,40}\b(rules?|instructions?|guidelines?|restrictions?|constraints?|policy)\b.{0,30}\b(expired?|lapsed|no longer (apply|valid|in force|binding)|are over|ended|been lifted|don'?t apply)\b`,
       'constraints reframed as expired'],
@@ -56,7 +69,7 @@
       R`\b(developer mode|jailbreak|DAN\b|do anything now|no (restrictions?|filter|guidelines?|rules)|unfiltered|without any (restrictions?|rules|filter)|act as (an )?(unrestricted|evil))\b`,
       'jailbreak / unrestricted-persona framing'],
     ['prompt-extraction', 'LLM07', 'high',
-      R`(repeat|print|show|reveal|output|display|tell me)\b.{0,30}\b(the )?(system )?(prompt|instructions?|everything above|text above|your rules|initial (prompt|message))`,
+      R`(repeat|print|show|reveal|output|display|tell me|disclose|paste|recite|reproduce|list|provide|share|dump|echo|spell out|write out|give me|read me|read out)\b.{0,40}(\b(system ?prompt|system message|initial (prompt|message)|guardrails?|everything above|text above)\b|\b(your|my|the system'?s?)\s+(system |initial |operating |hidden |secret |original |real )?(\w+ )?(prompt|instructions?|rules|configuration|directives?)\b|\b(the )?(prompt|instructions?|rules|configuration|directives?)\s+(you were (given|told)|(i|we) gave you|given to you)\b|\b(the )?(system|initial|operating)\s+(prompt|instructions?|rules|configuration)\b)`,
       'system-prompt extraction attempt'],
     ['prompt-extraction-verb', 'LLM07', 'high',
       R`\b(give|hand over|disclose|leak|send|forward|reply with|state|say)\b.{0,30}\b(me )?(your|the) (system ?prompt|initial (prompt|instructions|message)|prompt verbatim)\b`,
@@ -249,6 +262,56 @@
     return fold(text.replace(/(?<=\b\w) (?=\w\b)/g, ''));
   }
 
+  const HEXRUN = /(?:[0-9a-fA-F]{2}){8,}/g;
+  const B32RUN = /[A-Z2-7]{16,}={0,6}/g;
+  function rot13(s) {
+    return s.replace(/[a-zA-Z]/g, (c) => {
+      const b = c <= 'Z' ? 65 : 97;
+      return String.fromCharCode(((c.charCodeAt(0) - b + 13) % 26) + b);
+    });
+  }
+
+  // Decoded views for encodings the pre-pass did not cover. Added as VIEWS rather than rules so
+  // every existing rule gains the coverage at once. Each is gated behind the cheap single-regex
+  // directive check first: without that, rot13 alone tripled the engine's cost on ordinary input,
+  // because rot13(anything) differs from the original so the view was always built.
+  function encodingViews(text) {
+    const out = [];
+    const t = text.slice(0, MAX_INSPECT);
+
+    const rot = fold(rot13(t));
+    if (hasDirective(rot)) out.push(rot);
+
+    const rev = fold([...t].reverse().join(''));
+    if (hasDirective(rev)) out.push(rev);
+
+    for (const m of t.matchAll(HEXRUN)) {
+      const hex = m[0];
+      let dec = '';
+      for (let i = 0; i + 1 < hex.length; i += 2) dec += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
+      if (dec.length >= 6) { const f = fold(dec); if (hasDirective(f)) out.push(f); }
+    }
+
+    for (const m of t.matchAll(B32RUN)) {
+      const dec = b32decode(m[0]);
+      if (dec && dec.length >= 6) { const f = fold(dec); if (hasDirective(f)) out.push(f); }
+    }
+    return out;
+  }
+
+  const B32ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  function b32decode(tok) {
+    const core = tok.replace(/=+$/, '');
+    let bits = 0, value = 0, out = '';
+    for (const ch of core) {
+      const idx = B32ALPHA.indexOf(ch);
+      if (idx < 0) return '';
+      value = (value << 5) | idx; bits += 5;
+      if (bits >= 8) { bits -= 8; out += String.fromCharCode((value >> bits) & 0xff); }
+    }
+    return out;
+  }
+
   function obfuscatedHits(text, rawSeen) {
     const hits = new Set();
     const views = [fold(text)].concat(b64decodes(text));
@@ -256,6 +319,7 @@
     if (td) views.push(td);
     const ds = despace(text);
     if (ds) views.push(ds);
+    for (const v of encodingViews(text)) views.push(v);
     for (const v of views) {
       if (!v) continue;
       for (const rule of RULES) {
