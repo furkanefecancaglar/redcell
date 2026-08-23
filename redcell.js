@@ -29,8 +29,14 @@
   const RULE_DEFS = [
     ['direct-injection', 'LLM01', 'high',
       // The object matters: "please ignore my previous email" is a customer, not an attack.
-      R`\b(ignore|disregard|forget|override|discard|set aside)\b.{0,30}(\b(previous|prior|earlier|above|all|any|your)\b.{0,20}(instruction|prompt|rule|direction|context|message|guideline|directive)s?|\beverything\b.{0,20}\b(above|before|stated|said|you were (told|given))\b|\ball\b.{0,15}\b(of the )?(above|prior|preceding)\b)`,
+      R`\b(ignore|disregard|forget|override|discard|set aside|vergiss|vergessen sie|ignorier\w*|missachte\w*)\b.{0,30}(\b(previous|prior|earlier|above|all|any|your|alle[nrs]?|vorherige[nrs]?|bisherige[nrs]?)\b.{0,20}(instruction|prompt|rule|direction|context|message|guideline|directive|task|assignment|order|command|anweisung|aufgabe|auftrag|regel|befehl|vorgabe)\w*|\b(alles|everything)\b[,.]?\s*(and\s+|und\s+)?(write|say|tell|print|output|answer|reply|do|ignore|show|list|schreib\w*|sag\w*|zeig\w*|antwort\w*|gib)\b|\beverything\b.{0,20}\b(above|before|stated|said|you were (told|given))\b|\s+(the\s+)?above\b|\ball\b.{0,15}\b(of the )?(above|prior|preceding)\b)`,
       'override of prior instructions'],
+    ['instruction-replacement', 'LLM01', 'high',
+      R`\b(new|further|updated|revised|neue|weitere|aktualisierte)\s+(instruction|rule|directive|guideline|anweisung|regel|vorgabe)\w*\s*(now\s+)?(follow|apply|are in effect|folgen|gelten)\b|\b(follow|obey|befolge|beachte)\s+(these|the new|them|sie|diese)\s*(instruction|rule|anweisung|regel)\w*\s*(carefully|exactly|genau|sorgf[aä]ltig)\b`,
+      'announces a replacement instruction set'],
+    ['role-hijack', 'LLM01', 'high',
+      R`\b(act as|you are( now)?|behave like|pretend to be|simulate|verhalte dich wie|du bist( jetzt)?)\s+(an?|the)?\s*(linux|unix|bash|shell|python|sql|windows)?\s*(terminal|console|command line|shell|interpreter|root|superuser|sysadmin|administrator account|dan\b|do anything now|developer mode|jailbroken|unrestricted (ai|model|assistant)|uncensored (ai|model)|another ai)\b`,
+      'role-hijack onto a system-level or unconstrained persona'],
     ['authority-extraction', 'LLM01', 'high',
       // Neither half is an attack alone; the conjunction has no innocent reading.
       R`\b(i(?:'m| am)|i work (?:at|for)|this is|as|your)\b[^.\n]{0,40}\b(the )?(developer|engineer|admin\w*|administrator|author|creator|owner|operator|maintainer|auditor|security team|trust and safety|authoris?zed|legal|compliance)\b[^.\n]{0,80}\b(system ?prompt|instructions?|guardrails?|rules|configuration|initial prompt|system message)\b|\b(system ?prompt|instructions?|guardrails?|rules|configuration|system message)\b[^.\n]{0,80}\b(audit|discovery|verification|compliance|administrator|authoris?zed)\b[^.\n]{0,40}\b(disclose|reveal|reproduce|output|list|show|paste|print|provide)\b`,
