@@ -28,7 +28,7 @@ oversells itself is a liability to the people who trust it.
 
 - The engines are deterministic pattern matchers. They catch known shapes of attack and **miss
   roughly a third of novel phrasings** — measured on a held-out set nobody tuned against: 0
-  false positives on 30 ordinary business messages, 7 of 20 attacks missed. The families they
+  false positives on 30 ordinary business messages, 7 of 20 adversarial prompts missed. The families they
   miss are social-engineering framing, payloads hidden inside documents the agent was asked to
   process, and encodings outside the normalisers. See `/methodology`.
 - Non-English coverage is Turkish, Spanish, German and French. Attacks in other languages are
