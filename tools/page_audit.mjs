@@ -226,12 +226,17 @@ for (const p of PAGES) await audit(p);   // sequential: parallel bursts trip the
     notes.push('could not sign in, so the authenticated pages were NOT audited');
   } else {
     for (const p of ['/account']) await audit(p, cookie);
+    // Confirm the cleanup instead of assuming it: one run's throwaway account survived, and
+    // silently accumulating test accounts is how /admin stops showing real signups.
+    let cleaned = false;
     try {
-      await fetch(BASE + '/auth/delete', {
+      const del = await fetch(BASE + '/auth/delete', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
         body: JSON.stringify({ password: pass }),
       });
-    } catch (e) { notes.push('the throwaway audit account ' + email + ' may not have been deleted'); }
+      cleaned = del.status === 200;
+    } catch (e) { /* reported below */ }
+    if (!cleaned) fail('page_audit', 'could not delete its throwaway account ' + email + ' — delete it by hand');
   }
 }
 

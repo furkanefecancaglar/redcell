@@ -1771,3 +1771,16 @@ the rest of the interactive surface in a real browser. Mostly a NEGATIVE result,
       All five layers pass.
 NOTE on method: this round found no broken user-facing flow. That is worth writing down —
 "I checked and it works" is a result, and not recording it invites checking it again next week.
+- ⚠️ FOUND WHILE CLEANING UP: a throwaway audit account was left in a **zombie state** — its
+      `usr:<email>` record present but `uid:<id>` gone. Login returned 200 and set a cookie,
+      every request after it returned 401, and the account could never be deleted from the UI
+      because deletion needs a working session. Root cause is delete ORDER: deleteUserData
+      removed uid: before usr:, so a delete that loses a write partway leaves the login record
+      standing over nothing. Reordered to remove usr: first, which fails the safe way — the
+      account simply cannot sign in and what remains is orphaned rather than load-bearing.
+      Verified end to end after the change: register -> delete -> login returns 401.
+      Also: `wrangler kv key list` showed **zero** accounts at one point while `get` showed the
+      real one present. Same list() lag documented in round 48 — get is authoritative, and a
+      count from list() is not evidence an account is gone. Worth remembering before panicking.
+- [x] page_audit now checks its own cleanup succeeded and fails loudly if it cannot delete the
+      throwaway account, instead of leaving one behind quietly.

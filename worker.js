@@ -4310,7 +4310,14 @@ async function deleteUserData(env, user) {
     } while (cursor);
   }
 
-  for (const key of ['histidx:' + user.id, 'keyidx:' + user.id, 'sub:' + user.id, 'uid:' + user.id, 'usr:' + user.email]) {
+  /* Order matters when a delete can fail partway. `usr:<email>` is what login reads and
+     `uid:<id>` is what a session resolves through, so removing uid: before usr: leaves an
+     account that still signs in but whose session resolves to nothing — and that can never be
+     deleted from the UI, because deletion needs a working session. Observed exactly that: a
+     throwaway account was left with usr: present and uid: gone, returning 200 on login and 401
+     on every request after it. Removing usr: first fails the safe way — the account simply
+     cannot sign in, and what remains is orphaned rather than load-bearing. */
+  for (const key of ['usr:' + user.email, 'uid:' + user.id, 'sub:' + user.id, 'keyidx:' + user.id, 'histidx:' + user.id]) {
     const existed = await env.LEADS.get(key);
     await env.LEADS.delete(key);
     if (existed !== null) removed.records++;
