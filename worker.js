@@ -629,6 +629,22 @@ export default {
     if (url.pathname === '/changelog') return html(renderChangelog());
     if (url.pathname === '/benchmark') return html(renderBenchmark());
     if (url.pathname === '/openapi.json') return json(openApiDoc());
+    /* IndexNow — the free, account-free way onto Bing, Yandex, Seznam and Naver.
+       The site is not indexed anywhere: searching the exact domain returns nothing, because a
+       new .workers.dev subdomain with zero inbound links never gets crawled. Search Console
+       needs a Google account; IndexNow needs only a key file served from the origin and a POST.
+       Google does not participate, so this covers part of the problem, not all of it. */
+    /* Google Search Console ownership verification. The site is on a shared .workers.dev
+       subdomain, so DNS verification is impossible — we do not own the zone — and the HTML-file
+       method is the one that works. Content is Google's fixed format; keep this route forever,
+       because removing it un-verifies the property. */
+    if (url.pathname === '/google56873f2556445490.html') {
+      return new Response('google-site-verification: google56873f2556445490.html',
+        { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
+    if (url.pathname === '/' + INDEXNOW_KEY + '.txt') {
+      return new Response(INDEXNOW_KEY, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    }
     if (url.pathname === '/llms.txt') return new Response(LLMS_TXT, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600', ...CORS } });
     if (url.pathname === '/favicon.ico') return new Response(favIco(), { headers: { 'Content-Type': 'image/x-icon', 'Cache-Control': 'public, max-age=604800', ...CORS } });
     if (url.pathname === '/og.png') return new Response(ogPng(), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400', ...CORS } });
@@ -4401,6 +4417,7 @@ function historySarif(recs) {
    Same five tools as redcell_mcp.py, but answered in-Worker by the same engines the
    REST surfaces use — so a tool call is 0-API, deterministic and has no cold start.
    JSON-RPC 2.0, MCP 2024-11-05. GET /mcp still serves the docs page. */
+const INDEXNOW_KEY = '39c57622b9323a7e4da20d3d5d2ab685';
 const MCP_PROTOCOL = '2024-11-05';
 const MCP_SERVER_INFO = { name: 'redcell', version: '1.0.0' };
 

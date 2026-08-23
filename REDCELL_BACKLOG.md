@@ -2103,3 +2103,27 @@ now is.
       All five layers pass.
 STILL OPEN FOR FURKAN: a real domain (blocker 2 — partially addressable free, see next round),
 Paddle KYC (blocker 3), and the GitHub suspension.
+
+## ▶ round 69 — indexing, without spending anything (2026-08-23)
+Furkan asked whether blockers 1 and 2 could be solved free. Blocker 1 was (D1, round 68). This
+round did what is free of blocker 2 — getting the site known to search engines at all.
+- [x] **IndexNow** — an open protocol needing no account: serve a key file from the origin and
+      POST the URL list. Key file at /39c57622b9323a7e4da20d3d5d2ab685.txt.
+      Submitted all 12 sitemap URLs: api.indexnow.org **202**, bing.com/indexnow **200**.
+      Covers Bing, Yandex, Seznam and Naver. Google does not participate, hence the next item.
+- [x] **Google Search Console** — added the property with Furkan's connected Google account,
+      as a URL-prefix property since DNS verification is impossible on a shared .workers.dev.
+      Verified by serving Google's HTML file from the Worker: **"Sahiplik doğrulandı"**.
+      The route must stay forever; removing it un-verifies the property.
+- [x] Sitemap submitted. Status is still "Getirilemedi" with 0 pages — normal immediately after
+      submission, and the sitemap itself is sound: 200, valid XML, 12 URLs, and Googlebot's own
+      user agent gets 200. Needs re-checking in a day rather than being called done.
+- ⚠️ **Google independently confirmed round 58's measurement**: URL inspection says "URL Google'da
+      yok — URL Google tarafından bilinmiyor", with no referring sitemap and no referring page.
+      Zero inbound links, exactly as measured.
+- ⚠️ Manual "Request indexing" FAILED: **"Kota Aşıldı"** — Google's per-property daily quota.
+      The request did not go through. The sitemap is the durable path anyway.
+HONEST LIMIT: being indexed is not the same as ranking. A shared .workers.dev subdomain has no
+domain authority, and the name competes with six companies including a cyber-security firm. This
+buys "someone searching the exact name can find it", which is more than zero and less than
+distribution.
