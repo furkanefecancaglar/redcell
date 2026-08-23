@@ -326,6 +326,25 @@ def _tag_decode(text: str) -> str:
     return "".join(chr(ord(ch) - 0xE0000) for ch in text if 0xE0020 <= ord(ch) <= 0xE007E)
 
 
+# "i g n o r e   a l l   p r e v i o u s   i n s t r u c t i o n s" scored allow. Spacing out
+# letters is the same trick as zero-width insertion, which is already stripped — it just uses a
+# visible character. This is a normalisation gap, not a missing phrase, so it belongs in the
+# pre-pass alongside the others rather than as another rule.
+_SPACED_RUN = re.compile(r"(?:\b\w\b[ \t]+){4,}")
+
+
+def _despace(text: str) -> str:
+    """Collapse letter-by-letter spacing, but only where it actually occurs.
+
+    Removing every space unconditionally would turn ordinary prose into a single token and
+    invite false matches across word boundaries, so this returns a view only when the text
+    contains a run of at least four single-character words.
+    """
+    if not _SPACED_RUN.search(text):
+        return ""
+    return _fold(re.sub(r"(?<=\b\w) (?=\w\b)", "", text))
+
+
 def _obfuscated_hits(text: str, raw_seen: set) -> List[str]:
     """Rule ids that fire on a deobfuscated view but not on the raw text."""
     hits = set()
@@ -333,6 +352,9 @@ def _obfuscated_hits(text: str, raw_seen: set) -> List[str]:
     td = _tag_decode(text)
     if td:
         views.append(td)
+    ds = _despace(text)
+    if ds:
+        views.append(ds)
     for v in views:
         if not v:
             continue

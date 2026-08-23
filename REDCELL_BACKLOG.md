@@ -1902,3 +1902,48 @@ innocently ("please ignore my previous email", "what does os.system do", "how do
       places. pytest 221 -> 223. All five layers pass.
 NOTE on method: a corpus that ships in the same file as the rules is a rehearsal, not an exam.
 The 55% was only visible from outside it.
+
+## ▶ round 62 — a real generalisation number, and the day the writes ran out (2026-08-23)
+Set 1 stopped being held out once its gaps were fixed, so it could no longer answer "how good is
+this on attacks nobody tuned for". Wrote a second, independent set: 30 benign messages from
+different domains (healthcare, HR, legal, logistics, education) and 20 attacks from different
+families (indirect injection inside documents, hex encoding, JSON/YAML smuggling, conditional
+framing, social engineering, spaced-out letters), plus 4 in languages the product does not claim.
+- ⚠️ **I ran the first measurement against the wrong code.** An old copy of redcell_firewall.py
+      was sitting in the scratchpad and I put that directory first on sys.path, so it shadowed
+      the real module. The result said 55% missed and I was one step from reporting "last round's
+      rules did not generalise" — which was false. Caught it because two misses were in phrasings
+      I had just fixed and testing them directly flagged them.
+      The mistake accidentally produced a clean control: SAME set, old engine 11/20 missed,
+      current engine 8/20. So round 61's rules **did** generalise to phrasings never shown to them.
+- [x] MEASURED, correctly, against the current engine:
+        false positives           **0 / 30 (0%)**
+        missed, claimed languages **8 / 20 (40%)** -> 7/20 (35%) after de-spacing
+        missed, other languages    4 / 4 (100%) — the documented limit, scored separately
+- [x] Added de-spacing to the pre-pass, not as a rule: "i g n o r e   a l l" is zero-width
+      insertion with a visible character, so it belongs beside the other normalisers. Guarded so
+      it only builds the view when four or more single-character words actually appear — benign
+      text like "a b c d e f g in that order" stays quiet.
+- [x] Published the measured rate on /methodology, including that it misses about a third of
+      novel phrasings and which families they are. A detection rate measured against the corpus
+      you tuned on is marketing; this one cost us something to print.
+- [x] Set 2 is now a tracked baseline, not a target: the test fails if misses GROW. Tuning until
+      it hits zero would destroy the only honest generalisation estimate the project has.
+
+⚠️ THEN THE PRODUCT BROKE, mid-round: **sign-up started returning a bare Cloudflare 1101.**
+- Cause, verbatim from the runtime: `KV put() limit exceeded for the day.` The free plan allows
+  1,000 KV writes a day; bump() writes on every request across 18 surfaces and counts synthetic
+  traffic separately, and this suite is by far the heaviest writer. Reads kept working, so only
+  the write paths failed — registration, /review — while everything else looked healthy.
+- [x] bump() now samples synthetic traffic at 1-in-20. The split only needs to show it works.
+- [x] **Sign-up and sign-in no longer 500.** They return a 503 that says storage is rejecting
+      writes, that nothing was created, and that the free 0-API surfaces still work. Verified
+      against the real failure — the best way to test an error path is while it is happening.
+      The first attempt missed: startSession also writes and sat outside the guard, so the caller
+      still got a 1101 until it was brought inside.
+- [x] snippet_check now reports a spent quota as a loud note rather than a failure. A suite that
+      cries "product broken" when the truth is "free-tier quota spent" trains people to ignore it.
+      All five layers pass, with the account surfaces honestly marked NOT TESTED today.
+NOTE on method: two near-misses this round, both mine — a stale module on sys.path, and an error
+handler that did not cover the line that actually threw. Both were caught by checking the result
+against something independent rather than trusting that the change did what I intended.

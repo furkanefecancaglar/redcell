@@ -238,11 +238,24 @@
     return false;
   }
 
+  // Spacing letters apart is the same trick as zero-width insertion with a visible character,
+  // so it belongs in the pre-pass, not in another rule. Only produce the view when a run of at
+  // least four single-character words is actually present — collapsing every space would fuse
+  // ordinary prose into one token and invite matches across word boundaries.
+  const SPACED_RUN = /(?:\b\w\b[ \t]+){4,}/;
+
+  function despace(text) {
+    if (!SPACED_RUN.test(text)) return '';
+    return fold(text.replace(/(?<=\b\w) (?=\w\b)/g, ''));
+  }
+
   function obfuscatedHits(text, rawSeen) {
     const hits = new Set();
     const views = [fold(text)].concat(b64decodes(text));
     const td = tagDecode(text);
     if (td) views.push(td);
+    const ds = despace(text);
+    if (ds) views.push(ds);
     for (const v of views) {
       if (!v) continue;
       for (const rule of RULES) {

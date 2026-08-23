@@ -31,6 +31,7 @@ globalThis.fetch = async (url, opts = {}) => {
   throw last;
 };
 const failures = [];
+const notes = [];
 const ok = [];
 const fail = (what, msg) => failures.push(what + ': ' + msg);
 
@@ -236,7 +237,13 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
     await new Promise((r) => setTimeout(r, 62000));
     reg = await authed('/auth/register', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS, name: 'snippet check' }) });
   }
-  if (reg.status !== 200) {
+  if (reg.status === 503 && /storage is rejecting writes/.test(JSON.stringify(reg.body || {}))) {
+    // The free plan allows 1,000 KV writes a day and this suite is the heaviest writer. That is
+    // a spent quota, not a broken product: reads and every 0-API surface still work. Reporting
+    // it as a failure would teach us to ignore a red suite, so it is a loud note instead.
+    notes.push('account surfaces NOT TESTED — the KV daily write quota is exhausted, so sign-up '
+      + 'is returning its 503. Re-run after the quota resets (00:00 UTC) to cover them.');
+  } else if (reg.status !== 200) {
     fail('account surfaces', 'could not register a test account: HTTP ' + reg.status);
   } else {
     ok.push('register a new account');
@@ -402,6 +409,7 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
 }
 
 console.log('snippet check against ' + BASE);
+if (notes.length) { console.log('\nnotes:'); notes.forEach((n) => console.log('  - ' + n)); }
 ok.forEach((o) => console.log('  ok   ' + o));
 if (failures.length) {
   console.log('\nFAIL (' + failures.length + '):');

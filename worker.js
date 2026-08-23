@@ -117,6 +117,13 @@ function isSynthetic(request) {
 function bump(env, ctx, key, request) {
   if (!env || !env.LEADS || !ctx) return;
   const synthetic = isSynthetic(request);
+  /* Synthetic traffic is counted at a 1-in-20 sample rather than every request. KV on this plan
+     allows 1,000 writes a day and bump() writes on every request across 18 surfaces — the
+     verification suite alone runs hundreds of requests per round, and it exhausted the quota:
+     registration started returning a bare Cloudflare 1101 while reads carried on working. The
+     synthetic figure only needs to show the split is working, not to be exact, so it is the
+     obvious place to stop spending writes. Real traffic is still counted exactly. */
+  if (synthetic && Math.random() >= 0.05) return;
   ctx.waitUntil((async () => {
     try {
       const k = 'stat:' + (synthetic ? 'syn:' : '') + key;
@@ -1096,12 +1103,27 @@ export default {
       const rl = await rateLimit(env.RL_REGISTER, request);
       if (rl) return tooMany(rl);
       let b = {}; try { b = await request.json(); } catch (e) { }
-      const r = await registerUser(env, b.email, b.password, b.name);
+      let r, sessionToken;
+      try {
+        r = await registerUser(env, b.email, b.password, b.name);
+        // startSession writes too, so it belongs inside the same guard — it was the actual
+        // thrower once registerUser was wrapped, and the caller still saw a bare 1101.
+        if (r && !r.error) sessionToken = await startSession(env, r.user);
+      } catch (e) {
+        /* A KV write failure here surfaced as a bare Cloudflare 1101 error page — the worst
+           possible thing to show someone trying to sign up, and it gives them nothing to act on.
+           Storage problems are ours, so say so and keep the free surfaces reachable. */
+        const res = json({ error: 'Sign-up is temporarily unavailable — our storage is rejecting '
+          + 'writes right now. Nothing was created, so please try again shortly. The free '
+          + 'surfaces (/firewall, /toolcheck, /scan-config, /agentcheck) need no account and are '
+          + 'unaffected.', detail: String((e && e.message) || e).slice(0, 140) }, 503);
+        res.headers.set('Retry-After', '900');
+        return res;
+      }
       if (r.error) return json({ error: r.error }, 400);
       bump(env, ctx, 'signup', request);   // funnel: landing -> scan -> signup is otherwise invisible
-      const t = await startSession(env, r.user);
       const res = json({ ok: true, email: r.user.email });
-      res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
+      res.headers.set('Set-Cookie', sessionCookie(sessionToken, SESSION_TTL));
       return res;
     }
     if (url.pathname === '/auth/login' && request.method === 'POST') {
@@ -1110,7 +1132,15 @@ export default {
       let b = {}; try { b = await request.json(); } catch (e) { }
       const u = await verifyLogin(env, b.email, b.password);
       if (!u) return json({ error: 'Wrong email or password.' }, 401);
-      const t = await startSession(env, u);
+      let t;
+      try {
+        t = await startSession(env, u);
+      } catch (e) {
+        const res = json({ error: 'Sign-in is temporarily unavailable — our storage is rejecting '
+          + 'writes right now. Your account is fine; please try again shortly.' }, 503);
+        res.headers.set('Retry-After', '900');
+        return res;
+      }
       const res = json({ ok: true, email: u.email });
       res.headers.set('Set-Cookie', sessionCookie(t, SESSION_TTL));
       return res;
@@ -2903,6 +2933,21 @@ function renderMethodology() {
     + '<div class=ey>' + _mk() + 'REDCELL · methodology</div>'
     + '<h1 style="font-size:24px;margin:10px 0 4px">How it works — and what it doesn’t do.</h1>'
     + '<p style="color:var(--ink2);margin:0 0 6px">REDCELL is deterministic, pattern-based security tooling for LLM agents. No model sits in the free path: the scanner and firewall are pure static/regex analysis, so the check itself runs in about 15 microseconds (measured over 20,000 iterations), needs no API key, and sends your text nowhere. Served over HTTP it adds about 3&nbsp;ms over returning a static file, so what you wait for is the round trip to the edge, not the analysis. That design has clear strengths and clear limits — both are below.</p>'
+    + '<div class=card style="margin:14px 0"><div class=ey>Measured detection rate</div>'
+    + '<p style="color:var(--ink2);font-size:14px;margin:6px 0 8px">Most tools in this category '
+    + 'publish a detection rate against a corpus they also tuned on. Ours was doing the same: the '
+    + 'benign corpus lived in the same file as the rules. So we wrote a set afterwards, from '
+    + 'different attack families and different business domains, and never tuned against it.</p>'
+    + '<div class=kv style="border-top:0"><span>False positives, 30 ordinary business messages</span><b>0 (0%)</b></div>'
+    + '<div class=kv><span>Missed, 20 attacks in the four supported languages</span><b>7 (35%)</b></div>'
+    + '<div class=kv><span>Missed, languages we do not claim (IT/PT/RU/JA)</span><b>4 of 4 (100%)</b></div>'
+    + '<p style="color:var(--ink3);font-size:13px;margin:8px 0 0">Read that honestly: the layer is '
+    + '<b>precise</b> &mdash; it does not flag ordinary traffic &mdash; and it misses roughly a third '
+    + 'of novel phrasings, mostly social-engineering framing (&ldquo;I am the engineer who deployed '
+    + 'you&rdquo;), payloads hidden inside documents it was asked to process, and encodings outside '
+    + 'its normalisers. That is the case for pairing it with a model-based classifier rather than '
+    + 'replacing one. The same set against an earlier build missed 11 of 20, so the number moves as '
+    + 'rules are added &mdash; it is tracked in the test suite, not asserted once.</p></div>'
     + _mCard('Static scanner — the resilience score',
         'Scores an agent <b>system prompt</b> against 22 detectors mapped to the OWASP LLM Top 10 (instruction hierarchy, confidentiality, excessive agency, secret exposure, insecure output handling, RAG &amp; tool-output provenance, memory poisoning, identity binding, and more). Each detector is one of: <code>absent</code> (a defense you should have but don’t), <code>present</code> (a risky phrase you shouldn’t have), <code>cond</code> (a risky capability without its guard), <code>len</code>, or <code>hidden</code>. '
         + 'Score starts at 100 and subtracts a severity weight per finding — critical −34, high −20, medium −11, low −5 — floored at 0. Grades: Hardened ≥85, Resilient ≥70, Exposed ≥45, Vulnerable ≥20, else Critical. Like the firewall, it inspects the first 16 KB (a real system prompt is far smaller).')
