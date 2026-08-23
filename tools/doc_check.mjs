@@ -91,7 +91,13 @@ for (const doc of docs) {
   /* 3 — links to our own site must resolve. Third-party links are not our business to police. */
   for (const m of text.matchAll(/https:\/\/redcell\.redcellv1\.workers\.dev(\/[^\s)`'"]*)?/g)) {
     const url = m[0].replace(/[.,]$/, '');
-    let r = await fetch(url).catch(() => null);
+    // Retry transient failures: a dropped connection is not evidence that a documented link
+    // is dead, and reporting it as dead sends someone chasing a URL that works.
+    let r = null;
+    for (let i = 0; i < 3 && !r; i++) {
+      r = await fetch(url).catch(() => null);
+      if (!r) await new Promise((res) => setTimeout(res, 500 * (i + 1)));
+    }
     if (r && (r.status === 404 || r.status === 405)) {
       // POST-only endpoints are documented by URL. An empty POST proves the route exists:
       // it answers 400 for a missing field, and only a genuinely absent route answers 404.

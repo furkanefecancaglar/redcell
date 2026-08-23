@@ -25,12 +25,24 @@ const failures = [];
 const ok = [];
 const fail = (what, msg) => failures.push(what + ': ' + msg);
 
-async function post(path, body) {
-  const r = await fetch(BASE + path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+async function post(path, body, tries = 3) {
+  // Retry transient network failures. fetchRetry was added for the source downloads after one
+  // dropped connection failed a whole run, but POSTs were left bare — so an ETIMEDOUT here
+  // did not fail a check, it crashed the suite with an unhandled rejection. A harness that
+  // dies on a flaky link teaches people to ignore it.
+  let r, last;
+  for (let i = 0; i < tries; i++) {
+    try {
+      r = await fetch(BASE + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      last = null;
+      break;
+    } catch (e) { last = e; await new Promise((res) => setTimeout(res, 500 * (i + 1))); }
+  }
+  if (last) throw last;
   let d = null;
   try { d = await r.json(); } catch (e) { }
   return { status: r.status, body: d };

@@ -1671,3 +1671,39 @@ its own engine, are already on this machine** in ~/nvidia-test/engines.py. No ac
       NOTE: the five keys belong to one account, so failover cannot add quota capacity — it can
       only route around a single engine being down, which is exactly today's situation.
       All five layers pass.
+
+## ▶ round 55 — the paid tier had never once been used end to end (2026-08-23)
+Priority (2), "make the product actually usable". Nobody had ever exercised the Pro tier as a
+paying customer would. Created a test account, granted pro/active the way the Paddle webhook
+does, and ran it. Free tier correctly refused both Pro surfaces (402). Then, as a subscriber:
+- ⚠️ **/scan returned "Incomplete — 3 of 9 attacks could not be judged", no score at all.**
+      A subscriber's headline feature handing back nothing. And the failures were NOT provider
+      errors — every one was `judge returned no verdict` on an HTTP 200. The judge narrates its
+      reasoning in plain prose (no <think> tags for parseVerdict to strip) and the 200-token
+      budget ran out before it emitted a verdict, so the answer was truncated mid-thought.
+- [x] One stricter re-ask when the first parse fails: a 4-token budget leaves no room to ramble.
+      Runs only on failure, so a clean scan costs nothing. **Coverage 0.67 -> 1.0**, and two
+      consecutive runs returned byte-identical verdicts (6 PASS / 3 FAIL, score 58).
+- ⚠️ **Live scans were never recorded.** recordScan was wired into /scan-config and /gate but
+      not into the live engine, so a subscriber's runs appeared in neither /history nor the
+      SARIF export — the two things the paid tier is sold on. Verified empty after seven runs.
+- ⚠️ And once recorded they still exported as **zero SARIF results**: recordScan only mapped
+      `report.findings` (the static shape), while a live report carries `results`. An attack
+      that FAILed is a finding; now mapped. Verified: 3 FAILs -> 3 SARIF results with severities.
+- ⚠️ A scan that judged nothing returned **200 with a null score** — reads as "you scored
+      nothing" when the truth is the engine could not run. Now 503 + Retry-After, with the
+      deterministic surfaces named as unaffected.
+- ⚠️ HYPOTHESIS TESTED AND REJECTED: the judge already ran at temperature 0 but the target
+      answered at 0.4, so target resampling looked like the missing half of the reproducibility
+      problem. Pinned the target to 0 and measured: **58/58/80 before, 49/69/69 after** — no
+      improvement, and the FAIL set moved too. Reverted, because it bought nothing and sampling
+      the target is the more honest red team. The providers do not promise determinism at 0.
+- [x] So the score still is not reproducible, and the report now says so **itself**: a
+      `reproducibility` block quoting the measured spread (49–80 on one prompt, 31 points).
+      Docs saying it was not enough; the number has to carry its own caveat.
+- ⚠️ Three scans in 40s exhausted the shared NIM quota and all 9 attacks errored. That is the
+      one-account limit found in round 54, now with a user-visible consequence.
+- [x] Harness: `post()` in snippet_check and the link check in doc_check had no retry, so a
+      transient ETIMEDOUT did not fail a check — it crashed the suite with an unhandled
+      rejection. Both retry now, like the source downloads already did.
+      All five layers pass. Test account and its sub record deleted; one real account remains.
