@@ -1612,3 +1612,25 @@ logout, password policy, report-id entropy. 14 of 16 checks passed. The two that
       had been passing only when the cache happened to be cold — a flaky test asserting
       something the platform cannot deliver. Bounded to a 90s poll, same as account deletion.
       All five layers pass: pytest 220, js syntax, 18 pages, 58 snippet assertions, 16 documents.
+
+## ▶ round 53 — the metric got contaminated by the fix's own blind spot (2026-08-23)
+Furkan spotted a process that had been "running" for 25 hours. It was mine: I piped verify.sh
+through grep, so the output file only ever contained the pytest line, then set a waiter looping
+`until grep -qE "all layers pass|layer\(s\) failed"` on that filtered file — a pattern that
+could never appear. It slept 15s in a loop for 25h16m at 0% CPU. Killed. The lesson is the same
+one as the `curl | jq` gate: piping through a filter and then testing the filtered output tests
+the filter, not the thing.
+- ⚠️ /stats showed real traffic had risen from 0 to 71 (landing 52, signup 12, review 5).
+      None of it was adoption. **tools/doc_check.mjs — the layer added in round 51 — never got
+      the synthetic fetch wrapper that page_audit and snippet_check have**, and it fetches every
+      REDCELL link in every document on every run. The ad-hoc curl scripts used for the round-52
+      red team were unmarked too: `review 5` is exactly the five reports minted to test id
+      entropy, `signup 12` the test accounts.
+      A metric built specifically to stop us fooling ourselves fooled us within a day, because
+      the new tool was written without the one line that makes the metric mean anything.
+- [x] doc_check now marks its traffic, like the other two.
+- [x] Re-baselined every counter, since the entire "real" bucket was our own unmarked testing.
+      Recorded here rather than done quietly: landing 319, scan 150, firewall 110, toolcheck 106,
+      agentcheck 105, signup 24, review 18, scan_live 15 — all frozen as the new zero.
+      Verified after: real traffic 0 across every surface. That is the honest number.
+      All five layers pass.

@@ -22,6 +22,16 @@ import { fileURLToPath } from 'node:url';
 
 const BASE = (process.argv[2] || 'https://redcell.redcellv1.workers.dev').replace(/\/$/, '');
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+/* Identify our own traffic so it stays out of the public counters at /stats. This layer was
+   added without the wrapper the other two tools have, and it fetches every REDCELL link in
+   every document on each run — which is where "52 real landing visits" came from. */
+const _fetch = globalThis.fetch;
+globalThis.fetch = (url, opts = {}) => _fetch(url, {
+  ...opts,
+  headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) },
+});
+
 const failures = [];
 const ok = [];
 const fail = (where, msg) => failures.push(where + ': ' + msg);
