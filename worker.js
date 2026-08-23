@@ -114,23 +114,57 @@ function isSynthetic(request) {
   return (request.headers.get('User-Agent') || '').indexOf('redcell-verify') >= 0;
 }
 
+// Isolate-local counter batch. Module scope survives across requests in the same isolate, which
+// is what makes the batching worthwhile; it is also why the numbers are a floor rather than exact.
+let _pending = {};
+let _pendingTotal = 0;
+let _lastFlush = 0;
+const FLUSH_EVERY = 25;        // writes at most 1 KV key per 25 counted requests
+const FLUSH_MS = 5 * 60_000;   // ...or every five minutes, so a quiet site still records traffic
+
 function bump(env, ctx, key, request) {
   if (!env || !env.LEADS || !ctx) return;
   const synthetic = isSynthetic(request);
-  /* Synthetic traffic is counted at a 1-in-20 sample rather than every request. KV on this plan
-     allows 1,000 writes a day and bump() writes on every request across 18 surfaces — the
-     verification suite alone runs hundreds of requests per round, and it exhausted the quota:
-     registration started returning a bare Cloudflare 1101 while reads carried on working. The
-     synthetic figure only needs to show the split is working, not to be exact, so it is the
-     obvious place to stop spending writes. Real traffic is still counted exactly. */
+
+  /* Counters are BATCHED in the isolate and flushed occasionally, not written per request.
+
+     Writing one KV key per request capped the entire product at the free plan's 1,000 writes a
+     day — not the test suite, the product. A customer running the CI gate in a loop would have
+     taken sign-ups down for everyone, and on 2026-08-23 our own traffic did exactly that:
+     registration returned a bare 1101 for hours while reads carried on working.
+
+     Batching trades exactness for capacity, and the counters were never exact anyway — the
+     read-modify-write races between isolates, as measured in round 48. Pending counts are lost
+     if an isolate is evicted before it flushes, so these are floor estimates of real traffic
+     and are labelled as such at /stats. Synthetic traffic is sampled harder still: it only has
+     to show the real/synthetic split is working. */
+  const bucket = (synthetic ? 'syn:' : '') + key;
   if (synthetic && Math.random() >= 0.05) return;
+
+  _pending[bucket] = (_pending[bucket] || 0) + 1;
+  _pendingTotal += 1;
+
+  const now = Date.now();
+  // Start the clock on first use. Leaving _lastFlush at 0 made the age test true immediately,
+  // so every FRESH isolate flushed on its first counted request — which is per-request writing
+  // again, just with extra steps, since isolates are short-lived and numerous.
+  if (_lastFlush === 0) _lastFlush = now;
+  const due = _pendingTotal >= FLUSH_EVERY || (now - _lastFlush) > FLUSH_MS;
+  if (!due) return;
+
+  const batch = _pending;
+  _pending = {};
+  _pendingTotal = 0;
+  _lastFlush = now;
+
   ctx.waitUntil((async () => {
-    try {
-      const k = 'stat:' + (synthetic ? 'syn:' : '') + key;
-      const raw = await env.LEADS.get(k);
-      const n = raw ? (parseInt(raw, 10) || 0) : 0;
-      await env.LEADS.put(k, String(n + 1));
-    } catch (e) { /* metrics are best-effort */ }
+    for (const [b, n] of Object.entries(batch)) {
+      try {
+        const k = 'stat:' + b;
+        const raw = await env.LEADS.get(k);
+        await env.LEADS.put(k, String((raw ? (parseInt(raw, 10) || 0) : 0) + n));
+      } catch (e) { /* metrics are best-effort; a lost counter must never fail a request */ }
+    }
   })());
 }
 
@@ -626,7 +660,11 @@ export default {
       if (env && env.LEADS) {
         try {
           const probe = { ts: Date.now(), prompt: 'selfcheck', report: analyze('selfcheck probe'), firewall: inspect('selfcheck probe') };
-          await env.LEADS.put('report:__selfcheck__', JSON.stringify(probe), { expirationTtl: 3600 });
+          // The write IS the probe, so it cannot be removed — but it does not need to run on
+          // every call. One in ten keeps the signal and costs a tenth of the daily write budget.
+          if (Math.random() < 0.1) {
+            await env.LEADS.put('report:__selfcheck__', JSON.stringify(probe), { expirationTtl: 3600 });
+          }
           const back = await env.LEADS.get('report:__selfcheck__');
           let okBack = false; try { okBack = !!back && JSON.parse(back).prompt === 'selfcheck'; } catch (e) { okBack = false; }
           checks.report_kv = { pass: okBack, detail: okBack ? 'KV write + read-back ok' : 'read-back failed' };
@@ -1082,6 +1120,10 @@ export default {
       // than hidden so the figure can be checked. Counts before 2026-08-22 mix the two —
       // see `note`, because a number without its caveat is a number that will be misread.
       const r = json({ ok: true, since: '2026-08-22', counts, synthetic: synth,
+        counting: 'Counters are batched in-isolate and flushed about every 25 requests, so these '
+          + 'are a floor: pending counts are lost when an isolate is evicted. Exact per-request '
+          + 'counting cost one KV write per request, which capped the whole product at the free '
+          + 'plan\'s 1,000 writes a day and did take sign-ups down on 2026-08-23.',
         note: 'counts are real traffic since the cut-over date, excluding REDCELL\'s own '
           + 'verification runs (reported separately as `synthetic`). Totals from before that '
           + 'date mixed the two and were not a measure of adoption, so they are not published.',

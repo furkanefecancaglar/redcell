@@ -1947,3 +1947,35 @@ framing, social engineering, spaced-out letters), plus 4 in languages the produc
 NOTE on method: two near-misses this round, both mine — a stale module on sys.path, and an error
 handler that did not cover the line that actually threw. Both were caught by checking the result
 against something independent rather than trusting that the change did what I intended.
+
+## ▶ round 63 — the write budget was the product's real ceiling (2026-08-23)
+Yesterday's quota exhaustion looked like a testing artefact. It is not.
+- ⚠️ **bump() wrote one KV key per request across 18 surfaces.** The free plan allows 1,000
+      writes a day, so the entire product was capped at roughly 1,000 requests per day — for
+      everyone. A single customer running the CI gate in a loop would have taken sign-ups down.
+      Checked again at 06:30 UTC, six and a half hours after the daily reset: **still exhausted**,
+      sign-up still returning its 503. That is not a test artefact, that is the ceiling.
+- [x] Counters are now BATCHED in the isolate: at most one write per 25 counted requests, or one
+      every five minutes so a quiet site still records something. Trades exactness for capacity,
+      and they were never exact — the read-modify-write races between isolates (round 48).
+- ⚠️ Caught a real flaw in my own first version: `_lastFlush` started at 0, so the age test was
+      true immediately and **every fresh isolate flushed on its first counted request** — which
+      is per-request writing again with extra steps, since isolates are short-lived and numerous.
+      The clock now starts on first use.
+- [x] VERIFIED LOCALLY, because production writes are still blocked: 30 requests moved the
+      counter by **+25**, not +30. That is the batching signature — one KV write where there
+      would have been thirty. Production verification is deferred until the quota resets and is
+      marked NOT TESTED rather than assumed.
+- [x] /selfcheck's KV probe is sampled at 1-in-10 (the write IS the probe, so it stays, but it
+      does not need to run every call), and /stats now states plainly that counts are a FLOOR
+      because pending counts die with an evicted isolate.
+- ⚠️ Found and killed a **hung `wrangler dev` from 2 days 6 hours ago** in ~/redcell, holding
+      port 8795, listening but not answering /health, with an orphaned workerd child. Not from
+      this round, but exactly the kind of thing the standing instruction says not to leave lying
+      around — and I only found it because I went looking for my own.
+      All five layers pass; account surfaces honestly marked NOT TESTED today.
+FOR FURKAN — this one costs money and blocks revenue: the free plan's 1,000 KV writes/day is now
+the binding constraint on the whole product, not just our tests. Batching buys roughly 25x, so
+call it ~25,000 counted requests/day, but every sign-up still costs 5 writes and every live scan
+costs 2. **Workers Paid is $5/month** and removes it. Until then a real launch could take
+sign-ups down within hours of any traffic.
