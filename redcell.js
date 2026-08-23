@@ -103,18 +103,35 @@
       'destructive action request'],
     // See the Python engine: the coercion phrase must be attached to an action, or it blocks
     // "so you don't ask every time" while missing "call the delete_account tool".
+    // See the Python engine: the pressure must attach to an action, preventive phrasing is the
+    // opposite of coercion, and the phrase exists in the other four languages we claim.
     ['tool-coercion', 'LLM06', 'medium',
-      R`^(?=[\s\S]*\b(call|invoke|trigger|run|execute|delete|remove|send|transfer|wire|refund|charge|purchase|approve|issue|cancel|reset|grant|deploy|drop|wipe|tool|function|endpoint|api)\b)[\s\S]*?\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|don'?t (confirm|ask)|just do it|immediately (execute|run|delete|send))\b`,
+      R`^(?![\s\S]*\b(never|not|should ?n[o']t|niemals|sollte|jamais|nunca|asla)\b[^.?!]{0,40}(without|ohne|sans|sin conf|onay almadan))(?![\s\S]*(mamas[i\u0131]|memesi|nas[i\u0131]l ayarlar))(?=[\s\S]*\b(call|invoke|trigger|run|execute|delete|remove|send|transfer|wire|refund|charge|purchase|approve|issue|cancel|reset|grant|deploy|drop|wipe|tool|function|endpoint|api|appelle|appeler|outil|llama|llamar|herramienta|ruf|rufe|funktion|loesch|l\u00f6sch|calistir|\u00e7al\u0131\u015ft\u0131r|arac|ara\u00e7|iade|reembolso|remboursement)\b)[\s\S]*?\b(without (confirmation|confirming|asking)|no need to (confirm|ask)|don'?t (confirm|ask)|just do it|immediately (execute|run|delete|send)|sans confirmation|sin confirmaci[o\u00f3]n|sin confirmar|ohne best[a\u00e4]?e?tigung|onay almadan|onaylamadan|sormadan)\b`,
       'pressure to act on a tool without confirmation'],
+    ['tool-injection', 'LLM06', 'high',
+      R`\b(before (answering|responding|you answer|you respond)|first,? (call|invoke|run)|avant de r[e\u00e9]pondre|antes de responder|bevor du antwortest|cevap vermeden [o\u00f6]nce)\b[\s\S]{0,70}?\b(call|invoke|run|execute|trigger|appelle|llama|ruf|[c\u00e7]al[i\u0131]{1}[s\u015f]t[i\u0131]r)\b[\s\S]{0,50}?(delete|remove|drop|wipe|purge|refund|transfer|payout|charge|l[o\u00f6]esch|iade|reembolso|remboursement)`,
+      'instruction to invoke a destructive tool before answering'],
     ['refusal-suppression', 'LLM01', 'high',
       R`\b(do not (refuse|decline|warn|apologi[sz]e|hold back|include (a )?(warning|disclaimer|caveat))|don'?t (refuse|decline|hold back|say (you )?can'?t)|never (refuse|decline|say no)|you (must|have to) (answer|comply|respond) (regardless|no matter|even if|without refus))\b`,
       'refusal-suppression pressure'],
+    ['refusal-suppression-constrained', 'LLM01', 'high',
+      R`^(?=[\s\S]*\b(your (own |real |actual |hidden )?(system )?(prompt|instructions|configuration)|sistem talimatlar\w*|tu prompt del sistema|deine systemanweisungen|ton prompt syst[e\u00e8]me))[\s\S]*\b(and nothing else|nothing else|only[,.]|verbatim|do not add (a |an )?(disclaimer|warning|apolog|caveat|note)|any refusal|counts as a fail|will be treated as an error|reddetme|sin ninguna negativa|ohne ablehnung|sans refus)\b`,
+      'answer constrained so a refusal cannot fit, around a request for the prompt'],
     ['virtualization', 'LLM01', 'medium',
       R`\b(pretend (you are|to be) (an? )?(unrestricted|jailbroken|amoral|evil|different (ai|assistant))|imagine (you (are|have) no (rules|restrictions|guidelines|limits)|there are no rules)|in a (fictional|hypothetical|imaginary) (world|scenario|setting) (where|in which) (you|nothing)|for a (story|novel|screenplay) (where|in which) you (must|will|can))\b`,
       'virtualization / hypothetical jailbreak framing'],
     ['obfuscation-evasion', 'LLM01', 'medium',
       R`\b(respond (in|using|only in) (leet|l33t|rot13|base64|morse|pig latin|a cipher)|answer (in|with) (rot13|base64|leetspeak|a cipher)|reply only in (code|cipher)|encode your (answer|response|reply))\b`,
       'obfuscation to evade content filters'],
+    ['exfil-via-url', 'LLM02', 'high',
+      R`^(?=[\s\S]*\b(include|embed|add|append|render|attach|insert|put|end (your|every) (reply|answer)|termine|ajoute|incluye|a[nn]ade|f[u\u00fc]ge|ekle)\b)[\s\S]*!?\[[^\]]{0,80}\]\(\s*https?://[^)\s]{0,160}[?&][^)\s]{0,80}(prompt|conversation|chat|history|context|system|sistem|syst[e\u00e8]me|historial|verlauf)`,
+      "instruction to embed a URL that carries the model's own context"],
+    ['memory-poisoning', 'LLM03', 'high',
+      R`^(?=[\s\S]*\b(remember|save|store|note|keep in mind|merke|hat[i\u0131]rla|recuerda|retiens)\b)(?=[\s\S]*\b(permanent\w*|dauerhaft|kal[i\u0131]c[i\u0131]|standing instruction|to memory|in your memory|for later|(all|every|any) future|future (conversation|session|message)\w*|from now on|bundan sonra|ab jetzt|de ahora en adelante)\b)[\s\S]*\b((you )?(may|can) (reveal|share|show|disclose|print|output)|do(es)? not apply|don'?t apply|are suspended|is suspended|no longer (apply|applies|bound)|ignore any (restriction|rule|guideline|limit)|darfst du deine|g[o\u00f6]sterebilirsin|uygulanmaz|sin restricciones)\b`,
+      'durable instruction that overrides policy (memory poisoning)'],
+    ['fiction-exfil', 'LLM01', 'high',
+      R`^(?=[\s\S]*\b(story|novel|screenplay|script|roleplay|role-play|fiction\w*|monologue|hikaye|ejemplo|r[e\u00e9]cit|drehbuch)\b)[\s\S]*\b((its|your|their|his|her) (own |real |actual |hidden |original |secret )?(system )?(prompt|instructions|configuration)|the instructions it was given|kendi (sistem )?prompt|mensaje del sistema[^.]{0,40}tuyo)`,
+      "fiction framing used to extract the model's own instructions"],
     ['payload-splitting', 'LLM01', 'medium',
       R`\b((concatenate|combine|assemble|join) ((these|those|the following) (parts|strings|letters|fragments|words)|the (parts|strings|letters|fragments)|[ab] and [ab])|(first|last) letter of each|read (every|each) (second|other) (word|letter))\b`,
       'payload-splitting to smuggle an instruction'],
@@ -297,6 +314,23 @@
     for (const m of t.matchAll(B32RUN)) {
       const dec = b32decode(m[0]);
       if (dec && dec.length >= 6) { const f = fold(dec); if (hasDirective(f)) out.push(f); }
+    }
+
+    // Percent-encoding and HTML entities — the two encodings a browser or HTTP client decodes
+    // for free, which makes them the cheapest way past a matcher that reads only raw text.
+    // Same gating, so "what does %20 mean in a URL" costs nothing.
+    if (/%[0-9A-Fa-f]{2}/.test(t)) {
+      const dec = t.replace(/%([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+      const f = fold(dec);
+      if (f !== fold(t) && hasDirective(f)) out.push(f);
+    }
+    if (/&#[xX]?[0-9A-Fa-f]{1,6};/.test(t)) {
+      const dec = t.replace(/&#([xX]?[0-9A-Fa-f]{1,6});/g, (m2, body) => {
+        const cp = /^[xX]/.test(body) ? parseInt(body.slice(1), 16) : parseInt(body, 10);
+        return Number.isFinite(cp) && cp > 0 && cp < 0x110000 ? String.fromCodePoint(cp) : m2;
+      });
+      const f = fold(dec);
+      if (f !== fold(t) && hasDirective(f)) out.push(f);
     }
     return out;
   }

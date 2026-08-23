@@ -67,9 +67,22 @@ def test_split_directive_attacks_caught():
             assert joined["match_ids"], f"joined flag with no match ids: {t[0]}"
             seen_ids.update(joined["match_ids"])
     assert gains >= 6, f"joined-history must catch >=6 split-directive attacks, got {gains}"
-    # the canonical A1–A6 rule families must be represented in what was caught
+
+    # The families below must fire on this corpus — but NOT necessarily via the joined pass.
+    # This assertion used to read only `seen_ids`, which counts a thread only when every single
+    # message was individually clean. When a new rule started catching "your system prompt
+    # verbatim." on its own, prompt-extraction dropped out of `seen_ids` and this failed —
+    # reporting a regression for a thread that is now caught one turn EARLIER. Detection moving
+    # from the joined pass to the per-message pass is an improvement, so coverage is checked
+    # across both paths and only the joined-gain COUNT above stays strict.
+    covered = set(seen_ids)
+    for t in corpus["ATTACK"]:
+        msgs = _thread_msgs(t)
+        for m in msgs:
+            covered.update(x.id for x in fw.inspect(m).matches)
+        covered.update(fw.inspect_thread(msgs)["match_ids"] or [])
     for need in ("direct-injection", "prompt-extraction", "safety-off"):
-        assert need in seen_ids, f"expected family {need} among caught attacks: {seen_ids}"
+        assert need in covered, f"expected family {need} among caught attacks: {sorted(covered)}"
 
 
 def test_newline_blind_split_caught_via_join_sp():

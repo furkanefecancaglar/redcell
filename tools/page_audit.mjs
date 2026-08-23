@@ -139,6 +139,10 @@ async function audit(page, cookie, origin) {
     const claims = [
       [/<b>(\d+)<\/b>\s*(?:&nbsp;)?\s*firewall detectors/g, TRUTH.firewall, 'firewall detectors'],
       [/(\d+)\s+detectors block injection/g, TRUTH.firewall, 'firewall detectors'],
+      // Both patterns above require a specific wrapper, so a plain "the same 37 firewall
+      // detectors" sat on two pages undetected across every rule-count change since. Catch the
+      // bare phrasing too — the wrapper is presentation, the number is the claim.
+      [/(?:^|[^>\d])(\d+)\s+firewall detectors/g, TRUTH.firewall, 'firewall detectors'],
       [/<b>(\d+)<\/b>\s*(?:&nbsp;)?\s*static checks/g, TRUTH.statics, 'static checks'],
     ];
     for (const [re, truth, what] of claims) {
