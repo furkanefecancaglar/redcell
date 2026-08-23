@@ -44,7 +44,11 @@ Most tools in this space publish a detection rate against the corpus they also t
 did too. So we write a fresh set each time, from families the earlier ones never used, and
 measure on it once — a set stops being evidence the moment you fix things in response to it.
 
-Newest set: 13 of 25 adversarial prompts missed. 2 false positives on 41 ordinary messages.
+Two sets now, written to share nothing, each measured once and retired:
+Set A — 13 of 25 missed, 2 false positives on 41 ordinary messages.
+Set B — 12 of 26 missed, 0 false positives on 36.
+
+Roughly half, twice. Precise, not complete.
 
 Worse than the numbers it replaces. That is what an honest one looks like.
 

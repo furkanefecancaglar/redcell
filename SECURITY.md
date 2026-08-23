@@ -27,14 +27,20 @@ Detection limits are measured and published rather than implied, because a secur
 oversells itself is a liability to the people who trust it.
 
 - The engines are deterministic pattern matchers. Against attack families nobody tuned for they
-  catch **about half** — measured on a held-out set written from families and business domains
-  the earlier sets never used: 13 of 25 adversarial prompts missed, and 2 false positives on 41
-  ordinary business messages. The families they miss are exfiltration through a markdown image
-  URL, instructions written to memory for later, requests wrapped in fiction, refusal-suppression
-  that constrains the answer rather than asking for the secret, percent-encoding and HTML
-  entities, and tool-coercion phrased in a language other than English. Both false positives were
-  rules matching a family rather than an intent, and both were narrowed; the 2/41 above is the
-  held-out figure from before that fix, which is the one worth trusting. See `/methodology`.
+  catch **roughly half**. That is now measured twice, on two sets written to share nothing with
+  each other or with anything in the repo, each measured once and then retired:
+  - Set A: 13 of 25 adversarial prompts missed (48% detection), 2 false positives on 41 ordinary messages.
+  - Set B: 12 of 26 adversarial prompts missed (54% detection), 0 false positives on 36 ordinary messages.
+
+  Two independent sets landing in the same place is a firmer number than either alone. Set A's
+  families — markdown-URL exfiltration, memory poisoning, fiction framing, constrained-answer
+  refusal suppression, percent/entity encoding, non-English tool coercion — were closed against a
+  separate training set, which is why set A is retired rather than re-quoted. **What set B shows
+  we still miss:** instructions addressed to a downstream agent, a JSON field named for the secret
+  the model is asked to fill in, conditional and deferred triggers ("once this conversation
+  exceeds three messages"), directives laundered through a citation, and full-width unicode.
+  Those are published rather than fixed quietly, because a set you repair against stops measuring
+  anything. See `/methodology`.
 - Non-English coverage is Turkish, Spanish, German and French. Attacks in other languages are
   **not** detected, and that is asserted in the test suite so it cannot become an accidental claim.
 - A high prompt score means known weaknesses are absent. It is not proof an agent is safe.
