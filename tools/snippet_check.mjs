@@ -255,6 +255,14 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   } else {
     ok.push('register a new account' + (ACCOUNT_BASE !== BASE ? ' [local]' : ''));
 
+    /* Everything from here to the finally is inside a try purely so the account gets removed.
+       Two orphaned snippetcheck accounts were found in KV, left by runs that died partway
+       through this block on a transient network error — the assertions never reached the
+       deletion at the bottom. Orphans are cheap but they are exactly the kind of operator
+       residue that later gets miscounted as adoption, so cleanup must not depend on the
+       assertions above it passing. */
+    try {
+
     // key management: mint, list, revoke, and the cap that stops unbounded minting
     const mint = await authed('/auth/api-key', { method: 'POST', body: JSON.stringify({}) });
     const key = mint.body?.key;
@@ -322,6 +330,17 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
     }
     if (signedInFor === null) fail('account deletion', 'the account still signs in 90s after deletion');
     else ok.push('a deleted account stops signing in (took ' + signedInFor + 's)');
+    } finally {
+      // Best effort, and deliberately silent: if the delete above already succeeded this is a
+      // 401/403 no-op. Its only job is to make a crash mid-block stop leaving an account behind.
+      try {
+        const fresh = await authed('/auth/login', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS }) });
+        if (fresh.status === 200) {
+          await authed('/auth/delete', { method: 'POST', body: JSON.stringify({ password: PASS }) });
+          notes.push('cleaned up a leftover test account (' + EMAIL + ') that an earlier failure would have orphaned');
+        }
+      } catch (e) { /* the run is already ending; a failed cleanup must not mask the real error */ }
+    }
   }
 }
 

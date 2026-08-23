@@ -1370,15 +1370,44 @@ export default {
           const sv = await env.LEADS.get('stat:syn:' + k); synth[k] = sv ? (parseInt(sv, 10) || 0) : 0;
         }
       let breach = {}; try { breach = JSON.parse((await env.BREACH_LOG.get('stats')) || '{}'); } catch (e) { }
-      const ulist = await env.LEADS.list({ prefix: 'usr:', limit: 1000 });
+      /* Accounts moved to D1 in round 68 and this page was still enumerating KV, so it had been
+         reporting only the handful of pre-migration accounts — a dashboard quietly showing the
+         wrong number is worse than one showing none. Reads D1 first, then folds in whatever
+         KV still holds so nothing created before the migration disappears. */
+      const seen = new Set();
       const recent = []; let paid = 0;
+      if (env.DB) {
+        try {
+          const rows = await env.DB.prepare(
+            'SELECT email, id, created_at FROM users ORDER BY created_at DESC LIMIT 1000').all();
+          for (const r of (rows && rows.results) || []) {
+            seen.add(r.email);
+            const sub = await getSub(env, r.id);
+            if (sub.plan && sub.plan !== 'free' && sub.status === 'active') paid++;
+            recent.push({ email: r.email, createdAt: r.created_at, plan: sub.plan, status: sub.status });
+          }
+        } catch (e) { /* fall through to KV */ }
+      }
+      const ulist = await env.LEADS.list({ prefix: 'usr:', limit: 1000 });
       for (const k of ulist.keys) {
         const v = await env.LEADS.get(k.name); if (!v) continue;
         let u; try { u = JSON.parse(v); } catch (e) { continue; }
+        if (seen.has(u.email)) continue;
+        seen.add(u.email);
         const s = await getSub(env, u.id);
         if (s.plan && s.plan !== 'free' && s.status === 'active') paid++;
         recent.push({ email: u.email, createdAt: u.createdAt, plan: s.plan, status: s.status });
       }
+
+      /* The only adoption number our own testing cannot inflate. Request counters have been
+         re-baselined twice and polluted again both times, because ad-hoc operator curl is
+         indistinguishable from a customer. Test accounts always use a reserved example domain,
+         so counting accounts that do NOT is a metric that stays honest by construction. */
+      const TEST_DOMAINS = /@(example\.(org|com|net)|test\.local)$/i;
+      // The operator's own account is not adoption either. Counting it would have shown "1 real
+      // signup" on a product nobody outside this machine has ever registered for, which is the
+      // exact flattering-by-one-off error this metric exists to prevent.
+      const external = [...seen].filter((e) => !TEST_DOMAINS.test(e) && e !== OPERATOR_EMAIL);
       recent.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
       const llist = await env.LEADS.list({ prefix: 'lead:', limit: 200 });
       const recentLeads = [];
@@ -1387,7 +1416,7 @@ export default {
         try { recentLeads.push(JSON.parse(v)); } catch (e) { }
       }
       return html(renderAdmin({
-        users: ulist.keys.length, paid, mrr: paid * PLAN_PRICE_USD,
+        users: seen.size, external: external.length, externalEmails: external.slice(0, 10), paid, mrr: paid * PLAN_PRICE_USD,
         leads: parseInt((await env.LEADS.get('count')) || '0', 10) || 0,
         counts, synth, breach, recent: recent.slice(0, 25), recentLeads,
         billingReady: !!(env && env.PADDLE_CLIENT_TOKEN && env.PADDLE_PRICE_PRO && env.PADDLE_WEBHOOK_SECRET),
@@ -3583,6 +3612,7 @@ const PBKDF2_MAX = 100000;
 const PBKDF2_ITERS = PBKDF2_MAX;
 const SESSION_TTL = 60 * 60 * 24 * 30;   // 30 days
 const PLANS = { free: 'Free', team: 'Pro', pro: 'Pro', enterprise: 'Enterprise' };
+const OPERATOR_EMAIL = 'caglarf646@gmail.com';
 const PLAN_PRICE_USD = 39;   // keep in sync with the pricing section and the Paddle price
 
 function rndHex(n) {
@@ -4100,7 +4130,7 @@ function histCard(user, recs) {
 
 function renderAdmin(data) {
   const cells = [
-    ['Accounts', data.users], ['Paid', data.paid], ['MRR (USD)', '$' + data.mrr],
+    ['Accounts', data.users], ['Real signups', data.external], ['Paid', data.paid], ['MRR (USD)', '$' + data.mrr],
     ['Leads', data.leads], ['Page loads', data.counts.landing || 0],
     ['Config scans', data.counts.scan || 0], ['Firewall checks', data.counts.firewall || 0],
     ['CI gate runs', data.counts.gate || 0], ['MCP calls', data.counts.mcp || 0],
@@ -4548,6 +4578,24 @@ async function deleteUserData(env, user) {
       if (dk && dk.meta && dk.meta.changes) removed.api_keys += dk.meta.changes;
     } catch (e) { /* KV sweep below still runs */ }
   }
+  /* keyidx: is the account's own list of key hashes and is written at mint time, so it is
+     authoritative immediately. The list() sweep below is the safety net but list() lags by up
+     to a minute, which means a key minted seconds before deletion can survive it. Nothing is
+     currently exploitable — userForApiKey resolves through getUserById, which returns null once
+     the user row is gone, so a surviving record cannot authenticate — but leaving a live-looking
+     credential behind is not something to rely on a second layer to cover. */
+  try {
+    const idx = JSON.parse((await env.LEADS.get('keyidx:' + user.id)) || '[]');
+    if (Array.isArray(idx)) {
+      for (const k of idx) {
+        if (!k || !k.hash) continue;
+        if ((await env.LEADS.get('akey:' + k.hash)) === null) continue;
+        await env.LEADS.delete('akey:' + k.hash);
+        removed.api_keys++;
+      }
+    }
+  } catch (e) { /* the list() sweep still runs */ }
+
   for (const [prefix, counter] of [['sess:', 'sessions'], ['akey:', 'api_keys']]) {
     let cursor;
     do {
