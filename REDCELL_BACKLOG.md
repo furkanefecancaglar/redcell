@@ -2127,3 +2127,30 @@ HONEST LIMIT: being indexed is not the same as ranking. A shared .workers.dev su
 domain authority, and the name competes with six companies including a cyber-security firm. This
 buys "someone searching the exact name can find it", which is more than zero and less than
 distribution.
+
+## ▶ round 70 — Paddle: what is actually blocking money (2026-08-23)
+Went through the live Paddle account rather than guessing at its state.
+- ⚠️ **Payout Settings is completely empty.** That is the real blocker, and every field left in
+      it is one I must not fill: account type, first/last name, date of birth, and the payout
+      account itself. Read the options so Furkan does not have to hunt for them —
+      **for Turkey the only payout methods are Payoneer or Wire transfer**, minimum threshold
+      $100, and account type is one of Individual/Sole Proprietorship, Corporation, Non-profit,
+      Partnership/LLP. Country is already set to Turkey.
+- ⚠️ **Domain approval: still Pending.** Checked our side against Paddle's stated requirement —
+      the site must contain or link to terms, privacy and refund policy. All three return 200,
+      are substantive, and are linked from the homepage footer. So nothing is missing on our
+      side; it is waiting on Paddle's review.
+- [x] Webhook destination is **Active**, pointing at the Worker, subscribed to 9 events.
+- ⚠️ **But nobody had ever tested that a payment actually upgrades an account.** Paddle's
+      simulator is sandbox-only, and testing in production means taking a real payment. So it
+      was tested locally with a hand-signed event, and the whole path works:
+        signed subscription.activated -> 200 {"ok":true,"plan":"pro"}
+        account free -> pro/active
+        Pro gate opens: /history.sarif 402 -> 200
+        **unsigned webhook -> 401**, which is the assertion that matters: the endpoint is public
+        by necessity, so if it accepted unsigned events anyone could POST themselves onto Pro.
+- [x] Kept as tools/webhook_check.mjs and wired in as a sixth verification layer, skipped with a
+      note when the secret is absent. Six layers now pass.
+FOR FURKAN — Paddle is one form away. Business Account > Payouts > Payout Settings needs: account
+type, your name, date of birth, and either a Payoneer email or wire details. Nothing else on the
+Paddle side is missing, and the code behind it is now proven to work and proven not to be forgeable.

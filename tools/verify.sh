@@ -108,6 +108,21 @@ step "js syntax"         run_js_syntax
 start_local
 step "served pages"      run_pages
 step "published snippets" run_snippets
+
+# The money path: a signed Paddle webhook must upgrade the account and an unsigned one must not.
+# Paddle's own simulator is sandbox-only and testing this in production would mean taking a real
+# payment, so it runs against the local Worker with the secret from .dev.vars. Skipped with a
+# note rather than failing when that secret is absent.
+run_webhook () {
+  local secret
+  secret=$(sed -n 's/^PADDLE_WEBHOOK_SECRET=//p' .dev.vars 2>/dev/null | tr -d "\"'")
+  if [ -z "$secret" ] || [ -z "$ACCOUNT_BASE" ]; then
+    printf '   \033[33mnote\033[0m no local Worker or no PADDLE_WEBHOOK_SECRET — money path NOT TESTED\n'
+    return 0
+  fi
+  node tools/webhook_check.mjs "$ACCOUNT_BASE" "$secret"
+}
+step "money path"        run_webhook
 stop_local
 step "documentation"      node tools/doc_check.mjs "$BASE"
 
