@@ -13,6 +13,13 @@
  */
 const BASE = (process.argv[2] || 'https://redcell.redcellv1.workers.dev').replace(/\/$/, '');
 
+/* The account tests create and delete a real account, and on the free plan that costs KV writes
+   from the same 1,000-a-day budget paying customers draw on — our own suite was the biggest
+   consumer and it took sign-ups down for a whole day. ACCOUNT_BASE points those tests at a local
+   wrangler dev instead, so they still run every time and cost production nothing. Everything
+   else still runs against the deployed Worker, because that is the thing being verified. */
+const ACCOUNT_BASE = (process.env.ACCOUNT_BASE || BASE).replace(/\/$/, '');
+
 /* Identify our own traffic so it can be kept out of the public counters at /stats.
    Wrapping fetch once is the only reliable way — a header added per call site is a header
    someone forgets at the next call site, and the counters go quietly wrong again. */
@@ -218,7 +225,7 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   const PASS = 'Str0ng-Pass-9xQ';
   let cookie = '';
   const authed = async (path, opts = {}) => {
-    const r = await fetch(BASE + path, {
+    const r = await fetch(ACCOUNT_BASE + path, {
       ...opts,
       headers: { 'Content-Type': 'application/json', Cookie: cookie, ...(opts.headers || {}) },
     });
@@ -246,7 +253,7 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   } else if (reg.status !== 200) {
     fail('account surfaces', 'could not register a test account: HTTP ' + reg.status);
   } else {
-    ok.push('register a new account');
+    ok.push('register a new account' + (ACCOUNT_BASE !== BASE ? ' [local]' : ''));
 
     // key management: mint, list, revoke, and the cap that stops unbounded minting
     const mint = await authed('/auth/api-key', { method: 'POST', body: JSON.stringify({}) });
@@ -255,7 +262,7 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
     else ok.push('mint an API key');
 
     if (key) {
-      const useOk = await fetch(BASE + '/history', { headers: { 'X-API-Key': key } });
+      const useOk = await fetch(ACCOUNT_BASE + '/history', { headers: { 'X-API-Key': key } });
       if (useOk.status !== 200) fail('api-key auth', '/history rejected a fresh key: HTTP ' + useOk.status);
       else ok.push('a fresh API key authenticates');
 

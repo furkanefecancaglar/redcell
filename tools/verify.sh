@@ -46,10 +46,65 @@ run_js_syntax () {
   return "$bad"
 }
 
+# The account tests and the /account audit both write to KV, and on the free plan those writes
+# come out of the same 1,000-a-day budget real users need — this suite exhausted it once and
+# sign-ups were down for a full day. Run just those parts against a throwaway local Worker:
+# same code, same assertions, nothing charged to production. Everything else still runs against
+# the deployed site, because that is the thing being verified.
+ACCOUNT_BASE=""
+DEV_PID=""
+
+start_local () {
+  # setsid puts the dev server in its OWN process group. Without it, stop_local's group kill
+  # took this script down too (exit 137) — the server was a background job of the same group.
+  setsid npx wrangler dev --port 8788 --local >/tmp/redcell-verify-dev.log 2>&1 &
+  DEV_PID=$!
+  for _ in $(seq 1 40); do
+    if curl -s -o /dev/null "http://127.0.0.1:8788/health" 2>/dev/null; then
+      ACCOUNT_BASE="http://127.0.0.1:8788"
+      return 0
+    fi
+    sleep 1
+  done
+  printf '   \033[33mnote\033[0m local Worker did not start; account tests will hit %s\n' "$BASE"
+  return 0
+}
+
+stop_local () {
+  # Kill the process GROUP that owns the port, not a command-line pattern. wrangler dev is a node
+  # parent that respawns its workerd child, and the child's argv reads "entry=localhost:8788", so
+  # pattern-matching missed it and the parent immediately started another one. Observed directly:
+  # after three rounds of pkill a workerd was still holding the port, and only killing the group
+  # cleared it. A hung dev server sat on port 8795 for two days this way.
+  [ -n "${DEV_PID:-}" ] && kill "$DEV_PID" 2>/dev/null
+  local owners pg
+  owners=$(ss -ltnp 2>/dev/null | grep -E '127\.0\.0\.1:8788|localhost:8788' \
+    | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u)
+  local self_pg
+  self_pg=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+  for p in $owners; do
+    pg=$(ps -o pgid= -p "$p" 2>/dev/null | tr -d ' ')
+    # never kill our own group, even if setsid was unavailable — losing the verifier mid-run
+    # tells you nothing about the product
+    if [ -n "$pg" ] && [ "$pg" != "$self_pg" ]; then kill -9 -"$pg" 2>/dev/null; fi
+    kill -9 "$p" 2>/dev/null
+  done
+  return 0
+}
+
+# Tear the local Worker down on every exit path, including Ctrl-C. A verification run that
+# leaves a server listening is exactly the kind of stray this project keeps finding.
+trap stop_local EXIT INT TERM
+
+run_pages    () { ACCOUNT_BASE="$ACCOUNT_BASE" node tools/page_audit.mjs "$BASE"; }
+run_snippets () { ACCOUNT_BASE="$ACCOUNT_BASE" node tools/snippet_check.mjs "$BASE"; }
+
 step "unit tests"        run_pytest
 step "js syntax"         run_js_syntax
-step "served pages"      node tools/page_audit.mjs "$BASE"
-step "published snippets" node tools/snippet_check.mjs "$BASE"
+start_local
+step "served pages"      run_pages
+step "published snippets" run_snippets
+stop_local
 step "documentation"      node tools/doc_check.mjs "$BASE"
 
 printf '\n'

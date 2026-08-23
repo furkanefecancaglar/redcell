@@ -1999,3 +1999,33 @@ cannot accept a sign-up today. With writes blocked, the useful work is making ea
         after a paid sub is written -> /auth/me says pro/active · /history.sarif 200
       So removing the write did not weaken the Pro gate, which was the risk worth checking.
       All five layers pass; account surfaces still honestly marked NOT TESTED today.
+
+## ▶ round 65 — stop competing with our own customers for writes (2026-08-23)
+Quota still exhausted at 07:55 UTC. The account surfaces had been marked NOT TESTED for two days
+because verifying them needs a sign-up, and a sign-up needs writes. That framing was wrong: the
+suite was spending the same 1,000-a-day budget a paying customer needs, and losing.
+- [x] The account tests and the /account audit now run against a **throwaway local Worker** via
+      ACCOUNT_BASE — same code, same assertions, zero production writes. Everything else still
+      runs against the deployed site, because that is the thing being verified.
+      Coverage is back: register / mint / list / revoke / export / delete / post-delete sign-in
+      all pass again, and /account is audited signed-in for the first time in two days.
+- ⚠️ Which immediately paid for itself: the audit flagged `/account` reaching for `buy` and
+      `buymsg`, absent locally because the upgrade block only renders when billing is configured.
+      Those references ARE guarded (`var BUY=q("buy"); if(BUY){...}`), so this was MY checker
+      being wrong, not the page. It now flags only IMMEDIATE dereferences — `q("x").onclick` —
+      which are the ones that actually throw.
+      PROVED BOTH DIRECTIONS: injected `q("nosuchelement").textContent=...` and the audit failed
+      with exactly that id; guarded `buy`/`buymsg` no longer flagged. Reverted after.
+- ⚠️ Then the teardown fought back, three times, and each round taught something:
+      1. `pkill -f "workerd.*8788"` missed the child, whose argv reads `entry=localhost:8788`.
+      2. Killing the port owner alone was not enough — the wrangler **node parent respawned it**.
+         Only killing the process GROUP cleared the port. (This is why a hung dev server sat on
+         port 8795 for two days: nobody had killed the group.)
+      3. Killing the group then **killed verify.sh itself** — exit 137 — because the server was a
+         background job of the same group. The dev server now starts under `setsid`, in its own
+         group, and stop_local refuses to kill the verifier's own group even if setsid is missing.
+      Verified: `verify exit=0`, `listeners left: 0`.
+- [x] Teardown runs from a `trap ... EXIT INT TERM`, so a Ctrl-C or an early failure cannot leave
+      a server holding the port. All five layers pass.
+NOTE on method: "we cannot test this because the quota is spent" was a false constraint. The
+thing being tested was our own code, and our own code runs locally for free.
