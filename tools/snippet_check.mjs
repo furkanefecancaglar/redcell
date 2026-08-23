@@ -219,7 +219,14 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
     return { status: r.status, body: d };
   };
 
-  const reg = await authed('/auth/register', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS, name: 'snippet check' }) });
+  // Registration is rate-limited to 5/min per IP, and the suite now registers in two places
+  // (page_audit signs in to audit /account). A 429 here is the limiter working correctly, not
+  // a broken endpoint — wait it out rather than failing the run.
+  let reg = await authed('/auth/register', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS, name: 'snippet check' }) });
+  if (reg.status === 429) {
+    await new Promise((r) => setTimeout(r, 62000));
+    reg = await authed('/auth/register', { method: 'POST', body: JSON.stringify({ email: EMAIL, password: PASS, name: 'snippet check' }) });
+  }
   if (reg.status !== 200) {
     fail('account surfaces', 'could not register a test account: HTTP ' + reg.status);
   } else {

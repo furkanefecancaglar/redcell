@@ -66,11 +66,11 @@ function visibleText(html) {
     .replace(/<[^>]+>/g, ' ');
 }
 
-async function get(url, tries = 3) {
+async function get(url, cookie, tries = 3) {
   let last;
   for (let i = 0; i < tries; i++) {
     try {
-      const r = await fetch(url, { redirect: 'manual' });
+      const r = await fetch(url, { redirect: 'manual', headers: cookie ? { Cookie: cookie } : {} });
       return { status: r.status, body: await r.text() };
     } catch (e) {
       last = e;
@@ -80,10 +80,10 @@ async function get(url, tries = 3) {
   throw last;
 }
 
-async function audit(page) {
+async function audit(page, cookie) {
   let res, html;
   try {
-    const r = await get(BASE + page);
+    const r = await get(BASE + page, cookie);
     res = { status: r.status };
     html = r.body;
   } catch (e) {
@@ -136,7 +136,23 @@ async function audit(page) {
     }
   }
 
-  // 7. the social preview must be a format the platforms will actually render.
+  // 7. every inline script must actually PARSE.
+  //     worker.js parsing says nothing about the JavaScript it emits into a page: the account
+  //     page shipped a script with `style=\"color:...\"` inside a single-quoted JS string, so
+  //     the quote closed the string early and the WHOLE script failed to parse. Nothing on that
+  //     page worked — no key minting, no logout, no delete, and an Upgrade button that silently
+  //     did nothing — for several rounds, while this audit passed because the HTML was fine.
+  for (const m of html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)) {
+    const src = m[1];
+    if (!src.trim()) continue;
+    try {
+      new Function(src);
+    } catch (e) {
+      fail(page, 'inline script does not parse (' + e.message + ') — nothing on this page will run');
+    }
+  }
+
+  // 8. the social preview must be a format the platforms will actually render.
   //     og:image pointed at an SVG for months; X, LinkedIn, Facebook, Slack and Discord all
   //     decline to render SVG, so every shared link appeared with no card. Nothing in the
   //     suite noticed, because the tag was present and the URL returned 200.
@@ -154,7 +170,7 @@ async function audit(page) {
     else if (!/^image\/(png|jpeg|webp|gif)/.test(ct)) fail(page, 'og:image serves ' + ct + ', which social platforms will not render');
   }
 
-  // 8. the old dark/red identity must be gone
+  // 9. the old dark/red identity must be gone
   // the first sweep only listed the primary tokens, so tinted leftovers (a dark-red border,
   // a red wash behind a card) survived on five pages unnoticed. Check those too.
   for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4', '3a2030', '2a1918', 'ff5b64',
@@ -168,6 +184,37 @@ const ogChecked = new Set();   // fetch each distinct share image once, not once
 const t0 = Date.now();
 await loadTruth();
 for (const p of PAGES) await audit(p);   // sequential: parallel bursts trip the edge
+
+/* The signed-in pages had never been audited at all, and that is exactly where the damage was:
+   /account shipped an inline script that failed to parse, so key minting, logout, delete and the
+   Upgrade button were all dead — and this audit passed every run because an unauthenticated
+   fetch of /account returns the sign-in shell, not the real page. Sign in with a throwaway
+   account, audit the real thing, then delete it. */
+{
+  const email = 'pageaudit' + Math.floor(Date.now() / 1000) + '@example.org';
+  const pass = 'Str0ng-Pass-9xQ';
+  let cookie = '';
+  try {
+    const r = await fetch(BASE + '/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass }),
+    });
+    const setC = r.headers.get('set-cookie');
+    if (r.status === 200 && setC) cookie = setC.split(';')[0];
+  } catch (e) { /* handled below */ }
+
+  if (!cookie) {
+    notes.push('could not sign in, so the authenticated pages were NOT audited');
+  } else {
+    for (const p of ['/account']) await audit(p, cookie);
+    try {
+      await fetch(BASE + '/auth/delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ password: pass }),
+      });
+    } catch (e) { notes.push('the throwaway audit account ' + email + ' may not have been deleted'); }
+  }
+}
 
 console.log('audited ' + PAGES.length + ' pages against ' + BASE + ' in ' + (Date.now() - t0) + 'ms');
 if (notes.length) { console.log('\nnotes:'); notes.forEach((n) => console.log('  - ' + n)); }

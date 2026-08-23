@@ -1707,3 +1707,34 @@ does, and ran it. Free tier correctly refused both Pro surfaces (402). Then, as 
       transient ETIMEDOUT did not fail a check — it crashed the suite with an unhandled
       rejection. Both retry now, like the source downloads already did.
       All five layers pass. Test account and its sub record deleted; one real account remains.
+
+## ▶ round 56 — the account page had been dead for eight rounds (2026-08-23)
+Priority (2). The Pro features worked when driven by curl (round 55), so the next question was
+what a human actually experiences. Drove the real browser instead of the API.
+- ⚠️ **The Upgrade button did nothing. Silently.** No console error, no overlay, no message.
+      A visitor clicks "Upgrade to Pro — $39/mo" and nothing happens at all.
+- ⚠️ Calling Paddle.Initialize + Checkout.open BY HAND in the page opened the overlay fine, so
+      Paddle, the domain approval and the price id were never the problem. Ours was.
+- ⚠️ **The whole inline script on /account failed to parse: `Unexpected identifier 'color'`.**
+      Not just the button — `buy`, `mint`, `out` and `delbtn` all had null handlers and the key
+      list never rendered. No key minting, no logout, no account deletion, no upgrade. Live
+      since round 48, when I wrote `style=\"color:…\"` inside a single-quoted JS string in the
+      Python patch: `\"` inside single quotes is a bare `"`, which closed the string early.
+      I "verified" export and delete that round with curl, which never loads the page.
+- [x] Re-escaped the three offending lines. Verified in the browser: all four handlers attached,
+      the key list renders, and clicking Upgrade now opens the Paddle overlay
+      (buy.paddle.com iframe). No card details were entered — only that the checkout opens.
+- ⚠️ **page_audit passed every single run while this was live**, for two reasons, both fixed:
+      it never parsed the JavaScript it audits, and it never signed in, so fetching /account
+      returned the sign-in shell rather than the real page. The authenticated surface — the
+      part with the money in it — had never been audited at all.
+- [x] page_audit now (a) runs `new Function(src)` over every inline script, and (b) registers a
+      throwaway account, audits /account signed in, and deletes it afterwards.
+      PROVED IT CATCHES THE BUG: against the still-broken deployment it reported
+      "/account: inline script does not parse (Unexpected identifier 'color')". Green after deploy.
+- [x] That made the suite flaky: registration is limited to 5/min per IP and the suite now
+      registers in two places, so snippet_check occasionally hit a 429. It waits the limiter out
+      rather than failing — a 429 is the limiter working.
+      All five layers pass.
+NOTE on method: three rounds of "verified" work on the account page were verified by curl. curl
+does not run JavaScript. For a page whose entire value is in its script, that is not verification.
