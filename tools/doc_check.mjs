@@ -41,7 +41,10 @@ const fail = (where, msg) => failures.push(where + ': ' + msg);
 // mistakes, so auditing it for present-tense truth would be wrong.
 const SKIP = new Set(['REDCELL_BACKLOG.md']);
 const docs = [];
-for (const d of ['.', 'attic', 'services/api']) {
+// GTM/ was outside the sweep, so the launch copy kept claiming 37 detectors and 188 tests
+// long after both were corrected everywhere else. The documents most likely to be published
+// are exactly the ones that must not drift.
+for (const d of ['.', 'attic', 'services/api', 'GTM']) {
   const dir = join(ROOT, d);
   if (!existsSync(dir)) continue;
   for (const f of readdirSync(dir)) {

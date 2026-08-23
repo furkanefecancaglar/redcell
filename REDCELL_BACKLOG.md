@@ -1784,3 +1784,30 @@ NOTE on method: this round found no broken user-facing flow. That is worth writi
       count from list() is not evidence an account is gone. Worth remembering before panicking.
 - [x] page_audit now checks its own cleanup succeeded and fails loudly if it cannot delete the
       throwaway account, instead of leaving one behind quietly.
+
+## ▶ round 58 — distribution, measured before attempted (2026-08-23)
+Priority (3). Real traffic is 0 and the technical work is done, so the question is why nobody
+arrives. Measured it instead of assuming.
+- ⚠️ **The site is not indexed at all.** Searching the exact domain returns nothing — only six
+      unrelated companies also called RedCell, one of them a cyber-security firm. Even indexed,
+      the name competes with established businesses on the same words.
+- [x] Checked the obvious structural cause and RULED IT OUT: no `X-Robots-Tag: noindex` on
+      workers.dev responses, robots.txt allows everything, no meta robots on the landing page.
+      The site is crawlable. It simply has **zero inbound links** and lives on a shared
+      .workers.dev subdomain, and a sitemap alone does not get a new host crawled.
+      Getting indexed needs Search Console (an account), an inbound link (posting = an account),
+      or a real domain (a card). All three are outside what I may do → queued for Furkan.
+      Recording this rather than doing SEO busywork on a page nothing can reach.
+- ⚠️ So the only live channel is Furkan posting, and the copy for it was **false**:
+      GTM/launch_assets.md still claimed 37 detectors (x4) and 188 tests (x2). Round 51 fixed
+      exactly these numbers in PITCH.md and GTM_LAUNCH.md — **but doc_check only swept '.',
+      'attic' and 'services/api', so the GTM/ directory was never checked.** The documents most
+      likely to actually be published were the ones outside the guard.
+- [x] doc_check now sweeps GTM/. It immediately failed on all six stale claims; fixed to 38 and 220.
+- [x] Brought the copy up to the product: MCP over HTTP as a URL install, the /gate CI gate with
+      its 422/200 contract, and the $39/mo paid tier stated plainly rather than implying the
+      whole product is free. Added the measured caveat for the live engine — one identical
+      prompt has scored 49 to 80 — with instructions to lead on the deterministic surfaces.
+      All five layers pass.
+NOTE on method: the fix that mattered was not editing the copy, it was noticing the copy was
+outside the checker. A guard with a directory-shaped hole in it reads exactly like a guard.
