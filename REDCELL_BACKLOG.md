@@ -1979,3 +1979,23 @@ the binding constraint on the whole product, not just our tests. Batching buys r
 call it ~25,000 counted requests/day, but every sign-up still costs 5 writes and every live scan
 costs 2. **Workers Paid is $5/month** and removes it. Until then a real launch could take
 sign-ups down within hours of any traffic.
+
+## ▶ round 64 — cutting the cost of a sign-up (2026-08-23)
+Checked the quota again at 07:09 UTC — **still exhausted**, seven hours after the nominal
+midnight reset. So the limit is not a midnight reset but a rolling window, and the product still
+cannot accept a sign-up today. With writes blocked, the useful work is making each one cheaper.
+- ⚠️ Audited what a sign-up actually costs: five KV writes. Two of them earned nothing.
+      **`usercount`** was incremented on every sign-up and **read by nothing** — /admin counts
+      users from list(). A write-only counter, costing a read and a write per new customer.
+      **`sub:`** stored `{plan:'free',status:'active'}` — the exact value getSub() already
+      returns when the key is absent. We were paying a write to store a default.
+- [x] Both removed. Sign-up is now three writes: the account, the id mapping, the session.
+      A 40% cut on the one path that matters most for revenue.
+- [x] The absent-record default now says `status:'active'` instead of `'none'`, so nothing a
+      caller can observe changes: isPaid() still requires a non-free plan, planOf() still
+      returns 'free', and the account page still shows Active rather than a bare "none".
+- [x] VERIFIED LOCALLY on both paths, since production writes are blocked:
+        free account   -> /auth/me says free/active · /history 200 · /history.sarif 402
+        after a paid sub is written -> /auth/me says pro/active · /history.sarif 200
+      So removing the write did not weaken the Pro gate, which was the risk worth checking.
+      All five layers pass; account surfaces still honestly marked NOT TESTED today.

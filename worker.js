@@ -3531,7 +3531,12 @@ async function getUserById(env, id) {
 }
 async function getSub(env, uid) {
   const raw = await env.LEADS.get('sub:' + uid);
-  return raw ? JSON.parse(raw) : { plan: 'free', status: 'none' };
+  // Absent means free. Sign-up used to WRITE this exact record for every new account, which
+  // cost a KV write to store the default — and writes are the binding constraint on this plan.
+  // The default now says 'active' so removing that write changes nothing a caller can observe:
+  // isPaid() still needs a non-free plan, planOf() still returns 'free', and the account page
+  // still shows Active rather than the bare 'none' the old default would have surfaced.
+  return raw ? JSON.parse(raw) : { plan: 'free', status: 'active' };
 }
 async function currentUser(env, request) {
   const t = cookies(request).rc_sess;
@@ -3581,8 +3586,12 @@ async function registerUser(env, email, password, name) {
   };
   await env.LEADS.put('usr:' + email, JSON.stringify(user));
   await env.LEADS.put('uid:' + user.id, email);
-  await env.LEADS.put('sub:' + user.id, JSON.stringify({ plan: 'free', status: 'active', since: user.createdAt }));
-  const c = await env.LEADS.get('usercount'); await env.LEADS.put('usercount', String((parseInt(c, 10) || 0) + 1));
+  /* Sign-up costs KV writes and the free plan allows 1,000 a day, so each one has to earn its
+     place. Two did not:
+       sub:  stored the free-plan default that getSub() already returns when the key is absent.
+       usercount: incremented on every sign-up and read by nothing — /admin counts users from
+                  list(). A write-only counter is pure cost.
+     That takes sign-up from five writes to three: the account, the id mapping, and the session. */
   return { user };
 }
 async function startSession(env, user) {
