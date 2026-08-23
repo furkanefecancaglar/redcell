@@ -53,3 +53,10 @@ name = "RL_BREACH"
 type = "ratelimit"
 namespace_id = "1005"
 simple = { limit = 5, period = 60 }
+
+# D1 — the free plan allows 100,000 row writes a day against KV's 1,000, which is what took
+# sign-ups down. Accounts and sessions move here; KV keeps the things it is good at.
+[[d1_databases]]
+binding = "DB"
+database_name = "redcell-db"
+database_id = "f9cd23ab-9cfb-4655-9bde-b6c782c39384"

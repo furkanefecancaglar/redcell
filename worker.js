@@ -1225,7 +1225,11 @@ export default {
     }
     if (url.pathname === '/auth/logout' && request.method === 'POST') {
       const t = cookies(request).rc_sess;
-      if (t) await env.LEADS.delete('sess:' + t);
+      // Logout must clear both stores while pre-migration sessions still exist.
+      if (t) {
+        if (env.DB) { try { await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(t).run(); } catch (e) { } }
+        await env.LEADS.delete('sess:' + t);
+      }
       const res = json({ ok: true });
       res.headers.set('Set-Cookie', sessionCookie('', 0));
       return res;
@@ -3596,11 +3600,40 @@ function sessionCookie(token, maxAge) {
   return 'rc_sess=' + token + '; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=' + maxAge;
 }
 
+/* Accounts and sessions live in D1, not KV.
+
+   KV on the free plan allows 1,000 writes a DAY across the whole account, and sign-up alone
+   cost three of them. On 2026-08-23 that budget ran out and registration returned a bare
+   Cloudflare 1101 for the rest of the day — nobody could create an account. D1's free tier
+   allows 100,000 row writes a day, a hundred times the headroom, at the same price: nothing.
+
+   Reads fall back to KV so the accounts created before this migration keep working. Writes only
+   ever go to D1, so the fallback drains naturally and never has to be reconciled. */
+function rowToUser(r) {
+  if (!r) return null;
+  return { id: r.id, email: r.email, name: r.name || '', salt: r.salt, hash: r.hash,
+    iters: r.iters, createdAt: r.created_at };
+}
+
 async function getUserByEmail(env, email) {
-  const raw = await env.LEADS.get('usr:' + normEmail(email));
+  const e = normEmail(email);
+  if (env.DB) {
+    try {
+      const r = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(e).first();
+      if (r) return rowToUser(r);
+    } catch (err) { /* fall through to KV rather than lock anyone out on a D1 hiccup */ }
+  }
+  const raw = await env.LEADS.get('usr:' + e);
   return raw ? JSON.parse(raw) : null;
 }
+
 async function getUserById(env, id) {
+  if (env.DB) {
+    try {
+      const r = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+      if (r) return rowToUser(r);
+    } catch (err) { /* fall through */ }
+  }
   const email = await env.LEADS.get('uid:' + id);
   return email ? getUserByEmail(env, email) : null;
 }
@@ -3616,10 +3649,22 @@ async function getSub(env, uid) {
 async function currentUser(env, request) {
   const t = cookies(request).rc_sess;
   if (!t) return null;
-  const raw = await env.LEADS.get('sess:' + t);
-  if (!raw) return null;
-  let s; try { s = JSON.parse(raw); } catch (e) { return null; }
-  const u = await getUserById(env, s.uid);
+  let uid = null;
+  if (env.DB) {
+    try {
+      // Expiry is checked in the query rather than by a TTL, so an expired session is simply
+      // not found — no cleanup job, and no window where a stale row still authenticates.
+      const r = await env.DB.prepare('SELECT uid FROM sessions WHERE token = ? AND expires > ?')
+        .bind(t, Date.now()).first();
+      if (r) uid = r.uid;
+    } catch (e) { /* fall through to KV for sessions issued before the migration */ }
+  }
+  if (!uid) {
+    const raw = await env.LEADS.get('sess:' + t);
+    if (!raw) return null;
+    try { uid = JSON.parse(raw).uid; } catch (e) { return null; }
+  }
+  const u = await getUserById(env, uid);
   if (!u) return null;
   u.sub = await getSub(env, u.id);
   return u;
@@ -3659,19 +3704,22 @@ async function registerUser(env, email, password, name) {
     salt, iters: PBKDF2_ITERS, hash: await pbkdf2(password, salt, PBKDF2_ITERS),
     createdAt: new Date().toISOString(),
   };
-  await env.LEADS.put('usr:' + email, JSON.stringify(user));
-  await env.LEADS.put('uid:' + user.id, email);
-  /* Sign-up costs KV writes and the free plan allows 1,000 a day, so each one has to earn its
-     place. Two did not:
-       sub:  stored the free-plan default that getSub() already returns when the key is absent.
-       usercount: incremented on every sign-up and read by nothing — /admin counts users from
-                  list(). A write-only counter is pure cost.
-     That takes sign-up from five writes to three: the account, the id mapping, and the session. */
+  /* One D1 row instead of two KV writes, and the id mapping comes free from an index rather
+     than a second key. Sign-up previously cost five KV writes; two of those stored things
+     nothing read (a write-only counter and the free-plan default), and the remaining three are
+     now one row plus one session row. */
+  if (!env.DB) return { error: 'Account storage is not configured.' };
+  await env.DB.prepare(
+    'INSERT INTO users (email, id, name, salt, hash, iters, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.email, user.id, user.name, user.salt, user.hash, user.iters, user.createdAt).run();
   return { user };
 }
 async function startSession(env, user) {
   const token = rndHex(32);
-  await env.LEADS.put('sess:' + token, JSON.stringify({ uid: user.id, at: Date.now() }), { expirationTtl: SESSION_TTL });
+  const now = Date.now();
+  if (!env.DB) throw new Error('session storage is not configured');
+  await env.DB.prepare('INSERT INTO sessions (token, uid, created, expires) VALUES (?, ?, ?, ?)')
+    .bind(token, user.id, now, now + SESSION_TTL * 1000).run();
   return token;
 }
 async function verifyLogin(env, email, password) {
@@ -4466,6 +4514,18 @@ async function deleteUserData(env, user) {
   const removed = { sessions: 0, api_keys: 0, history: 0, records: 0 };
 
   // sessions and API keys are keyed by token/hash, so they have to be found by owner
+  if (env.DB) {
+    // D1 first, and users before sessions for the same reason the KV order matters: if this
+    // fails partway, an account that cannot be found is safer than one that still signs in.
+    try {
+      const du = await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
+      if (du && du.meta && du.meta.changes) removed.records += du.meta.changes;
+      const ds = await env.DB.prepare('DELETE FROM sessions WHERE uid = ?').bind(user.id).run();
+      if (ds && ds.meta && ds.meta.changes) removed.sessions += ds.meta.changes;
+      const dk = await env.DB.prepare('DELETE FROM api_keys WHERE uid = ?').bind(user.id).run();
+      if (dk && dk.meta && dk.meta.changes) removed.api_keys += dk.meta.changes;
+    } catch (e) { /* KV sweep below still runs */ }
+  }
   for (const [prefix, counter] of [['sess:', 'sessions'], ['akey:', 'api_keys']]) {
     let cursor;
     do {

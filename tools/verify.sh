@@ -62,6 +62,10 @@ start_local () {
   for _ in $(seq 1 40); do
     if curl -s -o /dev/null "http://127.0.0.1:8788/health" 2>/dev/null; then
       ACCOUNT_BASE="http://127.0.0.1:8788"
+      # The local D1 starts empty, so without the schema every account test fails with a
+      # storage error that looks exactly like the production quota being spent. Apply it.
+      npx wrangler d1 execute redcell-db --local --file=migrations/0001_accounts.sql \
+        >/tmp/redcell-verify-d1.log 2>&1 || true
       return 0
     fi
     sleep 1

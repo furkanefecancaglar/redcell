@@ -2076,3 +2076,30 @@ machine-readable surface: /openapi.json. Nothing had ever compared it to the act
 - [x] doc_check updated to treat a 400 as proof of presence, which is what it is testing for.
       All five layers pass, teardown clean, zero listeners left.
 NOTE on method: the checker's false alarm was worth more than the check passing would have been.
+
+## ▶ round 68 — sign-ups work again, for free (2026-08-23)
+Furkan asked whether blockers 1 and 2 could be solved without spending money. Blocker 1 can, and
+now is.
+- [x] **The deploy token CAN create a D1 database** — tested rather than assumed, since the same
+      token cannot create KV namespaces. `wrangler d1 create redcell-db` succeeded.
+- [x] D1's free tier allows **100,000 row writes a day** against KV's 1,000. Same price: nothing.
+      Accounts, sessions and API keys moved to D1 (migrations/0001_accounts.sql).
+- [x] Reads fall back to KV so pre-migration accounts keep working; writes only ever go to D1, so
+      the fallback drains on its own and never needs reconciling.
+- [x] Sessions now carry an `expires` column checked in the query, so an expired session is
+      simply not found — no cleanup job, and no window where a stale row still authenticates.
+- [x] **PROVED IT ON THE EXHAUSTED KV QUOTA**, which is the only test that mattered:
+        register 200 · /auth/me 200 · logout 200 · /auth/me after 401 · login 200 ·
+        wrong password 401 · duplicate email 400 · export 200 · delete 200 · login after delete 401
+      Every one of those was returning 503 an hour earlier.
+- [x] Fallback proved definitively, not by inference: caglarf646@gmail.com is **not** in D1
+      (`SELECT COUNT(*) = 0`) yet registering it returns "already has an account", so
+      getUserByEmail found it through KV. An earlier probe I ran — a wrong-password login
+      returning 401 — proved nothing, because a nonexistent account returns 401 too by design.
+- ⚠️ The local-Worker routing from round 65 then hid the win: verify.sh reported account
+      surfaces NOT TESTED, which read like the production quota, but the LOCAL D1 simply had no
+      schema. start_local now applies the migration. Coverage is green again.
+      Sign-up cost: 5 KV writes -> 1 D1 row + 1 session row, on a budget 100x larger.
+      All five layers pass.
+STILL OPEN FOR FURKAN: a real domain (blocker 2 — partially addressable free, see next round),
+Paddle KYC (blocker 3), and the GitHub suspension.
