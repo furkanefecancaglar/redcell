@@ -75,7 +75,7 @@ _RULES = [
     # the same act with the negation left implicit.
     ("instruction-replacement", "LLM01", "high",
      r"\b(new|further|updated|revised|neue|weitere|aktualisierte)\s+"
-     r"(instruction|rule|directive|guideline|anweisung|regel|vorgabe)\w*\s*"
+     r"(instruction|rule|directive|guideline|task|anweisung|regel|vorgabe|aufgabe|auftrag)\w*\s*"
      r"(now\s+)?(follow|apply|are in effect|folgen|gelten)\b"
      r"|\b(follow|obey|befolge|beachte)\s+(these|the new|them|sie|diese)\s*"
      r"(instruction|rule|anweisung|regel)\w*\s*(carefully|exactly|genau|sorgf[a\u00e4]ltig)\b",
