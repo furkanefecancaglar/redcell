@@ -3685,7 +3685,10 @@ function authShell(title, desc, bodyHtml, script, externalSrc) {
 
 const AUTH_JS =
   'function q(i){return document.getElementById(i)}'
-  + 'function say(t,ok){var m=q("msg");m.style.display="block";m.style.color=ok?"var(--pass)":"var(--crit)";m.textContent=t;}'
+  // say() is shared by signup, login and account. /account had no #msg, so the first code
+  // there to call it would throw and take its handler down with it — the same silent-dead
+  // control as the parse error. Both ends fixed: the helper no-ops, and the page has the element.
+  + 'function say(t,ok){var m=q("msg");if(!m)return;m.style.display="block";m.style.color=ok?"var(--pass)":"var(--crit)";m.textContent=t;}'
   + 'async function post(u,b){var r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});'
   + 'var d={};try{d=await r.json()}catch(e){}return {ok:r.ok,d:d};}';
 
@@ -3738,6 +3741,7 @@ function renderAccount(user, billingReady, history) {
     '<div style="max-width:640px;margin:34px auto 0">'
     + '<div class=ey>' + _mk() + 'REDCELL &middot; ACCOUNT</div>'
     + '<h1 style="font-size:26px;margin:10px 0 20px">' + esc(user.name || user.email) + '</h1>'
+    + '<div id=msg class=msg></div>'   // target for the shared say() helper
     + '<div class=card><div class=ey>Plan</div>'
     + '<div class=kv style="border-top:0"><span>Current plan</span><b><span class=tag>' + esc(planName) + '</span></b></div>'
     + '<div class=kv><span>Status</span><b>' + esc(sub.status || 'active') + '</b></div>'

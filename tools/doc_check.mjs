@@ -51,7 +51,13 @@ for (const d of ['.', 'attic', 'services/api']) {
   }
 }
 
-const health = await fetch(BASE + '/health').then((r) => r.json()).catch(() => null);
+// Retry the ground-truth fetch as well. The link checks were given a retry and this one was
+// not, so a single dropped connection failed the whole layer with "cannot verify counts".
+let health = null;
+for (let i = 0; i < 3 && !health; i++) {
+  health = await fetch(BASE + '/health').then((r) => r.json()).catch(() => null);
+  if (!health) await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+}
 if (!health) {
   console.log('doc check: /health unreachable, cannot verify counts');
   process.exit(1);

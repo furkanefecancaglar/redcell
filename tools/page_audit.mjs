@@ -152,7 +152,26 @@ async function audit(page, cookie) {
     }
   }
 
-  // 8. the social preview must be a format the platforms will actually render.
+  // 8. every element id the inline script reaches for must exist on the page.
+  //     A mistyped or renamed id makes getElementById return null; the handler is never
+  //     attached and the control silently does nothing — the same user-visible symptom as the
+  //     parse error above, with none of the noise. Cheap to check statically, so check it.
+  {
+    const inline = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+      .map((m) => m[1]).join('\n');
+    const wanted = new Set();
+    for (const m of inline.matchAll(/getElementById\(\s*["'`]([A-Za-z0-9_-]+)["'`]\s*\)/g)) wanted.add(m[1]);
+    // q("x") is the page's own shorthand for getElementById
+    for (const m of inline.matchAll(/\bq\(\s*["'`]([A-Za-z0-9_-]+)["'`]\s*\)/g)) wanted.add(m[1]);
+    const present = new Set([...html.matchAll(/\sid=["']?([A-Za-z0-9_-]+)["']?/g)].map((m) => m[1]));
+    const missing = [...wanted].filter((id) => !present.has(id));
+    if (missing.length) {
+      fail(page, 'script reaches for element id(s) that do not exist: ' + missing.join(', ')
+        + ' — those controls will silently do nothing');
+    }
+  }
+
+  // 9. the social preview must be a format the platforms will actually render.
   //     og:image pointed at an SVG for months; X, LinkedIn, Facebook, Slack and Discord all
   //     decline to render SVG, so every shared link appeared with no card. Nothing in the
   //     suite noticed, because the tag was present and the URL returned 200.
@@ -170,7 +189,7 @@ async function audit(page, cookie) {
     else if (!/^image\/(png|jpeg|webp|gif)/.test(ct)) fail(page, 'og:image serves ' + ct + ', which social platforms will not render');
   }
 
-  // 9. the old dark/red identity must be gone
+  // 10. the old dark/red identity must be gone
   // the first sweep only listed the primary tokens, so tinted leftovers (a dark-red border,
   // a red wash behind a card) survived on five pages unnoticed. Check those too.
   for (const tok of ['0b0d12', 'ff3b46', '9aa4b6', 'eaedf4', '3a2030', '2a1918', 'ff5b64',

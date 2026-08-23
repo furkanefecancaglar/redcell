@@ -1738,3 +1738,36 @@ what a human actually experiences. Drove the real browser instead of the API.
       All five layers pass.
 NOTE on method: three rounds of "verified" work on the account page were verified by curl. curl
 does not run JavaScript. For a page whose entire value is in its script, that is not verification.
+
+## ▶ round 57 — browser-level sweep of the remaining flows (2026-08-23)
+Round 56 showed that curl-verified is not verified for pages whose value is their script. Drove
+the rest of the interactive surface in a real browser. Mostly a NEGATIVE result, recorded as such.
+- [x] Landing scanner demo WORKS, all three modes, real verdicts from the live API:
+        system prompt   -> 21/100 Vulnerable, 7 findings, 22 checks, 202 ms
+        untrusted input -> BLOCK, score 44, direct-injection + prompt-extraction, 332 ms
+        tool call       -> FLAG, attacker-destination + unbounded-financial-action, 238 ms
+- [x] Signup works from the browser, including pressing Enter in the password field (there is no
+      <form>, so that was worth checking rather than assuming) — lands on /account signed in.
+- [x] Breach game works: sent the most obvious level-1 attack and the guard leaked its whole
+      system prompt including TOPAZ, correctly scored as a win (level 1 is redact:false).
+      Re-sending the identical message got a refusal instead — the guard is a model, so it is
+      not deterministic, which is the point of the game.
+      Checked the win rule on levels 4-5, where `win` is tested against the REDACTED text and so
+      can never fire. That reads like a bug and is not one: output-redaction is listed as a
+      defence on those levels, so a leak the redactor catches is the defence holding, and the
+      player still sees ████████ as the signal that they got the model to say it.
+- ⚠️ NEW CHECK, and it found something: page_audit now verifies that every element id the inline
+      script reaches for actually exists. A renamed or mistyped id makes getElementById return
+      null, the handler is never attached, and the control silently does nothing — same symptom
+      as round 56's parse error, with none of the noise.
+      It immediately flagged **/account: script reaches for `msg`, which does not exist**.
+      AUTH_JS is shared by signup, login and account, and its say() helper dereferences #msg.
+      Nothing on /account calls say() today, so this was latent rather than live — the first
+      code there to report an error would have thrown and taken its own handler down.
+      Fixed both ends: say() no-ops when the element is absent, and /account now has the element.
+- ⚠️ Third instance of the same harness gap: doc_check's `/health` fetch had no retry, so one
+      dropped connection failed the layer with "cannot verify counts" while the layer itself was
+      fine. Retried now, like the link checks and the source downloads before it.
+      All five layers pass.
+NOTE on method: this round found no broken user-facing flow. That is worth writing down —
+"I checked and it works" is a result, and not recording it invites checking it again next week.
