@@ -2052,3 +2052,27 @@ RUNNING TOTAL of write cost per user action, after rounds 63-66:
       sign-up          5     -> 3      (dropped a write-only counter and a stored default)
       breach message   3     -> 1.35   (aggregates batched 5:1)
       selfcheck        1     -> 0.1    (sampled)
+
+## ▶ round 67 — the spec a developer generates a client from (2026-08-23)
+Quota still exhausted at 09:46 UTC. Write-cost work is done, so audited the last unchecked
+machine-readable surface: /openapi.json. Nothing had ever compared it to the actual API.
+- ⚠️ It documented 14 paths and **omitted /gate and /mcp** — the exact two surfaces the site,
+      llms.txt and the launch copy all tell people to adopt. A developer generating a client
+      from our spec got everything except the CI gate and the MCP server. **/history** and
+      **/history.sarif**, the two things the paid tier is sold on, were missing too.
+- [x] Added /gate (with its 422/200 contract), /mcp (JSON-RPC, the five tools), /history,
+      /history.sarif and /stats. 14 paths -> 19.
+- [x] Guard so the two descriptions cannot drift apart again: snippet_check now fails if
+      llms.txt advertises an endpoint openapi.json omits, and probes every documented path to
+      make sure the spec never describes a dead route.
+- ⚠️ That probe immediately reported /firewall, /scan-config, /toolcheck and /agentcheck as
+      missing. They were not — **my checker was wrong**: it preferred GET, and those GETs are
+      documented conveniences that need a query parameter. Fixed to probe the canonical POST.
+- ⚠️ But chasing it found a real API defect: a bare `GET /firewall` returned **404**. The route
+      exists and the spec documents it; the request was simply missing a parameter. Answering
+      404 tells a developer the endpoint is not there and makes our own spec look wrong. Now
+      **400** with the parameter named, on /firewall, /scan-config and /toolcheck.
+      Verified live: bare GET -> 400, `?name=read_file` -> 200.
+- [x] doc_check updated to treat a 400 as proof of presence, which is what it is testing for.
+      All five layers pass, teardown clean, zero listeners left.
+NOTE on method: the checker's false alarm was worth more than the check passing would have been.

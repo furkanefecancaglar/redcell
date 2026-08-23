@@ -114,6 +114,9 @@ for (const doc of docs) {
       r = await fetch(url).catch(() => null);
       if (!r) await new Promise((res) => setTimeout(res, 500 * (i + 1)));
     }
+    // 400 on a GET means the route is there and telling us a parameter is missing — that is
+    // presence, which is all this check is for. The convenience GETs answer exactly that.
+    if (r && r.status === 400) continue;
     if (r && (r.status === 404 || r.status === 405)) {
       // POST-only endpoints are documented by URL. An empty POST proves the route exists:
       // it answers 400 for a missing field, and only a genuinely absent route answers 404.

@@ -415,6 +415,51 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   }
 }
 
+/* 9 — the two machine-readable descriptions of this API must agree with each other and with the
+       API. llms.txt is what an agent reads; openapi.json is what a developer generates a client
+       from. The spec was missing /gate and /mcp — the exact two surfaces we tell people to
+       adopt — so a generated client had everything except the CI gate and the MCP server. */
+{
+  const spec = await fetchRetry(BASE + '/openapi.json').then((r) => r.json()).catch(() => null);
+  if (!spec || !spec.paths) {
+    fail('openapi', 'could not fetch or parse /openapi.json');
+  } else {
+    ok.push('openapi.json parses (' + Object.keys(spec.paths).length + ' paths)');
+
+    const llms = await fetchRetry(BASE + '/llms.txt').then((r) => r.text()).catch(() => '');
+    const documented = new Set(Object.keys(spec.paths));
+    // endpoints llms.txt tells an agent to call, as "POST /path" or a bare origin-relative link
+    const advertised = new Set();
+    for (const m of llms.matchAll(/\b(?:POST|GET)\s+(\/[a-zA-Z0-9._/-]+)/g)) advertised.add(m[1]);
+    const missing = [...advertised].filter((p) => !documented.has(p));
+    if (missing.length) {
+      fail('openapi vs llms.txt', 'llms.txt advertises ' + missing.join(', ')
+        + ' but openapi.json does not document ' + (missing.length > 1 ? 'them' : 'it')
+        + ' — a generated client would be missing that surface');
+    } else {
+      ok.push('every endpoint llms.txt advertises is in openapi.json (' + advertised.size + ')');
+    }
+
+    // and each documented path must actually answer, so the spec cannot describe a dead route
+    let dead = [];
+    for (const p of Object.keys(spec.paths)) {
+      if (p.includes('{')) continue;                     // templated, covered elsewhere
+      const methods = Object.keys(spec.paths[p]);
+      // POST is canonical wherever both exist; the GET variants are documented conveniences that
+      // require a query parameter, so probing them bare says nothing about whether the route is
+      // there. Picking GET first made four live endpoints look missing.
+      const m = methods.includes('post') ? 'POST' : 'GET';
+      const r = await fetch(BASE + p, m === 'GET' ? {} : {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      }).catch(() => null);
+      // 400/401/402/422 all prove the route exists and is validating; 404 means it does not.
+      if (!r || r.status === 404) dead.push(p + ' -> ' + (r ? r.status : 'unreachable'));
+    }
+    if (dead.length) fail('openapi', 'documented but not answering: ' + dead.join(', '));
+    else ok.push('every documented path answers');
+  }
+}
+
 console.log('snippet check against ' + BASE);
 if (notes.length) { console.log('\nnotes:'); notes.forEach((n) => console.log('  - ' + n)); }
 ok.forEach((o) => console.log('  ok   ' + o));

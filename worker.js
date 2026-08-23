@@ -727,6 +727,12 @@ export default {
     }
     // GET convenience for quick curl/browser testing. POST (JSON body) is canonical —
     // don't put production prompts in URLs (they can land in logs/history).
+    if (request.method === 'GET' && url.pathname === '/firewall' && !url.searchParams.has('input')) {
+      return json({ error: 'input required (GET /firewall?input=... or POST /firewall)' }, 400);
+    }
+    if (request.method === 'GET' && url.pathname === '/scan-config' && !url.searchParams.has('system_prompt')) {
+      return json({ error: 'system_prompt required (GET /scan-config?system_prompt=... or POST /scan-config)' }, 400);
+    }
     if (request.method === 'GET' && url.pathname === '/firewall' && url.searchParams.has('input')) {
       bump(env, ctx, 'firewall', request);
       const gi = String(url.searchParams.get('input')).slice(0, 4096);
@@ -739,7 +745,10 @@ export default {
     // GET convenience for the tool-call firewall: name + args (a JSON object, URL-encoded).
     // POST (JSON body) is canonical — don't put production tool calls in URLs.
     if (request.method === 'GET' && url.pathname === '/toolcheck') {
-      if (!url.searchParams.has('name')) return json({ error: 'name required (GET /toolcheck?name=...&args=... or POST)' }, 404);
+      // 400, not 404. A 404 tells a developer the endpoint does not exist, and this one does —
+      // it is a missing parameter. The OpenAPI spec documents this GET, so answering 404 made
+      // the spec look wrong when the request was.
+      if (!url.searchParams.has('name')) return json({ error: 'name required (GET /toolcheck?name=...&args=... or POST /toolcheck)' }, 400);
       bump(env, ctx, 'toolcheck', request);
       let args;
       try {
@@ -3298,6 +3307,45 @@ function openApiDoc() {
           responses: { '200': { description: 'adversarial report' }, '401': { description: 'unauthorized' }, '503': { description: 'engine not configured' } },
         },
       },
+      /* /gate and /mcp are the two surfaces we actually tell people to adopt, and neither was
+         in the spec — so a developer generating a client from it got everything except the CI
+         gate and the MCP server. /history and /history.sarif are what the paid tier is sold on
+         and were missing too. snippet_check now fails if llms.txt documents an endpoint this
+         spec omits, so the two machine-readable descriptions cannot drift apart again. */
+      '/gate': { post: {
+        summary: 'CI gate. Returns 422 when the prompt scores below min_score, 200 when it passes, so the HTTP status alone can fail a build.',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['system_prompt'], properties: {
+          system_prompt: { type: 'string' },
+          min_score: { type: 'integer', default: 60 },
+          fail_on_critical: { type: 'boolean', default: true } } } } } },
+        responses: {
+          '200': { description: 'passed the threshold', content: { 'application/json': { schema: { type: 'object', properties: { score: { type: 'integer' }, findings: { type: 'array', items: { type: 'object' } } } } } } },
+          '422': { description: 'scored below min_score — fail the build', content: { 'application/json': { schema: { type: 'object', properties: { score: { type: 'integer' }, findings: { type: 'array', items: { type: 'object' } } } } } } },
+          '400': { description: 'system_prompt required' } } } },
+      '/mcp': { post: {
+        summary: 'MCP server over HTTP (JSON-RPC 2.0, protocol 2024-11-05). Five tools: firewall_check, scan_prompt, tool_check, thread_check, agent_check. GET returns the docs page.',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['jsonrpc', 'method'], properties: {
+          jsonrpc: { type: 'string', enum: ['2.0'] },
+          id: { type: 'integer' },
+          method: { type: 'string', enum: ['initialize', 'tools/list', 'tools/call', 'ping'] },
+          params: { type: 'object' } } } } } },
+        responses: {
+          '200': { description: 'JSON-RPC result', content: { 'application/json': { schema: { type: 'object', properties: { jsonrpc: { type: 'string' }, id: { type: 'integer' }, result: { type: 'object' }, error: { type: 'object' } } } } } },
+          '400': { description: 'parse error' } } } },
+      '/history': { get: {
+        summary: 'Scan history for the authenticated caller. Sign in, or send X-API-Key.',
+        responses: {
+          '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { plan: { type: 'string' }, kept: { type: 'integer' }, count: { type: 'integer' }, scans: { type: 'array', items: { type: 'object' } } } } } } },
+          '401': { description: 'not authenticated' } } } },
+      '/history.sarif': { get: {
+        summary: 'Scan history as SARIF 2.1.0 for code-scanning upload. Pro feature.',
+        responses: {
+          '200': { description: 'SARIF document' },
+          '401': { description: 'not authenticated' },
+          '402': { description: 'Pro feature — free plan' } } } },
+      '/stats': { get: {
+        summary: 'Aggregate funnel counters, no PII. Counts are batched and are a floor, not exact.',
+        responses: { '200': { description: 'ok' } } } },
       '/health': { get: { summary: 'Surface status + detector counts.', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, edge: { type: 'boolean' }, detectors: { type: 'integer' }, firewall_rules: { type: 'integer' }, attacks: { type: 'integer' }, scan_gated: { type: 'boolean' }, surfaces: { type: 'object' } } } } } } } } },
       '/selfcheck': { get: { summary: 'In-process reliability probe (real result, per surface).', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { ok: { type: 'boolean' }, ts: { type: 'integer' }, checks: { type: 'object' } } } } } } } } },
       '/breach/techniques': { get: { summary: 'Aggregate attack-technique counts from the Breach game (counts only, no PII).', responses: { '200': { description: 'ok', content: { 'application/json': { schema: { type: 'object', properties: { total: { type: 'integer' }, techniques: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, count: { type: 'integer' } } } } } } } } } } } },
