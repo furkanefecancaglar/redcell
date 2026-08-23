@@ -1840,3 +1840,31 @@ Never measured. Measured it.
 NOTE on method: "microseconds" was not a lie, it was a true statement about the wrong thing.
 The control endpoint is what separated our cost from the network's — a claim about latency
 without a control measures the tester's wifi.
+
+## ▶ round 60 — "4 languages" was half true, and the missing half was a bypass (2026-08-23)
+Continuing the unverified-claims sweep. The site advertises multilingual injection detection in
+four places. Tested it with the same attack in each language.
+- ⚠️ **Two of the four claimed languages were not detected at all.**
+        english BLOCK · spanish FLAG · german FLAG · **turkish ALLOW · french ALLOW**
+- ⚠️ ROOT CAUSE, and it is worse than a coverage gap: the rules were written with diacritics
+      (`önceki`, `précédentes`), and the deobfuscation pre-pass folds homoglyphs, leetspeak,
+      zero-width, bidi and unicode-tag smuggling — but **not diacritics**. `grep -c unicodedata`
+      in the firewall returned 0. So the most trivial transformation of all went unnormalised.
+      Confirmed by measurement: the accented form FLAGged, the identical plain form ALLOWed.
+      This is not an exotic evasion. Writing Turkish without diacritics is completely ordinary,
+      so REDCELL was blind to injection in the everyday spelling of one of its four languages —
+      and an attacker only had to drop the accents.
+- [x] Fixed at both ends rather than one: the multilingual patterns now accept either spelling
+      via character classes, so the correct rule id still fires, AND `_fold()` strips combining
+      marks so every other rule benefits. Added the letters NFD leaves alone (ı, İ, ø, ł, æ, œ,
+      ß, đ), since Turkish dotless ı is exactly the case that would have been missed.
+- [x] Mirrored in the JS port; the four parity tests pass, so hosted and self-hosted agree.
+- [x] Regression test with ten cases: accented and plain forms of TR/FR/DE/ES attacks must all
+      be detected, and benign prose in the same four languages must stay quiet — a diacritic
+      folder that flags "Merhaba, siparisim ne zaman gelir?" would be worse than the bug.
+      Verified live after deploy: plain Turkish and French now FLAG, benign Turkish still ALLOW.
+- [x] Also fixed the last "Microsecond latency" left over from round 59, and made the wording
+      specific: "4 languages" now says which four, and that spelling with or without diacritics
+      is handled. pytest 220 -> 221. All five layers pass.
+NOTE on method: the claim was literally true — four languages were in the ruleset. Testing what
+the words promise rather than what the code contains is what found it.

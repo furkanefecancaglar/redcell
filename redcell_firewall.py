@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import unicodedata
 import json
 import os
 import re
@@ -133,18 +134,21 @@ _RULES = [
     # Non-English injection (TR/ES/DE/FR). \S* (not \w) for suffixes so JS parity holds
     # (JS \w is ASCII-only and would miss Turkish ı/ş/… suffixes).
     ("multilang-injection", "LLM01", "high",
-     r"(önceki (tüm )?talimatlar\S* (yok say|görmezden gel|unut|boş ?ver)|"
-     r"sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (göster|açıkla|söyle|yazdır|ver)|"
-     r"tüm (kural\S*|kısıtlama\S*|sınırlama\S*) (yok say|kaldır|unut|görmezden gel)|"
+     # Both spellings, deliberately. The accented forms are correct Turkish/French, but writing
+     # without diacritics is completely ordinary on many keyboards — and it was a free bypass:
+     # "onceki tum talimatlari yok say" scored ALLOW while the accented form flagged.
+     r"([öo]nceki (t[üu]m )?talimatlar\S* (yok say|g[öo]rmezden gel|unut|bo[şs] ?ver)|"
+     r"sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (g[öo]ster|a[çc][ıi]kla|s[öo]yle|yaz[dı]?d[ıi]r|ver)|"
+     r"t[üu]m (kural\S*|k[ıi]s[ıi]tlama\S*|s[ıi]n[ıi]rlama\S*) (yok say|kald[ıi]r|unut|g[öo]rmezden gel)|"
      r"ignora (las )?instrucciones (anteriores|previas)|"
      r"olvida (las )?instrucciones (anteriores|previas)|"
      r"revela (tu|el|las) (prompt|sistema|instrucciones)|"
      r"ignoriere (alle )?(vorherigen |bisherigen )?anweisungen|"
      r"vergiss (alle )?(vorherigen |bisherigen )?anweisungen|"
      r"zeig(e)? (mir )?(deinen? )?(system[- ]?prompt|systemanweisung\S*)|"
-     r"ignore[z]? (toutes )?les instructions (précédentes|antérieures)|"
-     r"oublie[z]? (toutes )?les instructions (précédentes|antérieures)|"
-     r"révèle (ton|tes|le) (invite|système|prompt|instructions))",
+     r"ignore[z]? (toutes )?les instructions (pr[ée]c[ée]dentes|ant[ée]rieures)|"
+     r"oublie[z]? (toutes )?les instructions (pr[ée]c[ée]dentes|ant[ée]rieures)|"
+     r"r[ée]v[èe]le (ton|tes|le) (invite|syst[èe]me|prompt|instructions))",
      "non-English (TR/ES/DE/FR) prompt injection"),
     ("code-execution", "LLM06", "high",
      r"(\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.(Popen|run|call)|__import__\s*\(|"
@@ -222,10 +226,27 @@ _B64 = re.compile(r"[A-Za-z0-9+/_-]{16,}={0,2}")
 _TAG = re.compile("[\U000E0000-\U000E007F]")
 
 
+# Letters that do not decompose under NFD and so survive diacritic stripping.
+_LETTER_FOLD = {"\u0131": "i", "\u0130": "i", "\u00f8": "o", "\u0142": "l",
+                "\u00e6": "ae", "\u0153": "oe", "\u00df": "ss", "\u0111": "d"}
+
+
+def _strip_diacritics(s: str) -> str:
+    """Drop combining marks: ö -> o, é -> e, ş -> s. Also folds the letters NFD leaves alone."""
+    s = "".join(_LETTER_FOLD.get(ch, ch) for ch in s)
+    return "".join(ch for ch in unicodedata.normalize("NFD", s)
+                   if unicodedata.category(ch) != "Mn")
+
+
 def _fold(text: str) -> str:
-    """Lowercase + strip hidden chars + map homoglyphs and leetspeak back to ASCII."""
+    """Lowercase + strip hidden chars + map homoglyphs, leetspeak and diacritics back to ASCII.
+
+    Diacritic folding was missing while homoglyph, leetspeak, zero-width, bidi and unicode-tag
+    handling were all present — so the most trivial transformation of all went unnormalised.
+    """
     s = _FOLD_STRIP.sub("", text).lower()
-    return "".join(_HOMO.get(ch, _LEET.get(ch, ch)) for ch in s)
+    s = "".join(_HOMO.get(ch, _LEET.get(ch, ch)) for ch in s)
+    return _strip_diacritics(s)
 
 
 def _b64_one(text: str) -> List[str]:

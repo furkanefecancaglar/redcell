@@ -99,7 +99,7 @@
     // Non-English injection (TR/ES/DE/FR) — \S* (not \w) for suffixes so this
     // matches Turkish ı/ş/… identically to the Python rule (JS \w is ASCII-only).
     ['multilang-injection', 'LLM01', 'high',
-      R`(önceki (tüm )?talimatlar\S* (yok say|görmezden gel|unut|boş ?ver)|sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (göster|açıkla|söyle|yazdır|ver)|tüm (kural\S*|kısıtlama\S*|sınırlama\S*) (yok say|kaldır|unut|görmezden gel)|ignora (las )?instrucciones (anteriores|previas)|olvida (las )?instrucciones (anteriores|previas)|revela (tu|el|las) (prompt|sistema|instrucciones)|ignoriere (alle )?(vorherigen |bisherigen )?anweisungen|vergiss (alle )?(vorherigen |bisherigen )?anweisungen|zeig(e)? (mir )?(deinen? )?(system[- ]?prompt|systemanweisung\S*)|ignore[z]? (toutes )?les instructions (précédentes|antérieures)|oublie[z]? (toutes )?les instructions (précédentes|antérieures)|révèle (ton|tes|le) (invite|système|prompt|instructions))`,
+      R`([öo]nceki (t[üu]m )?talimatlar\S* (yok say|g[öo]rmezden gel|unut|bo[şs] ?ver)|sistem (istem\S*|komut\S*|talimat\S*|prompt\S*) (g[öo]ster|a[çc][ıi]kla|s[öo]yle|yaz[dı]?d[ıi]r|ver)|t[üu]m (kural\S*|k[ıi]s[ıi]tlama\S*|s[ıi]n[ıi]rlama\S*) (yok say|kald[ıi]r|unut|g[öo]rmezden gel)|ignora (las )?instrucciones (anteriores|previas)|olvida (las )?instrucciones (anteriores|previas)|revela (tu|el|las) (prompt|sistema|instrucciones)|ignoriere (alle )?(vorherigen |bisherigen )?anweisungen|vergiss (alle )?(vorherigen |bisherigen )?anweisungen|zeig(e)? (mir )?(deinen? )?(system[- ]?prompt|systemanweisung\S*)|ignore[z]? (toutes )?les instructions (pr[ée]c[ée]dentes|ant[ée]rieures)|oublie[z]? (toutes )?les instructions (pr[ée]c[ée]dentes|ant[ée]rieures)|r[ée]v[èe]le (ton|tes|le) (invite|syst[èe]me|prompt|instructions))`,
       'non-English (TR/ES/DE/FR) prompt injection'],
     ['code-execution', 'LLM06', 'high',
       R`(\beval\s*\(|\bexec\s*\(|\bos\.system\s*\(|\bsubprocess\.(Popen|run|call)|__import__\s*\(|\b(execute|run) (this |the following )?(arbitrary |untrusted )?(shell|bash|python|system) (command|code|script)\b|\bpip install\b.{0,20}&&|;\s*(rm|curl|wget|bash)\s)`,
@@ -157,11 +157,24 @@
   // Unicode "tag" block (U+E0000–E007F): invisible ASCII-smuggling carriers.
   const TAG = /[\u{E0000}-\u{E007F}]/u;
 
+  // Letters NFD leaves alone, so diacritic stripping would otherwise miss them.
+  const LETTER_FOLD = { '\u0131': 'i', '\u0130': 'i', '\u00f8': 'o', '\u0142': 'l',
+    '\u00e6': 'ae', '\u0153': 'oe', '\u00df': 'ss', '\u0111': 'd' };
+
+  function stripDiacritics(s) {
+    let out = '';
+    for (const ch of s) out += (LETTER_FOLD[ch] || ch);
+    return out.normalize('NFD').replace(/\p{Mn}/gu, '');
+  }
+
   function fold(text) {
+    // Diacritic folding was missing while homoglyph, leetspeak, zero-width, bidi and
+    // unicode-tag handling were all present — the most trivial transformation went
+    // unnormalised, and "onceki tum talimatlari yok say" scored allow.
     const s = text.replace(FOLD_G, '').toLowerCase();
     let out = '';
     for (const ch of s) out += (HOMO[ch] || LEET[ch] || ch);
-    return out;
+    return stripDiacritics(out);
   }
 
   function b64one(text) {

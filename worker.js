@@ -1593,7 +1593,7 @@ footer{margin-top:104px;border-top:1px solid var(--line);padding-top:30px;paddin
   <div class="trust load d5">
     <span><span class=pulse></span>Live on the edge</span>
     <span><b>38</b> firewall detectors</span>
-    <span><b>22</b> static checks · 4 languages</span>
+    <span><b>22</b> static checks · 4 non-English languages</span>
     <span><b>0</b> API keys to try it</span>
     <span id=trustlive style="display:none"><b id=stblk>0</b> attacks stopped</span>
   </div>
@@ -1638,7 +1638,7 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
     <div class="s up"><div class=k>Test</div><h3>Static scanner</h3><p>22 detectors across the OWASP LLM Top 10 — findings, exploit links, and a hardened-prompt kit.</p></div>
     <div class="s up"><div class=k>Prevent</div><h3>CI gate</h3><p>Fail the build when an agent's prompt regresses. GitHub Action, exit-code gate, zero API. <a href="/ci">Setup →</a></p></div>
     <div class="s up"><div class=k>Attack</div><h3>Live red-team <span style="font-size:11px;color:var(--ink3);font-weight:600">BETA</span></h3><p>Fires a real adversarial corpus at your agent and has a judge model score each response. Marked beta on purpose: on our current judge the verdict is not yet reproducible run-to-run, so treat it as a lead, not a measurement. The scanner, firewall and tool-call gate are deterministic.</p></div>
-    <div class="s up"><div class=k>Defend</div><h3>Runtime firewall</h3><p>38 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. A joined-history pass (<code>/firewall-thread</code>) re-checks the whole conversation, catching a directive split across turns. Microsecond latency, 4 languages.</p></div>
+    <div class="s up"><div class=k>Defend</div><h3>Runtime firewall</h3><p>38 detectors block injection, jailbreak and exfiltration in untrusted input — plus deobfuscation of base64, leetspeak, homoglyph, zero-width, bidi and unicode-tag smuggling. A joined-history pass (<code>/firewall-thread</code>) re-checks the whole conversation, catching a directive split across turns. ~15&micro;s of compute. Non-English injection in Turkish, Spanish, German and French, with or without diacritics.</p></div>
     <div class="s up"><div class=k>Guard</div><h3>Tool-call firewall</h3><p>Screens a proposed <code>{name, arguments}</code> call before it runs — dangerous names, data-exfil, unbounded transfers, local-file and secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
   </div>
 </div>
