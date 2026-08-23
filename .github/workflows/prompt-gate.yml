@@ -1,0 +1,27 @@
+# REDCELL gating its own published prompts with its own tool.
+#
+# The workflow that used to sit here was the customer-facing TEMPLATE, written for paths that
+# only exist in someone else's repo — so it failed on every push and left a red X on a security
+# project's front page. The template now lives in examples/, and this runs instead.
+#
+# What it gates is not filler: prompts/ holds the hardened examples this project publishes and
+# tells people to copy. If our own advice ever drops below the threshold we ask customers to
+# hold, this build breaks before anyone else finds out.
+name: prompt gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Gate the prompts we publish
+        run: python3 redcell_ci.py "prompts/**/*.txt" --min-score 60 --no-color

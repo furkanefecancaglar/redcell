@@ -599,6 +599,11 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
     if (url.pathname === '/') { bump(env, ctx, 'landing', request); return new Response(LANDING, { headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } }); }
+    /* Paddle's verification form asks for a pricing page URL, and prices lived only in a
+       section of the landing page. Redirect rather than duplicate: a second copy of the price
+       is a second thing to forget to update, and this project has been bitten by exactly that
+       often enough. */
+    if (url.pathname === '/pricing') return Response.redirect(url.origin + '/#pricing', 302);
     if (url.pathname === '/pitch') return new Response(PITCH_PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=1800', ...CORS } });
     // Retired: /admin does the same job with a server-side gate, while this page's token
     // check ran client-side. One internal surface, one gate.
