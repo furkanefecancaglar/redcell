@@ -1811,3 +1811,32 @@ arrives. Measured it instead of assuming.
       All five layers pass.
 NOTE on method: the fix that mattered was not editing the copy, it was noticing the copy was
 outside the checker. A guard with a directory-shaped hole in it reads exactly like a guard.
+
+## ▶ round 59 — the latency claim, measured (2026-08-23)
+The copy says the firewall blocks injection "in microseconds", in four documents and three
+places on the live site. It is sold as a runtime hot-path check, so that number is the product.
+Never measured. Measured it.
+- [x] **Engine: 14.8 microseconds per inspect()**, 20,000 iterations of the same JS the Worker
+      runs, four representative inputs. So "microseconds" is TRUE — of the engine.
+- ⚠️ **Served: p50 800 ms, p95 1639 ms** from Türkiye. The engine is 0.003% of that. A reader
+      deciding whether to put this in their agent's hot path would have been badly misled.
+- [x] FOUND THE REAL SPLIT with a control instead of guessing: `/robots.txt`, a static string
+      from the same Worker, is ALSO ~800 ms p50 on a fresh connection — and ten requests over
+      one reused connection total 0.30 s, about 30 ms each. So the 800 ms is TLS setup and
+      network from here, not our processing.
+- [x] Rewrote the claims to say what is actually true and useful: ~15us of compute, and about
+      **3 ms added over returning a static file** — the network-independent number, which is the
+      only part that is about us. Four places on the live site, plus PITCH.md and GTM_LAUNCH.md.
+- [x] Guard so it cannot regress unnoticed: snippet_check now times /firewall against
+      /robots.txt over warm connections and fails if the gap exceeds 250 ms. Absolute latency
+      would just measure this machine's link; the gap only moves when our processing does.
+      First run: 3 ms. Second: -12 ms — indistinguishable from static, which is the point.
+- ⚠️ FOURTH transient-network crash in this harness, and this one was mine: the new latency
+      block used a bare fetch, so an ENETUNREACH took the whole suite down again. Source
+      downloads, then post(), then doc_check's links, then its /health probe — each fixed
+      individually, and the next new fetch reintroduced it every time. Retry now lives in the
+      fetch WRAPPER in all three tools, so call sites that do not exist yet inherit it.
+      All five layers pass.
+NOTE on method: "microseconds" was not a lie, it was a true statement about the wrong thing.
+The control endpoint is what separated our cost from the network's — a claim about latency
+without a control measures the tester's wifi.

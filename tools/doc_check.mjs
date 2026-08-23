@@ -27,10 +27,17 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
    added without the wrapper the other two tools have, and it fetches every REDCELL link in
    every document on each run — which is where "52 real landing visits" came from. */
 const _fetch = globalThis.fetch;
-globalThis.fetch = (url, opts = {}) => _fetch(url, {
-  ...opts,
-  headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) },
-});
+globalThis.fetch = async (url, opts = {}) => {
+  // Retry belongs in the wrapper, not at each call site: this same transient-network crash was
+  // fixed four times in a row, once per new fetch, before being put where new fetches inherit it.
+  const withHeaders = { ...opts, headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) } };
+  let last;
+  for (let i = 0; i < 3; i++) {
+    try { return await _fetch(url, withHeaders); }
+    catch (e) { last = e; await new Promise((r) => setTimeout(r, 500 * (i + 1))); }
+  }
+  throw last;
+};
 
 const failures = [];
 const ok = [];

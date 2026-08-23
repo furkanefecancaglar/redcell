@@ -19,10 +19,17 @@ const BASE = (process.argv[2] || 'https://redcell.redcellv1.workers.dev').replac
    Wrapping fetch once is the only reliable way — a header added per call site is a header
    someone forgets at the next call site, and the counters go quietly wrong again. */
 const _fetch = globalThis.fetch;
-globalThis.fetch = (url, opts = {}) => _fetch(url, {
-  ...opts,
-  headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) },
-});
+globalThis.fetch = async (url, opts = {}) => {
+  // Retry belongs in the wrapper, not at each call site: this same transient-network crash was
+  // fixed four times in a row, once per new fetch, before being put where new fetches inherit it.
+  const withHeaders = { ...opts, headers: { 'User-Agent': 'redcell-verify/1', 'X-REDCELL-Synthetic': '1', ...(opts.headers || {}) } };
+  let last;
+  for (let i = 0; i < 3; i++) {
+    try { return await _fetch(url, withHeaders); }
+    catch (e) { last = e; await new Promise((r) => setTimeout(r, 500 * (i + 1))); }
+  }
+  throw last;
+};
 
 const PAGES = [
   '/', '/docs', '/agents', '/ci', '/mcp', '/quickstart', '/example', '/vs',
