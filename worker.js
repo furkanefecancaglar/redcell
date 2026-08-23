@@ -119,6 +119,12 @@ function isSynthetic(request) {
 let _pending = {};
 let _pendingTotal = 0;
 let _lastFlush = 0;
+// Breach aggregates, batched the same way as the funnel counters. A lower threshold than the
+// funnel: the game is low-volume, so waiting for 25 plays would leave the leaderboard stale.
+let _bPending = { attempts: 0, wins: 0, blocked: 0 };
+let _bTech = {};
+let _bLastFlush = 0;
+const BREACH_FLUSH_EVERY = 5;
 const FLUSH_EVERY = 25;        // writes at most 1 KV key per 25 counted requests
 const FLUSH_MS = 5 * 60_000;   // ...or every five minutes, so a quiet site still records traffic
 
@@ -1057,19 +1063,40 @@ export default {
             const rec = JSON.stringify({ ts: Date.now(), level: lvl.n, name: lvl.name, message: safeMsg.slice(0, 500), blocked: !!t.blocked, win: !!t.win });
             ctx.waitUntil((async () => {
               try {
+                /* Three KV writes per attempt was the second-heaviest path in the product, and
+                   two of them were pure aggregates. The per-attempt record stays — that is the
+                   data the game exists to collect — but `stats` and `techniques` accumulate in
+                   the isolate and flush together, exactly like the funnel counters. Same
+                   trade-off, stated the same way: these become floor counts, and they were
+                   never exact anyway because the read-modify-write races between isolates. */
                 await env.BREACH_LOG.put('atk:' + Date.now() + ':' + Math.random().toString(36).slice(2, 8), rec, { expirationTtl: 60 * 60 * 24 * 120 });
-                const raw = await env.BREACH_LOG.get('stats');
-                const st = raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 };
-                st.attempts++; if (t.win) st.wins++; if (t.blocked) st.blocked++;
-                await env.BREACH_LOG.put('stats', JSON.stringify(st));
+
+                _bPending.attempts += 1;
+                if (t.win) _bPending.wins += 1;
+                if (t.blocked) _bPending.blocked += 1;
                 // technique fingerprint: which firewall rules the attempt tripped — counts only, no message/PII
-                const fv = inspect(safeMsg);
-                const ids = (fv.matches || []).map(function (m) { return m.id; }).filter(Boolean);
-                if (ids.length) {
-                  const traw = await env.BREACH_LOG.get('techniques');
-                  const tc = traw ? JSON.parse(traw) : {};
-                  for (const id of ids) tc[id] = (tc[id] || 0) + 1;
-                  await env.BREACH_LOG.put('techniques', JSON.stringify(tc));
+                for (const id of (inspect(safeMsg).matches || []).map((m) => m.id).filter(Boolean)) {
+                  _bTech[id] = (_bTech[id] || 0) + 1;
+                }
+
+                const bNow = Date.now();
+                if (_bLastFlush === 0) _bLastFlush = bNow;
+                if (_bPending.attempts >= BREACH_FLUSH_EVERY || (bNow - _bLastFlush) > FLUSH_MS) {
+                  const pend = _bPending; const tech = _bTech;
+                  _bPending = { attempts: 0, wins: 0, blocked: 0 }; _bTech = {};
+                  _bLastFlush = bNow;
+
+                  const raw = await env.BREACH_LOG.get('stats');
+                  const st = raw ? JSON.parse(raw) : { attempts: 0, wins: 0, blocked: 0 };
+                  st.attempts += pend.attempts; st.wins += pend.wins; st.blocked += pend.blocked;
+                  await env.BREACH_LOG.put('stats', JSON.stringify(st));
+
+                  if (Object.keys(tech).length) {
+                    const traw = await env.BREACH_LOG.get('techniques');
+                    const tc = traw ? JSON.parse(traw) : {};
+                    for (const [id, n] of Object.entries(tech)) tc[id] = (tc[id] || 0) + n;
+                    await env.BREACH_LOG.put('techniques', JSON.stringify(tc));
+                  }
                 }
               } catch (e) { /* logging is best-effort */ }
             })());

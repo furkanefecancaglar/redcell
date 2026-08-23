@@ -2029,3 +2029,26 @@ suite was spending the same 1,000-a-day budget a paying customer needs, and losi
       a server holding the port. All five layers pass.
 NOTE on method: "we cannot test this because the quota is spent" was a false constraint. The
 thing being tested was our own code, and our own code runs locally for free.
+
+## ▶ round 66 — the second-heaviest write path (2026-08-23)
+Quota still exhausted at 08:51 UTC, nine hours past midnight. Continued trimming write cost.
+- ⚠️ /breach cost **three KV writes per message**: the per-attempt record plus two aggregates
+      (`stats` and `techniques`), each a read-modify-write. After sign-up, the heaviest path.
+- [x] The per-attempt record stays — it is the data the game exists to collect. The two
+      aggregates now accumulate in the isolate and flush together, like the funnel counters,
+      at a lower threshold (5 plays, not 25) because the game is low-volume and a stale
+      leaderboard is the cost of waiting.
+- [x] VERIFIED THE ARITHMETIC, which is the part that would actually be wrong — the KV plumbing
+      is the same shape as bump() and already proven. Simulated 23 plays through the exact
+      accumulate-and-flush code: **20 flushed + 3 pending = 23, nothing lost at a boundary and
+      nothing double counted**; wins 4/4, blocked 8/8, techniques 11/11. Aggregate writes fell
+      from 2.00 per attempt to **0.35**, so /breach goes from 3 writes to about 1.35.
+      Kept as tools/breach_batch_sim.mjs, exiting non-zero if the invariant breaks, because the
+      live path needs NIM keys and a working quota and today has neither.
+- [x] Stated honestly: the live /breach path is NOT verified today. The arithmetic is.
+      All five layers pass, teardown clean, zero listeners left.
+RUNNING TOTAL of write cost per user action, after rounds 63-66:
+      counted request  1     -> 0.04   (batched 25:1)
+      sign-up          5     -> 3      (dropped a write-only counter and a stored default)
+      breach message   3     -> 1.35   (aggregates batched 5:1)
+      selfcheck        1     -> 0.1    (sampled)
