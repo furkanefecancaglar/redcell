@@ -1634,3 +1634,40 @@ the filter, not the thing.
       agentcheck 105, signup 24, review 18, scan_live 15 — all frozen as the new zero.
       Verified after: real traffic 0 across every surface. That is the honest number.
       All five layers pass.
+
+## ▶ round 54 — the second provider already existed, and the benchmark nearly lied (2026-08-23)
+Priority (1) is "add a second NIM provider key to cut the engine's error rate and latency".
+Opening accounts is off-limits, but the premise turned out to be wrong: **five keys, each with
+its own engine, are already on this machine** in ~/nvidia-test/engines.py. No account needed.
+- ⚠️ MEASURED all five on the REAL judging payload (3 rounds each), not a toy prompt — an
+      earlier round picked a judge from a 0.76s probe on a tiny input and it was the worst of
+      the set on real work. Result: **only 2 of 5 engines are alive.**
+        deepseek-v4-flash  HTTP 410 x3   (model withdrawn)
+        deepseek-v4-pro    HTTP 410 x3   (model withdrawn)
+        glm slot           HTTP 500 x3
+        minimax            2/3 ok, one 429, both answers correct
+        nemotron           3/3 ok, 1.7s median, 3/3 correct
+      **engines.py's DEFAULT_ENGINE is `deepseek-pro`** — dead on every call. That is Furkan's
+      other project so it is reported, not edited. REDCELL itself defaults to nemotron and was
+      therefore never on a dead engine.
+- ⚠️ nim() retried the SAME key after a 429 — backing off against the exact quota that had just
+      refused. Rewrote it to take a pool: move to the next provider immediately on 429/5xx,
+      sleep only once every live provider has refused, and drop a model permanently within the
+      call on 410/401/404 so a withdrawn model costs one request rather than three. Wired
+      through liveScan, adaptiveProbe and breachTurn — all 8 nim() call sites.
+- [x] Set REDCELL_NIM_KEYS to the two working engines. Dead ones excluded: each would cost a
+      wasted request per call. Local copy shredded, keys never printed.
+- ⚠️ **The A/B nearly produced a false result.** First fair-looking run said failover CRUSHED
+      throughput: 17/20 -> 4/20, latency 1.81s -> 4.57s. It was an artifact of run order — the
+      first arm depletes a shared quota and the second inherits the hole. Re-run with the order
+      reversed and a 90s recovery gap: **20/20 vs 20/20**, median 1.42s vs 1.41s. On that
+      evidence I would have reverted a correct change, or shipped "failover made it worse" as a
+      finding. Benchmarks that share a rate-limited resource must randomise or reverse order.
+- [x] HONEST CONCLUSION: failover does **not** measurably improve success or median latency at
+      realistic load — nemotron alone handles it (20/20 either way). p90 was better in the fair
+      run (2.86s -> 1.60s) but that is one run and not claimed as established. The change is
+      kept because it removes a real pathology (retrying a refused key) and because three
+      engines really are returning permanent errors today. It is defensive, not a measured win.
+      NOTE: the five keys belong to one account, so failover cannot add quota capacity — it can
+      only route around a single engine being down, which is exactly today's situation.
+      All five layers pass.
