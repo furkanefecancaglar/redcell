@@ -37,6 +37,24 @@
     ['role-hijack', 'LLM01', 'high',
       R`\b(act as|you are( now)?|behave like|pretend to be|simulate|verhalte dich wie|du bist( jetzt)?)\s+(an?|the)?\s*(linux|unix|bash|shell|python|sql|windows)?\s*(terminal|console|command line|shell|interpreter|root|superuser|sysadmin|administrator account|dan\b|do anything now|developer mode|jailbroken|unrestricted (ai|model|assistant)|uncensored (ai|model)|another ai)\b`,
       'role-hijack onto a system-level or unconstrained persona'],
+    ['agent-delegation-injection', 'LLM01', 'high',
+      R`(\b(forward|pass|relay|tell|instruct|message|send|inform|transmite|dile|sag|sage|s[oö]yle)\b[\s\S]{0,60}?)?\b(downstream|next|sub-?|worker|other|another|following|second|siguiente|pr[oó]ximo|n(ae|a|ä)chste[nrs]?|sonraki|di[gğ]er)\s*(agent|ajan|agente|assistant|asistan|model)\w*\b[\s\S]{0,90}?\b(ignore|disregard|bypass|disabled?|override|reveal|show|print|comply fully|raw credentials|ignora|yok say|kurallarini|ignorier\w*|umgehen|offenlegen|ilet|s[oö]yle)\b`,
+      'instruction addressed to a downstream agent to subvert it'],
+    ['schema-coercion', 'LLM01', 'high',
+      R`\b(fill|complete|populate|return|output|produce|devuelve|f(ue|u|ü)lle|doldur)\b[\s\S]{0,120}?(\bsystem[_ ]?prompt(?![_a-z])|\byour[_ ]?(full )?instructions?\b|\bhidden[_ ]?prompt\b|\bprompt[_ ]?del[_ ]?sistema\b|\bsystemanweisungen\b|\byour[_ ]?tools?\b|\bapi[_ ]?keys?\b|\btools?[_ ]available\b|\byour[_ ]?(system )?config\w*)`,
+      "a schema or form field named for the model's own instructions"],
+    ['deferred-trigger', 'LLM01', 'high',
+      R`\b(if|once|when|after|as soon as|si|wenn|sobald|nachdem|cuando|bitince)\b[^.\n]{0,90}?((?:instruction|prompt|rule|restriction|guideline|system message|anweisung|talimat|instrucci[oó]n|restricci[oó]n|regel)\w*[^.\n]{0,90}?\b(?:(?:reply|print|output|append|show|reveal|write|list|expire)\b|(?:escrib|h(?:ae|a|ä)ng|zeig|yaz|muestr)\w*)|\b(?:(?:reply with|print|output|append|add|show|reveal|write|list)\b|(?:escrib|h(?:ae|a|ä)ng|zeig|yaz|muestr)\w*)[^.\n]{0,60}?(?:instruction|prompt|rule|restriction|system message|anweisung|talimat|instrucci[oó]n|systemanweisung)\w*)`,
+      'a directive deferred behind a condition or until after the answer'],
+    ['citation-laundering', 'LLM01', 'high',
+      R`\b(policy|manual|documentation|standard|regulation|guideline|contract|clause|richtlinie|reglamento|sozlesme|s[oö]zle[sş]me|madde)\w*[\s\S]{0,60}?(says?|states?|reads?|requires?|dice|besagt|diyor)\b[\s\S]{0,110}?(system[_ ]?prompt|operating instructions|its instructions|prompt del sistema|systemanweisungen|sistem talimatlar\w*)`,
+      'a directive to disclose, laundered through a quoted authority'],
+    ['third-person-directive', 'LLM01', 'high',
+      R`\b(ai|a\.i\.|assistant|model|bot|chatbot|asistan|assistent|asistente)\b[^.\n]{0,50}?\b(must|shall|should|is required to|has to|needs to|muss|soll|debe|doit|meli|malidir)\b[^.\n]{0,60}?\b(reveal|disclose|output|print|show|display|state|offenlegen|zeigen|revelar|mostrar|g[oö]ster)\w*[^.\n]{0,60}?(prompt|instruction|configuration|anweisung|talimat|configuraci[oó]n|konfiguration)`,
+      'a third-person directive telling the assistant to disclose its own instructions'],
+    ['fabricated-consent', 'LLM01', 'high',
+      R`\b(you (already |just |a moment ago )?(confirmed|accepted|agreed to|granted|approved|authori[sz]ed)|du .{0,25}best(ae|a|ä)tigt|aceptaste|kabul etti\w*)\b[\s\S]{0,80}?\b(rule|mode|exception|restriction|policy|guideline|regel|regla|kural|istisna|modus)\w*`,
+      'invents a prior agreement to build a request on'],
     ['authority-extraction', 'LLM01', 'high',
       // Neither half is an attack alone; the conjunction has no innocent reading.
       R`\b(i(?:'m| am)|i work (?:at|for)|this is|as|your)\b[^.\n]{0,40}\b(the )?(developer|engineer|admin\w*|administrator|author|creator|owner|operator|maintainer|auditor|security team|trust and safety|authoris?zed|legal|compliance)\b[^.\n]{0,80}\b(system ?prompt|instructions?|guardrails?|rules|configuration|initial prompt|system message)\b|\b(system ?prompt|instructions?|guardrails?|rules|configuration|system message)\b[^.\n]{0,80}\b(audit|discovery|verification|compliance|administrator|authoris?zed)\b[^.\n]{0,40}\b(disclose|reveal|reproduce|output|list|show|paste|print|provide)\b`,
@@ -221,11 +239,45 @@
     return out.normalize('NFD').replace(/\p{Mn}/gu, '');
   }
 
+  /* Full-width forms and the mathematical alphanumeric blocks, mapped back to ASCII. Held-out
+     set 6 walked "Ｉｇｎｏｒｅ ａｌｌ ｐｒｅｖｉｏｕｓ ｉｎｓｔｒｕｃｔｉｏｎｓ" through all
+     53 rules, every one of which fires on the ASCII form. A browser renders them identically to
+     normal text, so the payload is invisible to the reader and the matcher at once. Done as a
+     fold so every rule inherits it, same as the rot13 and percent-encoding views. */
+  const MATH_FOLD = (() => {
+    const t = new Map();
+    for (const start of [0x1D400, 0x1D434, 0x1D468, 0x1D49C, 0x1D4D0, 0x1D504, 0x1D538, 0x1D56C,
+                         0x1D5A0, 0x1D5D4, 0x1D608, 0x1D63C, 0x1D670, 0x1D6A4]) {
+      for (let i = 0; i < 26; i++) {
+        if (!t.has(start + i)) t.set(start + i, String.fromCharCode(97 + i));
+        if (!t.has(start + 26 + i)) t.set(start + 26 + i, String.fromCharCode(97 + i));
+      }
+    }
+    for (const start of [0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6]) {
+      for (let i = 0; i < 10; i++) if (!t.has(start + i)) t.set(start + i, String.fromCharCode(48 + i));
+    }
+    return t;
+  })();
+
+  function wideFold(s) {
+    // eslint-disable-next-line no-control-regex
+    if (!/[^\x00-\x7F]/.test(s)) return s;   // the common case pays nothing
+    let out = '';
+    for (const ch of s) {
+      const cp = ch.codePointAt(0);
+      if (cp >= 0xFF01 && cp <= 0xFF5E) out += String.fromCharCode(cp - 0xFEE0);
+      else if (cp === 0x3000) out += ' ';
+      else if (cp >= 0x1D400 && cp <= 0x1D7FF) out += (MATH_FOLD.get(cp) || ch);
+      else out += ch;
+    }
+    return out;
+  }
+
   function fold(text) {
     // Diacritic folding was missing while homoglyph, leetspeak, zero-width, bidi and
     // unicode-tag handling were all present — the most trivial transformation went
     // unnormalised, and "onceki tum talimatlari yok say" scored allow.
-    const s = text.replace(FOLD_G, '').toLowerCase();
+    const s = wideFold(text.replace(FOLD_G, '').toLowerCase());
     let out = '';
     for (const ch of s) out += (HOMO[ch] || LEET[ch] || ch);
     return stripDiacritics(out);
