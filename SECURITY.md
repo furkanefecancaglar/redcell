@@ -76,6 +76,18 @@ oversells itself is a liability to the people who trust it.
   single turn**, because the same work made phrases like "everything that appears above my first
   message" individually detectable, so the genuine staged-only figure is **10 of the 12 threads
   that remain purely staged**.
+
+- **Then the same axis was measured again on a set built to avoid the phrasings that repair
+  trained on** — no "you were given", no "verbatim", no "exact wording". It scores **1 of 15**,
+  back to the floor, immediately after the round that took the previous set from 1/15 to 13/15.
+  Zero false positives on its 15 ordinary threads.
+
+  That is the honest summary of every number on this page: **closing a family generalises to that
+  family and not past it.** Seven independent sets read 48%, 54%, 53%, 13%, 6.5%, 6.7%, 6.7%. The
+  high figures describe attacks that announce themselves; the low ones describe attacks that do
+  not. A matcher closes phrasings, not problems. That is why this is positioned as a cheap
+  first pass with a 0–1% false-positive rate, and why the advice is to put a model-based layer
+  behind it rather than to rely on this one.
   Set D's families have since been closed the same way the others were, taking its rule detection
   from 4/30 to 26/30 — which retires set D as a measurement and means the next honest number needs
   a set E. The gap it exposed was a single missing idea rather than a missing pattern: the object,
