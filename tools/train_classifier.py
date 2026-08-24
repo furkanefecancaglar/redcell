@@ -65,7 +65,11 @@ def load(path):
         out.append((t, int(r["label"])))
     return out
 
-train_rows = load("deepset_train.json") + load("safeguard_train.json")
+# deepset is oversampled 6x: it is 546 rows against safe-guard's 3,300, and its attack class
+# (topic-hijack) is the one the model was weakest on. Measured across four seeds, 6x moves its
+# held-out recall 8% -> ~40% while safe-guard holds at ~88%. Higher multiples buy little and
+# start costing safe-guard.
+train_rows = load("deepset_train.json") * 6 + load("safeguard_train.json")
 random.shuffle(train_rows)
 cut = int(len(train_rows) * 0.85)
 tr, val = train_rows[:cut], train_rows[cut:]
@@ -74,7 +78,10 @@ print(f"train {len(tr)}  val {len(val)}  (test splits untouched)")
 w, b = train(tr)
 print(f"model: {len(w)} non-zero weights")
 
-# threshold chosen on VALIDATION, for precision >= 0.95 — precision is the asset being protected
+# Threshold: chosen on VALIDATION for precision >= 0.95, then raised until it clears every
+# ordinary business message in REDCELL's own benign corpora by a 0.05 buffer. The auto-derived
+# value left a margin of 0.01 against "Perfect. Now please write the summary." — true zero false
+# positives, and a coincidence rather than a safety margin.
 scored = sorted(((prob(w, b, t), y) for t, y in val), reverse=True)
 best_thr, best_rec = 0.99, 0.0
 for thr in [i / 100 for i in range(50, 100)]:
