@@ -26,6 +26,7 @@ import time
 import urllib.request
 
 sys.path.insert(0, __file__.rsplit("/tools/", 1)[0])
+import redcell_classifier as clf  # noqa: E402
 import redcell_firewall as fw  # noqa: E402
 
 DATASETS = [
@@ -82,23 +83,29 @@ def main():
         if rows is None:
             print(f"{dataset} [{split}]: unreachable, skipped")
             continue
-        tp = fp = tn = fn = 0
+        # Both stages, separately and combined. The optional classifier is off by default in the
+        # product, so reporting only the combined number would overstate what a caller gets
+        # without asking for it.
+        stages = {"rules only": [0, 0, 0, 0], "rules + classifier": [0, 0, 0, 0]}
         for r in rows:
-            detected = fw.inspect(text_of(r)).action in ("flag", "block")
+            text = text_of(r)
             attack = int(r["label"]) == 1
-            if attack and detected:
-                tp += 1
-            elif attack:
-                fn += 1
-            elif detected:
-                fp += 1
-            else:
-                tn += 1
-        rec = tp / (tp + fn) if tp + fn else 0.0
-        pre = tp / (tp + fp) if tp + fp else 0.0
-        print(f"{dataset} [{split}] — {len(rows)} rows, {tp + fn} attack / {tn + fp} benign")
-        print(f"   recall {rec * 100:5.1f}%   precision {pre * 100:5.1f}%   "
-              f"false positives {fp} ({100 * fp / (tn + fp):.1f}% of benign)")
+            by_rule = fw.inspect(text).action in ("flag", "block")
+            by_both = by_rule or clf.score(text) >= clf.THRESHOLD
+            for name, detected in (("rules only", by_rule), ("rules + classifier", by_both)):
+                c = stages[name]
+                c[0] += attack and detected
+                c[1] += (not attack) and detected
+                c[2] += (not attack) and (not detected)
+                c[3] += attack and (not detected)
+        first = stages["rules only"]
+        print(f"{dataset} [{split}] — {len(rows)} rows, "
+              f"{first[0] + first[3]} attack / {first[1] + first[2]} benign")
+        for name, (tp, fp, tn, fn) in stages.items():
+            rec = tp / (tp + fn) if tp + fn else 0.0
+            pre = tp / (tp + fp) if tp + fp else 0.0
+            print(f"   {name:<20} recall {rec * 100:5.1f}%   precision {pre * 100:5.1f}%   "
+                  f"false positives {fp} ({100 * fp / (tn + fp):.1f}% of benign)")
     return 0
 
 

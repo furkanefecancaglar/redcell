@@ -41,6 +41,13 @@ oversells itself is a liability to the people who trust it.
   exceeds three messages"), directives laundered through a citation, and full-width unicode.
   Those are published rather than fixed quietly, because a set you repair against stops measuring
   anything. See `/methodology`.
+- An **optional** second stage (`classifier: true`, off by default) adds a 3,000-weight logistic
+  regression trained on the public training splits — 47 KB in the bundle, no API call, no key.
+  It takes third-party recall from 28% to 91% on safe-guard at 98% precision, moves deepset from
+  17% to 18%, and adds **nothing** on our own independent set: it learned those corpora's
+  distribution, not the general problem. It can only escalate allow→flag and never blocks, since
+  a component that cannot explain its verdict should not hard-stop traffic. Reproduce with
+  `python tools/thirdparty_bench.py`.
 - Non-English coverage is Turkish, Spanish, German and French. Attacks in other languages are
   **not** detected, and that is asserted in the test suite so it cannot become an accidental claim.
 - A high prompt score means known weaknesses are absent. It is not proof an agent is safe.

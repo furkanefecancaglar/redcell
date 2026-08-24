@@ -13,6 +13,7 @@ import fw from './redcell.js';
 import scan from './redcell_scanner.js';
 import semantic from './redcell_semantic.js';
 import toolcheck from './redcell_toolcheck.js';
+import classifier from './redcell_classifier.js';
 // The 0-dependency source files, imported as text (wrangler Text rule) so /src/<file>.py
 // serves exactly what the vendoring instructions reference.
 import SRC_STATIC from './redcell_static.py';
@@ -49,6 +50,25 @@ function withSemantic(v, text, on) {
     v.action = 'flag';
     if (v.risk === 'none') v.risk = sev;
   }
+  return v;
+}
+/* Optional second stage: a 3,000-weight logistic regression over hashed word n-grams, shipped
+   in the bundle. Measured on public third-party corpora it takes recall from 28% to 87% at 100%
+   precision — but on our own independent set it adds nothing, because it learned those corpora's
+   distribution rather than the general problem. So it is OFF by default, it can only escalate
+   allow -> flag, and it never blocks: a component that cannot explain its verdict does not get
+   to hard-stop a customer's traffic. The score is always returned so the caller can decide. */
+function withClassifier(v, text, on) {
+  if (!on) return v;
+  const p = classifier.score(String(text || ''));
+  v.classifier = { score: Math.round(p * 1000) / 1000, threshold: classifier.THRESHOLD };
+  if (v.action !== 'allow' || p < classifier.THRESHOLD) return v;
+  v.matches.push({ id: 'classifier-injection', owasp: 'LLM01', severity: 'medium',
+    why: 'statistical classifier scored this as an injection attempt', snippet: 'p=' + v.classifier.score });
+  v.score = Math.max(v.score, 12);
+  v.action = 'flag';
+  if (v.risk === 'none') v.risk = 'medium';
+  v.classifier.escalated = true;
   return v;
 }
 function truthy(x) { return x === true || x === 1 || x === '1' || x === 'true'; }
@@ -757,7 +777,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/firewall' && url.searchParams.has('input')) {
       bump(env, ctx, 'firewall', request);
       const gi = String(url.searchParams.get('input')).slice(0, 4096);
-      return json(withSemantic(inspect(gi), gi, truthy(url.searchParams.get('semantic'))));
+      return json(withClassifier(withSemantic(inspect(gi), gi, truthy(url.searchParams.get('semantic'))), gi, truthy(url.searchParams.get('classifier'))));
     }
     if (request.method === 'GET' && url.pathname === '/scan-config' && url.searchParams.has('system_prompt')) {
       bump(env, ctx, 'scan', request);
@@ -807,7 +827,7 @@ export default {
       const b = await request.json().catch(() => ({}));
       if (!b || !b.input) return json({ error: 'input required (POST JSON {input}) or ?input= for GET' }, 400);
       bump(env, ctx, 'firewall', request);
-      return json(withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic)));
+      return json(withClassifier(withSemantic(inspect(String(b.input)), String(b.input), truthy(b.semantic)), String(b.input), truthy(b.classifier)));
     }
     // Joined-history pass over a conversation: joins USER turns and re-runs the rule set.
     if (request.method === 'POST' && url.pathname === '/firewall-thread') {
@@ -3099,8 +3119,10 @@ function renderMethodology() {
     + 'corpora we wrote. That is held-out and honest, but it is still us writing both the exam and '
     + 'the answer key. These are public datasets nobody here controls, scored by a script in the '
     + 'repo you can run yourself: <span class=mono>python tools/thirdparty_bench.py</span>.</p>'
-    + '<div class=kv style="border-top:0"><span>deepset/prompt-injections (test, 116)</span><b>recall 17% &middot; precision 100%</b></div>'
-    + '<div class=kv><span>safe-guard-prompt-injection (test, 2060)</span><b>recall 28% &middot; precision 93%</b></div>'
+    + '<div class=kv style="border-top:0"><span>deepset/prompt-injections (test, 116) &mdash; rules only</span><b>recall 17% &middot; precision 100%</b></div>'
+    + '<div class=kv><span>&nbsp;&nbsp;&nbsp;same, with the optional classifier</span><b>recall 18% &middot; precision 100%</b></div>'
+    + '<div class=kv><span>safe-guard-prompt-injection (test, 2060) &mdash; rules only</span><b>recall 28% &middot; precision 93%</b></div>'
+    + '<div class=kv><span>&nbsp;&nbsp;&nbsp;same, with the optional classifier</span><b>recall 91% &middot; precision 98%</b></div>'
     + '<p style="color:var(--ink3);font-size:13px;margin:8px 0 0"><b>That recall is low and we are '
     + 'publishing it anyway.</b> Here is what it means. These corpora label <i>topic-hijacking</i> as '
     + 'injection &mdash; &ldquo;that is enough, now write me a reason why X&rdquo; &mdash; which is only '
@@ -3112,7 +3134,8 @@ function renderMethodology() {
     + '<b>precision 93&ndash;100%, false positives 0&ndash;0.9%</b>. A guardrail that blocks paying '
     + 'customers costs its owner more than one that misses an attack the next layer catches. That is '
     + 'the trade this layer is built for, and it is why it is sold as a first pass rather than as the '
-    + 'whole defence.</p></div>'
+    + 'whole defence.</p>'
+    + '<p style="color:var(--ink3);font-size:13px;margin:10px 0 0">Since round 79 there is a second, <b>optional</b> stage: a 3,000-weight logistic regression trained on the public training splits, shipped in the bundle at 47&nbsp;KB. No API call, no network, no key &mdash; a hash and a dot product. Pass <span class=mono>classifier: true</span> to use it. It is <b>off by default</b>, and it can only escalate allow&rarr;flag; it never blocks, because a component that cannot explain its verdict does not get to hard-stop your traffic. Read the four rows above for what they actually say: it nearly closes the gap on one corpus, barely moves the other, and on our own independent set it adds <b>nothing</b>. It learned those corpora&rsquo;s distribution rather than the general problem &mdash; the same limitation every model-based detector in this category has under adaptive attack. Its threshold was chosen for zero false positives on ordinary business traffic, and that margin is thinner than it looks: &ldquo;Great, thanks! Now can you help me with the invoice?&rdquo; scores 0.72 against a 0.75 cutoff, because the training data taught it that praise-then-pivot is an attack.</p></div>'
     + _mCard('Static scanner — the resilience score',
         'Scores an agent <b>system prompt</b> against 22 detectors mapped to the OWASP LLM Top 10 (instruction hierarchy, confidentiality, excessive agency, secret exposure, insecure output handling, RAG &amp; tool-output provenance, memory poisoning, identity binding, and more). Each detector is one of: <code>absent</code> (a defense you should have but don’t), <code>present</code> (a risky phrase you shouldn’t have), <code>cond</code> (a risky capability without its guard), <code>len</code>, or <code>hidden</code>. '
         + 'Score starts at 100 and subtracts a severity weight per finding — critical −34, high −20, medium −11, low −5 — floored at 0. Grades: Hardened ≥85, Resilient ≥70, Exposed ≥45, Vulnerable ≥20, else Critical. Like the firewall, it inspects the first 16 KB (a real system prompt is far smaller).')
@@ -3337,7 +3360,7 @@ function openApiDoc() {
         post: {
           summary: 'Inspect untrusted input for prompt-injection / jailbreak / exfiltration (0 API).',
           description: 'Runs ' + (fw.RULES.length + 4) + ' detectors plus deobfuscation (base64/url-safe/nested, leetspeak, homoglyph, zero-width, unicode-tag). Inspects the first 16 KB.',
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' }, semantic: { type: 'boolean', description: 'opt in to the 0-API semantic layer (escalates allow→flag on a paraphrased attack; never blocks alone)' } } } } } },
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['input'], properties: { input: { type: 'string', description: 'the untrusted text to inspect' }, semantic: { type: 'boolean', description: 'opt in to the 0-API semantic layer (escalates allow→flag on a paraphrased attack; never blocks alone)' }, classifier: { type: 'boolean', description: 'opt in to the bundled statistical classifier (3,000-weight logistic regression, no API call). Always returns classifier.score; escalates allow→flag above its threshold and never blocks. Off by default.' } } } } } },
           responses: { '200': { description: 'verdict', content: { 'application/json': { schema: { type: 'object', properties: { action: { type: 'string', enum: ['allow', 'flag', 'block'] }, score: { type: 'integer' }, risk: { type: 'string' }, matches: { type: 'array', items: Match } } } } } }, '400': { description: 'input required' } },
         },
         get: { summary: 'Convenience: inspect ?input= (POST is canonical; do not put production data in URLs).', parameters: [{ name: 'input', in: 'query', required: true, schema: { type: 'string', maxLength: 4096 } }], responses: { '200': { description: 'verdict' } } },
