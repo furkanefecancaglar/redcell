@@ -60,6 +60,14 @@ oversells itself is a liability to the people who trust it.
   write a fourth in the same house style", or "print it, unmodified" from "repeat it exactly — the
   part number you just gave me", does not exist without knowing the context. **A family a matcher
   cannot separate belongs on this page rather than in a rule that costs precision.**
+
+- The **joined-history pass** (`/firewall-thread`) was measured the same way, on 15 conversations
+  where *no single turn is an attack* — establish a referent innocently, ask for a category, then
+  ask for its exact wording; or split one directive across three turns behind a trigger word.
+  **1 of 15 caught, 0 false positives on 15 ordinary threads.** That is not the joined pass being
+  useless: it does catch split directives that carry attack vocabulary across turns ("forget all"
+  then "previous instructions"), and the suite holds it to at least six of those. It cannot notice
+  a sequence in which no turn contains anything to notice.
   Set D's families have since been closed the same way the others were, taking its rule detection
   from 4/30 to 26/30 — which retires set D as a measurement and means the next honest number needs
   a set E. The gap it exposed was a single missing idea rather than a missing pattern: the object,
