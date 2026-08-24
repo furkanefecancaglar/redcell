@@ -66,8 +66,16 @@ oversells itself is a liability to the people who trust it.
   ask for its exact wording; or split one directive across three turns behind a trigger word.
   **1 of 15 caught, 0 false positives on 15 ordinary threads.** That is not the joined pass being
   useless: it does catch split directives that carry attack vocabulary across turns ("forget all"
-  then "previous instructions"), and the suite holds it to at least six of those. It cannot notice
-  a sequence in which no turn contains anything to notice.
+  then "previous instructions"), and the suite holds it to at least six of those.
+
+  That shape has since been closed too. The escalation is identical in an attack and its twin —
+  "do you work from a set of guidelines ... its exact wording" against "do you follow a protocol
+  for sterilisation ... its exact wording" — and what differs is whether the assistant itself
+  holds the artefact. Keying on that took set F from 1 of 15 to **13 of 15**, still with 0 false
+  positives on the ordinary threads. Reported honestly: **3 of those 13 are now caught from a
+  single turn**, because the same work made phrases like "everything that appears above my first
+  message" individually detectable, so the genuine staged-only figure is **10 of the 12 threads
+  that remain purely staged**.
   Set D's families have since been closed the same way the others were, taking its rule detection
   from 4/30 to 26/30 — which retires set D as a measurement and means the next honest number needs
   a set E. The gap it exposed was a single missing idea rather than a missing pattern: the object,

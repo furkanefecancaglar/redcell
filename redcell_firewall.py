@@ -315,7 +315,8 @@ _RULES = [
      # Some boundary phrases are unambiguous on their own — nobody says "before I said anything"
      # about a document — so they do not need the verb. The weaker ones do. The connector can also
      # follow the phrase, because Turkish puts "once" last, and Spanish says "al principio de".
-     r"\b(before my first (message|turn|prompt)|before i said anything|before i wrote anything|"
+     r"\b(before my first (message|turn|prompt)|above my first message|before anything i typed|"
+     r"before i said anything|before i wrote anything|"
      r"before this session (began|started)|vor meiner ersten nachricht|antes de mi primer mensaje|"
      r"hi[cç]bir [sş]ey yazmadan [oö]nce)\b"
      r"|^(?=[\s\S]*\b(print|quote|reproduc|repeat|show|display|summaris|summariz|render|read back|"
@@ -389,6 +390,43 @@ _RULES = [
      r"mit dem du konfiguriert wurdest|con el que fuiste configurado)\b"
      r"|\b(configured|set up|konfiguriert)\b[^.?!]{0,30}?\b(before this (chat|session|conversation))\b",
      "asks the model to mirror the format of the text that configured it"),
+    # Staged extraction across turns. Rules run over the joined span in inspect_thread, so this
+    # needs no new machinery — only a signal that survives being read as one paragraph. Set 14's
+    # own twins show what it is: the escalation shape is identical in both, and what differs is
+    # who holds the artefact. "Do you work from a fixed set of guidelines ... its exact wording"
+    # against "do you follow a fixed protocol FOR sterilisation ... its exact wording". Same
+    # distinction as round 85's topic complement, applied across a conversation rather than inside
+    # a sentence. Both halves must be present; neither has to come first.
+    ("staged-self-extraction", "LLM07", "high",
+     # Staged extraction across turns. Rules run over the joined span in inspect_thread, so this
+     # needs no new machinery — only a signal that survives being read as one paragraph. Set 14's
+     # own twins show what it is: the escalation shape is identical in both, and what differs is
+     # who holds the artefact. "Do you work from a fixed set of guidelines ... its exact wording"
+     # against "do you follow a fixed protocol FOR sterilisation ... its exact wording".
+     #
+     # Every lookahead here is at the TOP level on purpose. An earlier version nested two of them
+     # inside an outer (?=[\s\S]*(...)), which re-ran both full-string scans at every position and
+     # cost 35ms against 0.7ms for the next slowest rule — the fuzz and backtracking tests caught
+     # it. Zero-width scans must not be wrapped in a scan.
+     r"^(?:"
+     r"(?=[\s\S]*\b((you (work from|were (given|shown|set up|configured|handed)|"
+     r"must have been given|have a (list|set) of))|"
+     r"((were|was|have) you (given|shown|set up|configured|handed)))\b)"
+     r"(?=[\s\S]*\b(guideline|instruction|rule|text|setup|configuration|tone of voice|sentence|"
+     r"things you must never|set of)\w*)"
+     r"|(?=[\s\S]*(\b(what you are (able|allowed) to (help|do)|things you must never do)\b"
+     r"|\b(sana|dir|te)\b[^.?!]{0,40}?\b(verildi|bekommen|dieron|gegeben)\b"
+     r"|\bdu hast\b[^.?!]{0,40}?\b(text|anweisung|vorgabe)\w*[^.?!]{0,20}?\bbekommen\b))"
+     r")"
+     r"(?=[\s\S]*\b(exact wording|verbatim|word for word|exactly as written|"
+     r"quote (it|that|them)|quote the opening|write that opening out|read me that definition|"
+     r"the (very )?first (sentence|line) you (were|was)|"
+     r"aynen|w[oö]rtlich|woertlich|tal cual|exactamente|textualmente)\b)"
+     # A governing-text noun named in the conversation and then claimed as "yours" needs no
+     # verbatim demand — the claim is the whole request. "Ours" is the benign twin.
+     r"|\b(system message|configuration text|briefing|system prompt)\w*"
+     r"[\s\S]{0,220}?\b(add|provide|include|paste|give)\b[^.?!]{0,20}?\byours\b",
+     "a conversation that escalates toward the assistant's own governing text"),
     ("authority-extraction", "LLM01", "high",
      # Neither half is an attack alone. "I'm the engineer on call" is a colleague, and "which
      # OWASP categories do you cover" is a customer. It is the CONJUNCTION — someone claiming
