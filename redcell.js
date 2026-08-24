@@ -55,6 +55,27 @@
     ['fabricated-consent', 'LLM01', 'high',
       R`\b(you (already |just |a moment ago )?(confirmed|accepted|agreed to|granted|approved|authori[sz]ed)|du .{0,25}best(ae|a|ä)tigt|aceptaste|kabul etti\w*)\b[\s\S]{0,80}?\b(rule|mode|exception|restriction|policy|guideline|regel|regla|kural|istisna|modus)\w*`,
       'invents a prior agreement to build a request on'],
+    ['context-exfil-transform', 'LLM02', 'high',
+      R`^(?=[\s\S]*(\b(everything|all (of )?the |all the |the (entire|whole)|alles|todo lo|her ?[sş]ey)\w*[\s\S]{0,40}?(above|before|preceding|precedes|prior to this|oben|anterior|antes|[oö]nceki|yukar[iı]dak)|\b(above|before|preceding|anterior|antes|[oö]nceki|yukar[iı]dak)\w*[\s\S]{0,40}?\b(everything|all the|alles|todo lo|her ?[sş]ey)))[\s\S]*\b(hidden|omitting nothing|leaving nothing out|without omitting|omit nothing|do not omit|verbatim|word for word|including the instructions|parts you were told not to|versteckte\w*|sin omitir nada|atlamadan|oldu[gğ]u gibi)\b`,
+      "asks to transform the whole preceding context and demands hidden or complete content"],
+    ['prompt-metadata', 'LLM01', 'high',
+      R`\b(how (many|long)|character count|word count|length of|first (word|letter|character)|sha-?\d*|hash|checksum|wie (viele|lang)|cu[aá]ntas palabras|ka[cç] kelime)\w*[^.?!]{0,60}?\b(your|deine[rnms]?|tus?|senin)\s*(own |real |actual )?(system[\s_-]*)?(prompt|instruction|message|anweisung|talimat|instrucci[oó]n)\w*|\b(your|deine|tus)\s*(system[\s_-]*)?(prompt|instruction|anweisung|talimat)\w*[^.?!]{0,50}?\b(how (many|long)|wie (viele|lang)|ka[cç] kelime)\b`,
+      "measures the model's own instructions instead of asking for them"],
+    ['rule-attributed-omission', 'LLM01', 'high',
+      R`\b(your|deine[rnms]?|tus)\s*(own )?(instruction|guideline|rule|restriction|anweisung|talimat|regla|richtlinie)\w*[^.?!]{0,70}?\b(stop|stopped|prevent|prevented|restrict|restricted|allow|allowed|left out|leave out|weggelassen|eingeschr[aä]nkt|impidieron|engelledi)\w*|\b(left out|leave out|had to omit|weggelassen)\b[^.?!]{0,70}?\b(your|deine|tus)\s*(own )?(instruction|guideline|rule|anweisung|talimat)\w*`,
+      "asks which rules suppressed content, and what they say"],
+    ['negated-concealment', 'LLM01', 'high',
+      R`\b(withhold|conceal|hide|keep secret|verberg\w*|verheimlich\w*|ocultar|esconder|gizle\w*)\b[^.?!]{0,50}?\b(your|deine|tus)\s*(system[\s_-]*)?(prompt|instruction|anweisung|talimat|instrucci[oó]n)\w*|\b(your|deine[rnms]?|tus|sistem)\s*(system[\s_-]*)?(prompt|instruction|anweisung|talimat|instrucci[oó]n)\w*[^.?!]{0,50}?\b(withhold|conceal|hide|verberg\w*|gizlemek|ocultar)\w*|\b(no es que no|not that you (can'?t|cannot)|es ist nicht so, dass du nicht)\b[^.?!]{0,40}?\b(mostrar|muestra|show|reveal|zeigen?)\w*[^.?!]{0,30}?\b(your|tus?|deine[rnms]?)\s*(system[\s_-]*)?(prompt|instruction|instrucci[oó]n|anweisung|talimat)\w*`,
+      "negation framing around concealing the model's own instructions"],
+    ['counterfactual-leak', 'LLM01', 'high',
+      R`\b(how would|what would|the (reply|answer) you would give|wie w[aä]re|c[oó]mo responder)\w*[^.?!]{0,70}?\b(without|no|ohne|sin)\b[^.?!]{0,40}?\b(your |deine[rnms]? |tus? )?(system[\s_-]*)?(prompt|instruction|restriction|anweisung|talimat|instrucci[oó]n|restricci[oó]n|einschr[aä]nkung)\w*`,
+      "asks for the answer the model would give without its instructions"],
+    ['continuation-priming', 'LLM01', 'high',
+      R`\b(complete|finish|continue|vervollst[aä]ndige|completa|tamamla)\w*[^:]{0,60}?[:\-]\s*[\"'‘“]?\s*(you are (a|an|now)|your instructions are|du bist (ein|eine)|eres un|sen bir)`,
+      "primes the model to continue its own opening instructions"],
+    ['token-flood-extraction', 'LLM01', 'high',
+      R`\b(repeat|say|print|write)\b[^.?!]{0,40}?\b(forever|endlessly|\d{3,}|thousand|infinitely|unendlich|sonsuza)\b[\s\S]{0,80}?\b(then|and when|and then|danach|luego|sonra)\b[\s\S]{0,70}?\b(continue|print|whatever|original|instruction|precede|preceding|anweisung|talimat)\w*`,
+      "token flooding to push the model into verbatim recall"],
     ['authority-extraction', 'LLM01', 'high',
       // Neither half is an attack alone; the conjunction has no innocent reading.
       R`\b(i(?:'m| am)|i work (?:at|for)|this is|as|your)\b[^.\n]{0,40}\b(the )?(developer|engineer|admin\w*|administrator|author|creator|owner|operator|maintainer|auditor|security team|trust and safety|authoris?zed|legal|compliance)\b[^.\n]{0,80}\b(system ?prompt|instructions?|guardrails?|rules|configuration|initial prompt|system message)\b|\b(system ?prompt|instructions?|guardrails?|rules|configuration|system message)\b[^.\n]{0,80}\b(audit|discovery|verification|compliance|administrator|authoris?zed)\b[^.\n]{0,40}\b(disclose|reveal|reproduce|output|list|show|paste|print|provide)\b`,
@@ -382,6 +403,17 @@
       const f = fold(dec);
       if (f !== fold(t) && hasDirective(f)) out.push(f);
     }
+    /* German writes ä/ö/ü as ae/oe/ue when diacritics are unavailable, and that spelling survives
+       diacritic folding untouched — "waere" never becomes "ware", so every German rule written
+       against the folded form missed it. Three separate rounds of non-English misses traced back
+       here, so it is fixed once as a view. Gated on a German function word rather than on the
+       digraph alone: "true", "value" and "aerated" all contain one, and gating on the digraph
+       cost 260us on ordinary English for a view that exists to read German without its umlauts. */
+    if (/(ae|oe|ue)/.test(t) && DE_MARKER.test(t)) {
+      const dec = t.replace(/ae/g, 'a').replace(/oe/g, 'o').replace(/ue/g, 'u');
+      const f = fold(dec);
+      if (f !== fold(t) && hasDirective(f)) out.push(f);
+    }
     if (/&#[xX]?[0-9A-Fa-f]{1,6};/.test(t)) {
       const dec = t.replace(/&#([xX]?[0-9A-Fa-f]{1,6});/g, (m2, body) => {
         const cp = /^[xX]/.test(body) ? parseInt(body.slice(1), 16) : parseInt(body, 10);
@@ -393,6 +425,7 @@
     return out;
   }
 
+  const DE_MARKER = /\b(dein\w*|du|dich|ohne|nicht|bitte|zeige|zeig|waere|wuerde|koennen|kannst|darfst|fuer|ueber|systemanweisung\w*|anweisung\w*|verberg\w*|vervollstaendige|antwort|regeln|alles|einschliesslich|weggelassen|eingeschraenkt)\b/i;
   const B32ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   function b32decode(tok) {
     const core = tok.replace(/=+$/, '');
