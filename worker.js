@@ -1501,6 +1501,15 @@ const SITE_NAV = '<style>'
   + '</nav></div></header>'
   + '<script>(function(){fetch(\'/auth/me\',{credentials:\'same-origin\'}).then(function(r){return r.ok?r.json():null;}).then(function(u){if(!u)return;var i=document.querySelectorAll(\'[data-signin]\'),g=document.querySelectorAll(\'[data-getstarted]\');Array.prototype.forEach.call(i,function(a){a.textContent=\'Sign out\';a.href=\'#\';a.onclick=function(e){e.preventDefault();fetch(\'/auth/logout\',{method:\'POST\'}).then(function(){location.href=\'/\';});};});Array.prototype.forEach.call(g,function(a){a.textContent=\'Account\';a.href=\'/account\';});}).catch(function(){});})();</script>';
 
+/* One source of truth for the price. It used to be a constant plus three hand-written
+   "$39" literals across the landing page, the pitch page and the account page, kept in
+   sync by a comment that said "keep in sync" — which is an admission that nothing did.
+   A visitor seeing one number and being charged another is the worst class of drift a
+   billing page can have, so the literals are gone and this is hoisted above every page
+   that renders it (LANDING and PITCH_PAGE are module-level template literals, so a
+   later definition would be in the temporal dead zone). */
+const PLAN_PRICE_USD = 39;
+
 const LANDING = `<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>REDCELL — the security layer for AI agents</title>
@@ -1851,7 +1860,7 @@ e.g. {&quot;name&quot;:&quot;transfer_funds&quot;,&quot;arguments&quot;:{&quot;a
     </div>
     <div class="pc feat up">
       <div class=tier>Pro <span class=tag>POPULAR</span></div>
-      <div class=amt>$39<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Pro</a>
+      <div class=amt>$${PLAN_PRICE_USD}<s>/mo</s></div><a class=b-pri href="/signup" style="text-decoration:none;text-align:center;margin-bottom:16px">Start on Pro</a>
       <ul><li>Scan history &amp; score trend</li><li>SARIF export for CI &amp; code scanning</li><li>Live red-team engine <span style="font-size:11px;color:var(--ink3)">(beta)</span></li></ul>
     </div>
     <div class="pc up">
@@ -2222,7 +2231,7 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <section><h2>Business model</h2>
 <div class=tiers>
 <div><span class=eyebrow>Free</span><div class=p>$0</div><p style="font-size:13px;margin:0;color:var(--ink3)">Scanner · firewall · tool-call · CI · SDKs · MCP</p></div>
-<div><span class=eyebrow style="color:var(--red)">Pro</span><div class=p>$39<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
+<div><span class=eyebrow style="color:var(--red)">Pro</span><div class=p>$${PLAN_PRICE_USD}<span style="font-size:13px;color:var(--ink3)">/mo</span></div><p style="font-size:13px;margin:0;color:var(--ink3)">Live engine · adaptive attacks · runtime firewall</p></div>
 <div><span class=eyebrow>Enterprise</span><div class=p>Custom</div><p style="font-size:13px;margin:0;color:var(--ink3)">Unlimited · SSO · compliance · SLA</p></div>
 </div></section>
 
@@ -3688,7 +3697,6 @@ const PBKDF2_ITERS = PBKDF2_MAX;
 const SESSION_TTL = 60 * 60 * 24 * 30;   // 30 days
 const PLANS = { free: 'Free', team: 'Pro', pro: 'Pro', enterprise: 'Enterprise' };
 const OPERATOR_EMAIL = 'caglarf646@gmail.com';
-const PLAN_PRICE_USD = 39;   // keep in sync with the pricing section and the Paddle price
 
 function rndHex(n) {
   const a = new Uint8Array(n); crypto.getRandomValues(a);
@@ -4078,7 +4086,7 @@ function renderAccount(user, billingReady, history) {
   const upgrade = sub.plan === 'free'
     ? (billingReady
       ? '<p style="color:var(--ink2);font-size:14px;margin:8px 0 14px">Pro keeps 500 scans of history and unlocks <span class=mono>/history.sarif</span> for CI. Free keeps the last 5.</p>'
-        + '<button class=cta id=buy style="border:0;cursor:pointer">Upgrade to Pro &mdash; $39/mo</button>'
+        + '<button class=cta id=buy style="border:0;cursor:pointer">Upgrade to Pro &mdash; $' + PLAN_PRICE_USD + '/mo</button>'
         + '<div id=buymsg class=mono style="display:none;margin-top:10px"></div>'
       : '<span class=btn style="opacity:.6">Upgrade &mdash; billing not configured yet</span>')
     : '<a class=btn href="/billing/portal">Manage subscription</a>';

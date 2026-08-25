@@ -88,3 +88,30 @@ def test_the_language_count_on_the_landing_page_matches_what_is_documented():
     assert claimed == count, (
         "the landing page says %d non-English languages, SECURITY.md names %d (%s)"
         % (claimed, count, named.group(1).strip()))
+
+
+def test_the_price_has_exactly_one_source_of_truth():
+    """It used to live in a constant plus three hand-written "$39" literals on the landing page,
+    the pitch page and the account page, kept in sync by a comment saying "keep in sync". A
+    visitor seeing one price and being charged another is the worst drift a billing page can have.
+
+    Literals are allowed only inside comments — the explanation of this very bug contains one."""
+    src = _worker()
+    m = re.search(r"^const PLAN_PRICE_USD = (\d+);", src, re.M)
+    assert m, "PLAN_PRICE_USD is gone"
+    price = int(m.group(1))
+
+    stripped = re.sub(r"/\*[\s\S]*?\*/", " ", src)
+    stripped = re.sub(r"^\s*//.*$", " ", stripped, flags=re.M)
+    # Only OUR price counts. A first attempt at this matched any "$NN" and flagged the funding
+    # figures on the comparison page ($855M seed, Lakera's $20M) — third-party facts, not our
+    # billing. Two shapes are the real risk: the bare current price, and anything "$NN/mo".
+    strays = re.findall(r"\$%d\b" % price, stripped)
+    strays += [m.group(0) for m in re.finditer(r"\$\d+\s*(?:<[^>]*>)?\s*/mo", stripped)]
+    assert not strays, "hand-written price literals are back: %r" % strays
+
+    assert src.index("const PLAN_PRICE_USD") < src.index("const LANDING = "), (
+        "PLAN_PRICE_USD must be defined before the module-level page templates that interpolate "
+        "it, or they hit the temporal dead zone at load")
+    assert "${PLAN_PRICE_USD}" in src and "+ PLAN_PRICE_USD +" in src
+    assert price > 0
