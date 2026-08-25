@@ -831,11 +831,34 @@ export default {
     }
     // Joined-history pass over a conversation: joins USER turns and re-runs the rule set.
     if (request.method === 'POST' && url.pathname === '/firewall-thread') {
-      const b = await request.json().catch(() => ({}));
+      let b;
+      try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
       if (!b || !Array.isArray(b.turns) || b.turns.length === 0) return json({ error: 'turns required (POST JSON { turns: [...] })' }, 400);
       if (b.turns.length > 50) return json({ error: 'turns capped at 50' }, 400);
       bump(env, ctx, 'firewall-thread', request);
-      const turns = b.turns.map((t) => String((t && (t.content || t.text)) || t).slice(0, 8000));
+      /* Turns may be plain strings or chat objects. `content` and `text` were the only keys read,
+         so a turn shaped {role, message} — a real convention in several SDKs — stringified to
+         "[object Object]" and its text was never inspected, while the response still said allow.
+         The caller had no way to know a turn had been skipped. `message` is accepted now, and an
+         object that yields no text at all is refused rather than silently swallowed. */
+      const unread = [];
+      const turns = b.turns.map((t, i) => {
+        if (typeof t === 'string') return t.slice(0, 8000);
+        if (t && typeof t === 'object') {
+          const v = t.content || t.text || t.message;
+          if (typeof v === 'string') return v.slice(0, 8000);
+          unread.push(i);
+          return '';
+        }
+        return String(t === null || t === undefined ? '' : t).slice(0, 8000);
+      });
+      if (unread.length) {
+        return json({
+          error: 'every turn must be a string or an object with content, text or message',
+          unreadable_turns: unread,
+          hint: 'these turns would not have been inspected, and the verdict would still have said allow',
+        }, 400);
+      }
       return json(fw.inspectThread(turns));
     }
     if (request.method === 'POST' && url.pathname === '/scan-config') {
@@ -942,8 +965,18 @@ export default {
       let b;
       try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
       if (!b || typeof b !== 'object' || !b.name) return json({ error: 'name required (POST JSON {name, arguments})' }, 400);
+      // A non-string name used to be stringified: {"name":{"a":1}} became the tool
+      // "[object Object]", matched nothing, and returned action "allow" — a confident verdict on
+      // a call that was never really examined.
+      if (typeof b.name !== 'string') {
+        return json({
+          error: 'name must be a string',
+          received: Array.isArray(b.name) ? 'array' : typeof b.name,
+          hint: 'a non-string name would be stringified and screened as "[object Object]", which matches nothing and returns allow',
+        }, 400);
+      }
       bump(env, ctx, 'toolcheck', request);
-      return json(toolcheck.check(String(b.name), b.arguments || {}, inspect));
+      return json(toolcheck.check(b.name, b.arguments || {}, inspect));
     }
     // Unified agent check: run all three surfaces in one call and return the worst verdict.
     if (request.method === 'POST' && url.pathname === '/agentcheck') {
