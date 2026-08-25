@@ -103,3 +103,35 @@ def test_python_and_js_scorers_agree():
     got = json.loads(out.stdout.strip().splitlines()[-1])
     worst = max(abs(a - b) for a, b in zip(expected, got))
     assert worst < 1e-6, "python and JS scorers diverge by %.3e" % worst
+
+
+def test_the_published_weight_count_matches_the_shipped_model():
+    """The docs said 3,000 weights for ten rounds after the model was retrained to 6,000. Nothing
+    checked it: doc_check compares prose against /health, and /health does not expose the model.
+    It does now, here."""
+    import json
+    import re
+
+    with open("/home/furkan/redcell/models/injection_lr.json", encoding="utf-8") as f:
+        actual = len(json.load(f)["w"])
+    for path in ("/home/furkan/redcell/worker.js", "/home/furkan/redcell/SECURITY.md"):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        for m in re.finditer(r"([\d,]+)-weight logistic regression", text):
+            claimed = int(m.group(1).replace(",", ""))
+            assert claimed == actual, (
+                "%s claims %d weights, the shipped model has %d" % (path, claimed, actual))
+
+
+def test_the_published_latency_is_the_right_order_of_magnitude():
+    """Published as 5.3 us against the rule engine's 66 us. Asserted loosely — this is a guard
+    against the claim rotting by an order of magnitude, not a benchmark."""
+    import time
+
+    text = "Can you confirm the delivery date for order 4412 please?"
+    clf.score(text)
+    t0 = time.perf_counter()
+    for _ in range(2000):
+        clf.score(text)
+    per_call_us = (time.perf_counter() - t0) / 2000 * 1e6
+    assert per_call_us < 500, "classifier scoring is %.0f us; the site claims single digits" % per_call_us

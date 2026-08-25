@@ -8,6 +8,40 @@ prompt injection, and screen tool calls before they run.
 The shipped product is a single Cloudflare Worker. Every check below is a deterministic
 pattern engine running at the edge — no model call, no API key, no account.
 
+## What is unusual about this project
+
+Most tools in this category publish a detection rate measured on a corpus they also tuned on.
+This one publishes seven independent measurements, each taken on a set written from scratch,
+measured **once**, and then retired — including the ones that look bad:
+
+| Set | How it was built | Detection | False positives |
+|---|---|---:|---:|
+| A | broad sample of attack families | 48% | 2 of 41 |
+| B | families A never used | 54% | 0 of 36 |
+| C | families A and B never used | 53% | 0 of 35 |
+| D | **indirect extraction only** | 13% | 0 of 35 |
+| E | indirect **and never naming what it wants** | 6.5% | 0 of 35 |
+| F | **multi-turn**, no single turn an attack | 6.7% | 0 of 15 |
+| G | multi-turn, avoiding the phrasings F trained | 6.7% | 0 of 15 |
+
+Each of D, E and F was then closed — 13% to 87%, 6.5% to 90%, 6.7% to 87%. Set G was written
+immediately after F's repair, on the same axis, avoiding the phrasings that repair used. It
+scores 6.7%.
+
+**That is the finding: closing a family generalises to that family and not past it.** The high
+numbers describe attacks that announce themselves; the low ones describe attacks that do not. A
+matcher closes phrasings, not problems.
+
+What does not move is precision — 0–1% false positives across every set, and 93.5% precision on
+2,060 rows of third-party data you can score yourself:
+
+```bash
+python tools/thirdparty_bench.py   # downloads public corpora, no key, no cost
+```
+
+So: use this as a cheap, high-precision first pass, and put a model-based layer behind it. That
+recommendation is on the product's own methodology page, not just here.
+
 ```bash
 curl -s https://redcell.redcellv1.workers.dev/firewall \
   -H 'Content-Type: application/json' \

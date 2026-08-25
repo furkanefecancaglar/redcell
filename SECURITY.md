@@ -111,7 +111,7 @@ oversells itself is a liability to the people who trust it.
   charge" — an ordinary question. Gaps are published rather than fixed quietly, because a set you
   repair against stops measuring anything, and a rule that costs precision is not a fix.
   The next honest number needs a set D. See `/methodology`.
-- An **optional** second stage (`classifier: true`, off by default) adds a 3,000-weight logistic
+- An **optional** second stage (`classifier: true`, off by default) adds a 6,000-weight logistic
   regression trained on the public training splits — 94 KB in the bundle, no API call, no key.
   It takes third-party recall from 28% to 90% on safe-guard at 98% precision and from 17% to 43%
   on deepset at 100% precision, and adds **nothing** on our own independent set: it learned those
