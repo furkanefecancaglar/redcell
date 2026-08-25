@@ -4598,6 +4598,11 @@ function mcpCallTool(name, args) {
 function mcpHandle(msg) {
   const id = msg && msg.id;
   const method = msg && msg.method;
+  // JSON-RPC 2.0 section 4.1: a request without an `id` is a Notification and the server MUST
+  // NOT reply to it. This recognised notifications by METHOD NAME only, so any other method
+  // sent without an id — a client probing tools/list, say — got a full 2 KB response body
+  // where the spec requires silence. Absence of the id is what defines it, not the name.
+  if (id === undefined || id === null) return null;
   if (method === 'initialize') {
     return { jsonrpc: '2.0', id, result: { protocolVersion: MCP_PROTOCOL, capabilities: { tools: {} }, serverInfo: MCP_SERVER_INFO } };
   }
