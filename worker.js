@@ -2215,14 +2215,14 @@ footer{border-top:1px solid var(--line);padding:26px 0;color:var(--ink3);font:12
 <div class=card><span class=k>Guard · /toolcheck</span><h3>Tool-call firewall</h3><p>Screens a proposed {name, arguments} call before it runs — dangerous names, data exfil, unbounded transfers, local-file &amp; secret-env reads, SSRF, command injection, privileged identities, Windows paths, privileged container exec, executable data URLs. 13 reason classes, 0 API.</p></div>
 <div class=card style="grid-column:1/-1"><span class=k>One call · /agentcheck</span><h3>Unified agent check</h3><p>Runs the scanner, input firewall and tool-call firewall in a single call and returns the <strong>worst verdict</strong> — block on danger, pause for human approval on flag. The single guard to wrap an agent loop.</p></div>
 </div>
-<p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) drove 15M+ messages / 300k+ users. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
+<p style="margin-top:14px"><strong>Growth engine + moat: REDCELL Breach</strong> — a gamified jailbreak challenge whose levels are our defense layers. Lakera's equivalent (Gandalf) had drawn 15M+ messages from 300k+ users <a href="https://vvolhejn.com/2023/05/09/gandalf.html" style="color:inherit">as of August 2023</a> &mdash; the last figure Lakera published, and three years old now. Every attempt is logged — a compounding proprietary attack dataset competitors can't buy.</p></section>
 
 <section><h2>Market — validated, winner undecided</h2>
-<p>AI-security seed funding reached <strong>~$855M across 150+ rounds in 2026</strong>. The direct peers are already funded — and one just exited:</p>
+<p>AI-security startups raised <strong>~$855M across 150+ seed rounds in the first half of 2026</strong> (<a href="https://news.crunchbase.com/cybersecurity/solid-startup-venture-funding-growth-h1-2026/" style="color:inherit">Crunchbase</a>). The direct peers are already funded — and one just exited:</p>
 <table><tr><th>Company</th><th>Raised</th><th>Lead</th></tr>
-<tr><td>Lakera</td><td class=n>$20M Series A</td><td>Atomico</td></tr>
-<tr><td>HiddenLayer</td><td class=n>$50M Series A</td><td>M12 (Microsoft)</td></tr>
-<tr><td>Prompt Security</td><td class=n>acquired</td><td>SentinelOne (2025)</td></tr></table>
+<tr><td>Lakera</td><td class=n>$20M Series A</td><td>Atomico &middot; <a href="https://www.prnewswire.com/news-releases/lakera-raises-20m-series-a-to-secure-generative-ai-applications-302204874.html" style="color:inherit">Jul 2024</a></td></tr>
+<tr><td>HiddenLayer</td><td class=n>$50M Series A</td><td>co-led M12 (Microsoft) &amp; Moore Strategic &middot; <a href="https://techcrunch.com/2023/09/19/hiddenlayer-raises-50m-for-its-ai-defending-cybersecurity-tools" style="color:inherit">Sep 2023</a></td></tr>
+<tr><td>Prompt Security</td><td class=n>acquired, ~$250M</td><td>SentinelOne &middot; <a href="https://www.sentinelone.com/press/sentinelone-to-acquire-prompt-security-to-advance-genai-security/" style="color:inherit">Aug 2025</a></td></tr></table>
 <p style="margin-top:12px">Buyers — fintech, healthcare, support automation, internal copilots — are now asked <em>"how do you know your agent is safe?"</em> for procurement and compliance (EU AI Act, SOC 2 AI addenda).</p></section>
 
 <section><h2>Wedge & moat</h2>

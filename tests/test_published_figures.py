@@ -115,3 +115,53 @@ def test_the_price_has_exactly_one_source_of_truth():
         "it, or they hit the temporal dead zone at load")
     assert "${PLAN_PRICE_USD}" in src and "+ PLAN_PRICE_USD +" in src
     assert price > 0
+
+
+THIRD_PARTIES = ("Lakera", "HiddenLayer", "Prompt Security", "SentinelOne", "Atomico",
+                 "M12", "Moore Strategic", "Crunchbase", "Gandalf")
+
+
+def test_every_third_party_claim_carries_a_date():
+    """Claims about other companies are the highest-liability content on the site: a wrong number
+    about ourselves is embarrassing, a wrong number about Lakera is something else.
+
+    All of them were true when audited, and all of them were undated — including a Gandalf usage
+    figure from August 2023 presented as current, and a Series A described as led by M12 when it
+    was co-led. Facts about other companies go stale silently, so each one must carry a date."""
+    src = _worker()
+    start = src.index("const PITCH_PAGE")
+    pitch = src[start:src.index("\n`;", start)]
+
+    # Sentences and table rows that name a third party AND state a figure.
+    chunks = re.split(r"</tr>|</p>|<br>", pitch)
+    offenders = []
+    for chunk in chunks:
+        if not any(name in chunk for name in THIRD_PARTIES):
+            continue
+        if not re.search(r"\$\d|\d{2,}[MmKk]\+?|\d{3,}", chunk):
+            continue          # a name without a figure is an opinion, not a claim
+        if not re.search(r"\b(19|20)\d{2}\b", chunk):
+            offenders.append(re.sub(r"<[^>]+>", " ", chunk).strip()[:90])
+    assert not offenders, "undated third-party claims: %r" % offenders
+
+
+def test_third_party_claims_link_to_a_source():
+    """A date without a source is still an assertion.
+
+    The first version of this test hardcoded name-to-domain pairs and failed for a good reason:
+    "Lakera" appears twice, once for Gandalf usage and once for the Series A, each correctly
+    sourced to a different place. Pinning a name to one domain assumed a company is only ever
+    claimed about once. What actually matters is that every figure-bearing claim links somewhere."""
+    src = _worker()
+    start = src.index("const PITCH_PAGE")
+    pitch = src[start:src.index("\n`;", start)]
+
+    unsourced = []
+    for chunk in re.split(r"</tr>|</p>|<br>", pitch):
+        if not any(name in chunk for name in THIRD_PARTIES):
+            continue
+        if not re.search(r"\$\d|\d{2,}[MmKk]\+?|\d{3,}", chunk):
+            continue
+        if 'href="http' not in chunk:
+            unsourced.append(re.sub(r"<[^>]+>", " ", chunk).strip()[:90])
+    assert not unsourced, "third-party claims with a figure but no source: %r" % unsourced
