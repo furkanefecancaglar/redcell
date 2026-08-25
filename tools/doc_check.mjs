@@ -145,6 +145,35 @@ for (const doc of docs) {
   }
 }
 
+/* 5 — a claim that we ship on a package registry must be true, and must point at US.
+      The methodology page said "the Python library on PyPI is roughly 650us" for ten rounds. There
+      is no REDCELL package on PyPI; the name belongs to an unrelated MCP scanner by another author,
+      so the sentence was both false and an unintentional pointer at someone else's code. Nothing
+      caught it because doc_check only compared prose against /health. */
+{
+  const claimsPypi = [];
+  for (const doc of docs) {
+    const text = readFileSync(doc.path, 'utf8');
+    if (/\b(on|to) PyPI\b/i.test(text) && !/not on PyPI|until REDCELL is on PyPI/i.test(text)) {
+      claimsPypi.push(doc.rel);
+    }
+  }
+  const served = await fetch(BASE + '/methodology').then((r) => r.text()).catch(() => '');
+  if (/library on PyPI|available on PyPI|pip install redcell\b/i.test(served)) claimsPypi.push('/methodology');
+  if (claimsPypi.length) {
+    const meta = await fetch('https://pypi.org/pypi/redcell/json').then((r) => r.json()).catch(() => null);
+    const urls = JSON.stringify((meta && meta.info && meta.info.project_urls) || {});
+    const ours = /furkanefecancaglar\/redcell/i.test(urls);
+    if (!ours) {
+      fail(claimsPypi.join(', '),
+        'claims REDCELL is on PyPI, but pypi.org/project/redcell belongs to '
+        + ((meta && meta.info && meta.info.author) || 'someone else'));
+    }
+  } else {
+    ok.push('no unverified PyPI claim');
+  }
+}
+
 ok.push(docs.length + ' documents checked against /health and the filesystem');
 
 console.log('doc check against ' + BASE);
