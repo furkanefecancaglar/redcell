@@ -1167,7 +1167,10 @@ export default {
         if (!env || !env.REDCELL_NIM_KEYS) return json({ error: 'game engine not configured (set REDCELL_NIM_KEYS secret)' }, 503);
         const rl = await rateLimit(env.RL_BREACH, request); // each attempt costs NIM quota
         if (rl) { const r = json({ error: 'rate limited — retry after ' + rl.retryAfter + 's' }, 429); r.headers.set('Retry-After', String(rl.retryAfter)); return r; }
-        const b = await request.json().catch(() => ({}));
+        // Third surface with this bug: a malformed body fell through to "message required" and
+        // sent the caller to the wrong field. /gate and /firewall-thread were fixed the same way.
+        let b;
+        try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
         const lvl = LEVELS[(Number(b && b.level) || 1) - 1];
         if (!lvl) return json({ error: 'bad level' }, 400);
         const safeMsg = String((b && b.message) || '').slice(0, 2000);
