@@ -3,7 +3,7 @@
 Score an agent's system prompt against the OWASP LLM Top 10, firewall untrusted input for
 prompt injection, and screen tool calls before they run.
 
-**Live:** https://redcell.redcellv1.workers.dev
+**Live:** https://redcell.redcellv1.workers.dev &nbsp;·&nbsp; **The measurements:** https://furkanefecancaglar.github.io/redcell/
 
 The shipped product is a single Cloudflare Worker. Every check below is a deterministic
 pattern engine running at the edge — no model call, no API key, no account.

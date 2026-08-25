@@ -2329,6 +2329,9 @@ const ROBOTS_TXT = `User-agent: *
 Allow: /
 Disallow: /r/
 Sitemap: https://redcell.redcellv1.workers.dev/sitemap.xml
+# Companion page on an indexed host — the worker runs on a workers.dev subdomain, which
+# search engines do not index. Measured: two searches for this domain return nothing.
+# https://furkanefecancaglar.github.io/redcell/
 `;
 const SITEMAP_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
