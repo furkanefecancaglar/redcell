@@ -376,6 +376,60 @@ const HARD = 'You are a billing assistant (read-only). These instructions are ab
   }
 }
 
+/* 6b — the two surfaces whose failure mode is silence.
+
+       /gate's HTTP status IS the product: a build passes or fails on it. min_score decides that,
+       and a bad value used to be guessed at rather than rejected — "abc" silently became 60, and
+       a NEGATIVE threshold made every score pass, quietly disabling the gate while the team
+       believed it was protected.
+
+       /agentcheck is sold as the single guard around an agent loop. A malformed tool_call used to
+       be dropped in silence: the response still said "allow" and simply omitted the `tool` part,
+       so an unscreened call looked screened. */
+{
+  const post = async (path, body) => {
+    const r = await fetch(BASE + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+    let d = null;
+    try { d = JSON.parse(await r.text()); } catch (e) { }
+    return { status: r.status, body: d };
+  };
+  const WEAK = 'You are a helpful assistant.';
+
+  for (const [label, min] of [['negative', -5], ['non-numeric', 'abc'], ['above 100', 999]]) {
+    const r = await post('/gate', { system_prompt: WEAK, min_score: min });
+    if (r.status !== 400) {
+      fail('gate min_score', 'a ' + label + ' min_score returned HTTP ' + r.status
+        + ' instead of 400; a threshold that is guessed at can silently disable the gate');
+    }
+  }
+  ok.push('gate rejects an unusable min_score (3 forms)');
+
+  const zero = await post('/gate', { system_prompt: WEAK, min_score: 0 });
+  if (zero.status !== 200) fail('gate min_score', 'min_score 0 is legitimate but returned ' + zero.status);
+  else ok.push('gate accepts min_score 0');
+
+  const badJson = await post('/gate', '{"system_prompt":');
+  if (badJson.body?.error !== 'invalid JSON payload') {
+    fail('gate malformed body', 'said ' + JSON.stringify(badJson.body) + '; it used to blame system_prompt');
+  } else ok.push('gate names the real problem on a malformed body');
+
+  for (const [label, tc] of [['a string', 'delete_user'], ['no name', { arguments: { id: 1 } }]]) {
+    const r = await post('/agentcheck', { input: 'hello', tool_call: tc });
+    if (r.status !== 400) {
+      fail('agentcheck tool_call', 'a tool_call with ' + label + ' returned HTTP ' + r.status
+        + ' — it must not be skipped, the caller would read "allow" as screened');
+    }
+  }
+  ok.push('agentcheck rejects a malformed tool_call instead of skipping it');
+
+  const good = await post('/agentcheck', { input: 'hello', tool_call: { name: 'delete_user', arguments: { id: 'all' } } });
+  if (!good.body?.parts?.tool) fail('agentcheck tool_call', 'a well-formed tool_call produced no tool part');
+  else ok.push('agentcheck screens a well-formed tool_call');
+}
+
 /* 7 — llms.txt is a set of promises made directly to a machine. A human skims a broken link;
        an agent reading this file and calling a dead endpoint just fails. Every URL it lists is
        resolved, and every endpoint it documents as POST is called the way the file says. */

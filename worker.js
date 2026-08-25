@@ -858,9 +858,30 @@ export default {
     // Python in the runner; this needs neither. The status code IS the verdict, so `curl -f`
     // fails the build on its own. Deterministic (static scanner only), no key, no install.
     if (request.method === 'POST' && url.pathname === '/gate') {
-      const b = await request.json().catch(() => ({}));
+      // A malformed body used to fall through to "system_prompt required", which sent the caller
+      // looking at the wrong field. /agentcheck already said "invalid JSON payload"; say the same.
+      let b;
+      try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON payload' }, 400); }
       if (!b || !b.system_prompt) return json({ error: 'system_prompt required' }, 400);
-      const minScore = Number.isFinite(Number(b.min_score)) ? Number(b.min_score) : 60;
+      /* min_score decides whether a build passes, so a bad value must be rejected rather than
+         guessed at. Two failures were possible before:
+           - a non-numeric value ("abc", a shell variable that did not expand) silently became 60,
+             so the gate was stricter than the caller asked for and nothing said so;
+           - a NEGATIVE value made every score pass, silently disabling the gate. That is the
+             direction that matters: a gate that always passes is worse than no gate, because the
+             team believes it is protected. A typed minus sign should not do that quietly. */
+      let minScore = 60;
+      if (b.min_score !== undefined && b.min_score !== null && b.min_score !== '') {
+        const n = Number(b.min_score);
+        if (!Number.isFinite(n) || n < 0 || n > 100) {
+          return json({
+            error: 'min_score must be a number between 0 and 100',
+            received: b.min_score,
+            hint: 'a negative or non-numeric threshold would silently disable this gate',
+          }, 400);
+        }
+        minScore = n;
+      }
       const failOnCritical = b.fail_on_critical !== false;
       bump(env, ctx, 'gate', request);
       const rep = analyze(String(b.system_prompt));
@@ -932,6 +953,18 @@ export default {
       const hasTurns = !!(b && Array.isArray(b.turns) && b.turns.length);
       if (!b || typeof b !== 'object' || (!b.system_prompt && !b.input && !hasTool && !hasTurns)) {
         return json({ error: 'provide at least one of: system_prompt, input, turns, tool_call {name, arguments}' }, 400);
+      }
+      /* A tool_call that is present but malformed used to be dropped in silence: the caller sent
+         {"input": "...", "tool_call": "delete_user"}, got back verdict "allow" and a parts object
+         with no `tool` key, and nothing anywhere said the tool call had not been screened. This
+         endpoint is sold as the single guard around an agent loop, so an unscreened call that
+         looks screened is the worst failure it can have. Ask, do not assume. */
+      if (b.tool_call !== undefined && !hasTool) {
+        return json({
+          error: 'tool_call must be an object with a string name: {"name": "...", "arguments": {...}}',
+          received: typeof b.tool_call === 'object' ? Object.keys(b.tool_call || {}) : typeof b.tool_call,
+          hint: 'a malformed tool_call would otherwise be skipped and the response would still say allow',
+        }, 400);
       }
       bump(env, ctx, 'agentcheck', request);
       const r = json(agentCheck(b));   // shared with the MCP agent_check tool
